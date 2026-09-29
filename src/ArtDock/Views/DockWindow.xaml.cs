@@ -193,14 +193,17 @@ public sealed partial class DockWindow : Window
         _runningApps.Changed += OnRunningAppsChanged;
         _settings.Changed += (_, updated) => Dispatcher.Invoke(() => ApplySettings(updated));
 
-        // Resolution changes, a monitor being unplugged and taskbar moves all shift the work
-        // area out from under the dock; re-applying settings re-anchors it.
+        // Resolution changes and a monitor being unplugged shift the display out from under the
+        // dock, and the taskbar taking or giving back room shifts the work area; re-applying
+        // settings re-anchors it. They are two notifications, not one — see the second.
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
         Closed += (_, _) =>
         {
             _closed = true;
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _runningApps.Dispose();
             _backdrop?.Dispose();
             _binWatch?.Dispose();
@@ -1350,6 +1353,42 @@ public sealed partial class DockWindow : Window
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
         Dispatcher.Invoke(() => ApplySettings(_applied));
+
+    /// <summary>
+    /// Re-anchors when the taskbar takes or gives back room on the dock's display.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A display change does not cover this. Across a wake from sleep the displays come back
+    /// first and the taskbar claims its strip afterwards, so the re-apply a display change
+    /// prompts can read a work area that is the whole screen — and the dock stayed where that
+    /// put it, the bottom of the bar under the taskbar, until something else moved it.
+    /// </para>
+    /// <para>
+    /// Through <see cref="SystemEvents"/>, like the display change, rather than the window
+    /// procedure: the work area is announced by a broadcast <c>WM_SETTINGCHANGE</c>, and
+    /// <see cref="SystemEvents"/> hears broadcasts on a window of its own — this one WPF gives
+    /// an owner, and whether a broadcast reaches an owned window has not been shown here. It
+    /// arrives as the Desktop category, which a new wallpaper is too — hence asking whether the
+    /// work area is actually a new one.
+    /// </para>
+    /// </remarks>
+    private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category != UserPreferenceCategory.Desktop)
+        {
+            return;
+        }
+
+        Dispatcher.Invoke(() =>
+        {
+            var screen = Screens.Resolve(_applied.ScreenDeviceName, _applied.ScreenDevicePath);
+            if (screen.WorkArea != _workArea)
+            {
+                ApplySettings(_applied);
+            }
+        });
+    }
 
     /// <summary>
     /// Re-anchors after a DPI change. Every dimension the dock uses is in DIPs, so the layout

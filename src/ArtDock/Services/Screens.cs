@@ -37,8 +37,8 @@ public sealed record ScreenInfo(
 /// </summary>
 /// <remarks>
 /// WinForms' <c>Screen</c> rather than a hand-rolled <c>EnumDisplayMonitors</c>: this project
-/// already carries WinForms for the tray icon, and this is the one thing in the framework
-/// that enumerates monitors and their work areas without any interop at all.
+/// already carries WinForms for the tray icon, and it enumerates the monitors without any
+/// interop at all. Not their work areas, though — see <see cref="WorkAreaOf"/>.
 /// </remarks>
 public static class Screens
 {
@@ -60,11 +60,7 @@ public static class Screens
         return [.. screens.Select((screen, index) => new ScreenInfo(
             screen.DeviceName,
             Describe(screen, index + 1),
-            new Rect(
-                screen.WorkingArea.X,
-                screen.WorkingArea.Y,
-                screen.WorkingArea.Width,
-                screen.WorkingArea.Height),
+            WorkAreaOf(screen),
             new Rect(
                 screen.Bounds.X,
                 screen.Bounds.Y,
@@ -72,6 +68,40 @@ public static class Screens
                 screen.Bounds.Height),
             screen.Primary,
             DevicePathOf(screen.DeviceName)))];
+    }
+
+    /// <summary>
+    /// The part of <paramref name="screen"/> the taskbar leaves, as Windows has it now.
+    /// </summary>
+    /// <remarks>
+    /// Asked of Windows rather than read from <c>Screen.WorkingArea</c>, which is cached, and
+    /// forgotten only when WinForms' own handler for the work area changing has run. That is
+    /// the very notification the dock re-anchors on, and the order the two handlers run in is
+    /// not ours to choose — whichever came first would place the dock by the stale one.
+    /// </remarks>
+    private static Rect WorkAreaOf(System.Windows.Forms.Screen screen)
+    {
+        var bounds = new NativeMethods.NativeRect
+        {
+            Left = screen.Bounds.Left,
+            Top = screen.Bounds.Top,
+            Right = screen.Bounds.Right,
+            Bottom = screen.Bounds.Bottom,
+        };
+        var info = new NativeMethods.MonitorInfo { cbSize = Marshal.SizeOf<NativeMethods.MonitorInfo>() };
+        var monitor = NativeMethods.MonitorFromRect(ref bounds, NativeMethods.MONITOR_DEFAULTTONULL);
+
+        if (monitor != 0 && NativeMethods.GetMonitorInfo(monitor, ref info))
+        {
+            return new Rect(
+                info.rcWork.Left,
+                info.rcWork.Top,
+                info.rcWork.Right - info.rcWork.Left,
+                info.rcWork.Bottom - info.rcWork.Top);
+        }
+
+        var cached = screen.WorkingArea;
+        return new Rect(cached.X, cached.Y, cached.Width, cached.Height);
     }
 
     /// <summary>

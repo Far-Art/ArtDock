@@ -264,4 +264,23 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool EnumDisplayDevices(
         string? lpDevice, uint iDevNum, ref DisplayDevice lpDisplayDevice, uint dwFlags);
+
+    /// <summary>No monitor at all when the rectangle is on none, rather than the nearest.</summary>
+    internal const uint MONITOR_DEFAULTTONULL = 0;
+
+    [DllImport("user32.dll")]
+    internal static extern nint MonitorFromRect(ref NativeRect lprc, uint dwFlags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MonitorInfo
+    {
+        public int cbSize;
+        public NativeRect rcMonitor;
+        public NativeRect rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetMonitorInfo(nint hMonitor, ref MonitorInfo lpmi);
 }
