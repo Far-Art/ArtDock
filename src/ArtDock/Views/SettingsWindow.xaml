@@ -1,0 +1,1366 @@
+<Window
+    x:Class="ArtDock.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:ArtDock.Controls"
+    xmlns:loc="clr-namespace:ArtDock.Localization"
+    Title="{DynamicResource Settings.Title}"
+    FlowDirection="{DynamicResource Language.FlowDirection}"
+    Language="{DynamicResource Language.Tag}"
+    Icon="/Assets/ArtDock.ico"
+    Width="900"
+    Height="780"
+    MinWidth="640"
+    MinHeight="480"
+    ResizeMode="CanResize"
+    Topmost="True"
+    WindowStartupLocation="CenterScreen">
+
+    <!-- Everything here is WPF's own Fluent theme (App.xaml's ThemeMode), so the controls
+         are Windows 11 controls rather than an imitation of them, and the colours below are
+         the system's own resource keys rather than hex this project invented. Nothing is
+         hard-coded except spacing. -->
+
+    <Window.Resources>
+        <!-- TextBlock is not a Control: nothing in any theme sets its Foreground, and its
+             own default is literally black. Every text style here therefore starts from one
+             that names the system's own text brush, and the implicit style below catches
+             the plain ones. Leaving that out is what put black text on a dark window. -->
+        <Style x:Key="TextBase" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        </Style>
+
+        <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+
+        <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+
+        <Style x:Key="GroupHeader" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="2,16,0,6" />
+        </Style>
+
+        <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="CardHint" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <!-- The Settings app's row: a rounded, faintly outlined panel per setting. -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+            <Style.Triggers>
+                <!-- A card that does not apply dims as a whole. The controls inside grey
+                     themselves, but their labels are TextBlocks and would otherwise stay at
+                     full strength next to a slider nothing is listening to. -->
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Each page ends with its own reset. Deliberately on the page rather than in the
+             window's button row: a reset button is only unambiguous when what it covers is
+             the thing it is sitting at the foot of. -->
+        <Style x:Key="PageReset" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="0,12,0,0" />
+            <Setter Property="MinWidth" Value="190" />
+        </Style>
+
+        <!-- The grip on a pinned row. Drawn rather than a glyph: the icon fonts that carry
+             one are not guaranteed to be installed, and a missing glyph renders as a box —
+             which is worse than no affordance at all. Six squares in two columns is the
+             shape everyone reads as "pick this up". -->
+        <Geometry x:Key="GripDots">
+            M0,0H2V2H0Z M4,0H6V2H4Z M0,4H2V6H0Z M4,4H6V6H4Z M0,8H2V10H0Z M4,8H6V10H4Z
+        </Geometry>
+
+        <!-- The buttons that take something away — Remove on both list pages, Clear all, and
+             the whole-application reset — coloured so they do not read like the ones beside
+             them that do not. -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- The column the value beside every slider sits in, one width for all of them so
+             the sliders line up down a page. Sized for the longest read-out there is rather
+             than for English: "100% right" set the width first, and a translated "3 icons" is
+             routinely longer than the English — German's is "3 Symbole". -->
+        <GridLength x:Key="ReadoutWidth">80</GridLength>
+
+        <Style x:Key="RowValue" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <!-- BasedOn matters: the Fluent theme supplies its controls as implicit styles, and
+             an explicit style without a base replaces one outright rather than adding to it
+             — which is how these sliders lost their Windows 11 template and came back as
+             the old grey ones. -->
+        <Style x:Key="RowSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="IsSnapToTickEnabled" Value="True" />
+            <Setter Property="Margin" Value="12,0,12,0" />
+        </Style>
+
+        <!-- Left navigation, the way the Settings app arranges its pages. A TabControl
+             rather than a bespoke list, so the pages stay pages and the code-behind does
+             not have to know the difference. -->
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <!-- For the same reason as TabItem below: this replaces the theme's style, so
+                 anything in a page that falls back to inherited text colour would fall back
+                 to black. Nothing does today; this is so nothing added later can. -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="188" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel IsItemsHost="True" Margin="0,4,0,0" />
+
+                            <ContentPresenter
+                                Grid.Column="1"
+                                Margin="20,0,0,0"
+                                ContentSource="SelectedContent" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <!-- The header text is a TextBlock the ContentPresenter makes for itself inside
+                 the template, so no implicit style reaches it. What it does inherit is
+                 Foreground, and this style replaces the theme's — which left it on Control's
+                 default of black, invisible against a dark window. Naming the system's text
+                 brush here is what the generated TextBlock picks up. -->
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border
+                            x:Name="Chrome"
+                            Margin="0,1,8,1"
+                            Padding="10,9"
+                            Background="Transparent"
+                            CornerRadius="4">
+                            <Grid>
+                                <!-- The accent bar down the left of the selected page. -->
+                                <Border
+                                    x:Name="Indicator"
+                                    Width="3"
+                                    Height="16"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="2"
+                                    Opacity="0" />
+                                <ContentPresenter
+                                    Margin="16,0,0,0"
+                                    VerticalAlignment="Center"
+                                    ContentSource="Header" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
+                                <Setter TargetName="Indicator" Property="Opacity" Value="1" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20,12,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TabControl x:Name="Tabs">
+
+            <!-- ==================== SIZE AND MOTION ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.Size}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Size.Title}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Size.IconSize}" />
+                                <Slider
+                                    x:Name="BaseSizeSlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="96"
+                                    Minimum="20"
+                                    TickFrequency="1" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Size.IconSize.Value"
+                                    loc:Localized.Value="{Binding ElementName=BaseSizeSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Size.Magnification}" />
+                                <Slider
+                                    x:Name="MaxScaleSlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="2.5"
+                                    Minimum="1"
+                                    TickFrequency="0.05" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Size.Magnification.Value"
+                                    loc:Localized.Value="{Binding ElementName=MaxScaleSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Size.Influence}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Size.Influence.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="InfluenceSlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="6"
+                                    Minimum="1"
+                                    TickFrequency="1" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Size.Influence.Value"
+                                    loc:Localized.Value="{Binding ElementName=InfluenceSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Size.Gap}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Size.Gap.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="GapSlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="0.6"
+                                    Minimum="0"
+                                    TickFrequency="0.02" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Size.Gap.Value"
+                                    loc:Localized.Value="{Binding ElementName=GapSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Size.Sweep}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Size.Sweep.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="SweepCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetSizeButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Size.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== THE BAR ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.Appearance}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Appearance.Title}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Opacity}" />
+                                <Slider
+                                    x:Name="OpacitySlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="1"
+                                    Minimum="0.2"
+                                    TickFrequency="0.02" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Appearance.Opacity.Value"
+                                    loc:Localized.Value="{Binding ElementName=OpacitySlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Roundness}" />
+                                <Slider
+                                    x:Name="RoundnessSlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="1"
+                                    Minimum="0"
+                                    TickFrequency="0.02" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Appearance.Roundness.Value"
+                                    loc:Localized.Value="{Binding ElementName=RoundnessSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Colour}" />
+                                    <TextBox
+                                        x:Name="BarColorBox"
+                                        Grid.Column="1"
+                                        Margin="12,0,12,0"
+                                        VerticalAlignment="Center" />
+                                    <Border
+                                        Grid.Column="2"
+                                        Width="52"
+                                        Height="28"
+                                        VerticalAlignment="Center"
+                                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                        <Border.Background>
+                                            <SolidColorBrush x:Name="BarColorPreview" />
+                                        </Border.Background>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Appearance.MatchTaskbar}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Appearance.MatchTaskbar.Hint}" />
+                                    </StackPanel>
+                                    <CheckBox
+                                        x:Name="TaskbarColorCheck"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center" />
+                                </Grid>
+
+                                <!-- Everything the taskbar option overrides, so it can all be
+                                     greyed together rather than one control at a time. -->
+                                <Grid x:Name="ManualColorPanel" Margin="0,16,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- The wheel is added in code: it is a drawn control, not a template. -->
+                                    <ContentControl x:Name="WheelHost" VerticalAlignment="Top" />
+
+                                    <StackPanel Grid.Column="1" Margin="20,0,0,0">
+                                        <TextBlock Style="{StaticResource Hint}" Text="{DynamicResource Settings.Appearance.Swatches}" />
+                                        <WrapPanel x:Name="SwatchPanel" Margin="0,8,0,0" />
+
+                                        <TextBlock
+                                            Margin="0,10,0,0"
+                                            Style="{StaticResource Hint}"
+                                            Text="{DynamicResource Settings.Appearance.SavedColours}" />
+                                        <WrapPanel x:Name="CustomSwatchPanel" Margin="0,8,0,0" />
+                                        <TextBlock
+                                            x:Name="NoSavedColorsHint"
+                                            Style="{StaticResource Hint}"
+                                            Text="{DynamicResource Settings.Appearance.NoSavedColours}" />
+                                        <Button
+                                            x:Name="SaveColorButton"
+                                            Margin="0,8,0,0"
+                                            HorizontalAlignment="Left"
+                                            MinWidth="132"
+                                            Content="{DynamicResource Settings.Appearance.SaveColour}" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Appearance.Blur}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Appearance.Blur.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="BlurCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- The icon set is part of how the dock looks, so it lives here and
+                             is reset with this page. The list is read again whenever this
+                             window comes back to the front, so a set copied in with Open
+                             folder shows up without reopening anything. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Appearance.IconSet}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Appearance.IconSet.Hint}" />
+                                    </StackPanel>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                        <ComboBox x:Name="IconSetBox" MinWidth="200" />
+                                        <Button
+                                            x:Name="IconSetFolderButton"
+                                            Margin="8,0,0,0"
+                                            Content="{DynamicResource Common.OpenFolder}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock
+                                    x:Name="IconSetProblems"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource CardHint}"
+                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetAppearanceButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Appearance.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== BEHAVIOUR ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.Behaviour}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Behaviour.Title}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.AlwaysOnTop}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.AlwaysOnTop.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="AlwaysOnTopCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.AutoHide}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.AutoHide.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="AutoHideCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Greyed with auto-hide off: only auto-hide leaves a dock for the handle
+                             to mark. Its width greys with the handle, and the slider with the
+                             match, the way the taskbar colour greys the manual colour. It has no
+                             choice of look: it always inverts what is behind it. -->
+                        <Border x:Name="HandleCard" Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Behaviour.Handle}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Behaviour.Handle.Hint}" />
+                                    </StackPanel>
+                                    <CheckBox
+                                        x:Name="HandleCheck"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center" />
+                                </Grid>
+
+                                <StackPanel x:Name="HandleOptionsPanel" Margin="0,14,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{DynamicResource Settings.Behaviour.HandleMatchesDock}" />
+                                            <TextBlock
+                                                Style="{StaticResource CardHint}"
+                                                Text="{DynamicResource Settings.Behaviour.HandleMatchesDock.Hint}" />
+                                        </StackPanel>
+                                        <CheckBox
+                                            x:Name="HandleMatchDockCheck"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <Grid x:Name="HandleWidthRow" Margin="0,14,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="220" />
+                                            <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Behaviour.HandleWidth}" />
+                                        <Slider
+                                            x:Name="HandleWidthSlider"
+                                            Grid.Column="1"
+                                            Style="{StaticResource RowSlider}"
+                                            Maximum="600"
+                                            Minimum="40"
+                                            TickFrequency="10" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Style="{StaticResource RowValue}"
+                                            loc:Localized.Key="Settings.Behaviour.HandleWidth.Value"
+                                            loc:Localized.Value="{Binding ElementName=HandleWidthSlider, Path=Value}" />
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Never greyed out, like the reveal delay below: with auto-hide off, the
+                             same wait sends a dock the edge lifted back under what it covered. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.HideDelay}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.HideDelay.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="HideDelaySlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="3000"
+                                    Minimum="0"
+                                    TickFrequency="50" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Behaviour.HideDelay.Value"
+                                    loc:Localized.Value="{Binding ElementName=HideDelaySlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Never greyed out: the same hold against the edge also lifts a covered
+                             dock, whatever the other settings are. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.RevealDelay}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.RevealDelay.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="RevealDelaySlider"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="1000"
+                                    Minimum="0"
+                                    TickFrequency="10" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Behaviour.RevealDelay.Value"
+                                    loc:Localized.Value="{Binding ElementName=RevealDelaySlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetBehaviourButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Behaviour.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== ITEMS ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.Items}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.ColumnSpan="2"
+                        Style="{StaticResource PageTitle}"
+                        Text="{DynamicResource Settings.Items.Title}" />
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="4">
+                        <!-- The lock reaches the rows through the Tag: a DataTemplate has a
+                             namescope of its own, so an ElementName binding to the checkbox
+                             cannot be written inside one. Here, outside the template, it can. -->
+                        <ListBox
+                            x:Name="PinnedList"
+                            AllowDrop="True"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            HorizontalContentAlignment="Stretch"
+                            Tag="{Binding IsChecked, ElementName=LockOrderCheck}">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <controls:AnimatedRowPanel />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- Faded while the order is locked. The grip is the
+                                             row's one invitation to drag it, and an
+                                             invitation that is not being honoured is worse
+                                             than none. -->
+                                        <Path
+                                            Margin="0,0,12,0"
+                                            VerticalAlignment="Center"
+                                            Data="{StaticResource GripDots}"
+                                            Fill="{DynamicResource TextFillColorTertiaryBrush}">
+                                            <Path.Style>
+                                                <Style TargetType="Path">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="True">
+                                                            <Setter Property="Opacity" Value="0.3" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Path.Style>
+                                        </Path>
+                                        <TextBlock
+                                            x:Name="ItemLabel"
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Text="{Binding Label}"
+                                            TextTrimming="CharacterEllipsis" />
+
+                                        <!-- A separator is punctuation rather than an entry,
+                                             and the row says so the way the dock does: it
+                                             draws the rule instead of spelling out a name
+                                             that would sit in the list looking like an app
+                                             called Separator. -->
+                                        <Border
+                                            x:Name="SeparatorRule"
+                                            Grid.Column="1"
+                                            Height="2"
+                                            Margin="0,0,8,0"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource TextFillColorTertiaryBrush}"
+                                            CornerRadius="1"
+                                            Visibility="Collapsed" />
+                                    </Grid>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                                            <Setter TargetName="ItemLabel" Property="Visibility" Value="Collapsed" />
+                                            <Setter TargetName="SeparatorRule" Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Margin="12,0,0,4">
+                        <!-- The dropdown is built in code from the same list the dock's own
+                             right-click menu uses, so the two cannot drift apart. -->
+                        <Button x:Name="AddButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.Add}" />
+
+                        <!-- Add works on the list; everything below it works on whichever
+                             item is selected, and is dead until one is. Ruled apart so the
+                             one button that is always available does not read as the odd
+                             one out of five that happen to be greyed. -->
+                        <Border
+                            Height="1"
+                            Margin="4,4,4,12"
+                            Background="{DynamicResource CardStrokeColorDefaultBrush}" />
+
+                        <Button x:Name="ItemSettingsButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.ItemSettings}" />
+                        <Button
+                            x:Name="RemoveButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource DangerButton}"
+                            Content="{DynamicResource Common.Remove}" />
+                        <Button x:Name="MoveUpButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.MoveUp}" />
+                        <Button x:Name="MoveDownButton" MinWidth="132" Content="{DynamicResource Settings.Items.MoveDown}" />
+
+                        <!-- Not a page reset like the other pages carry. What a page reset
+                             would offer here is the starting set, and that comes back with the
+                             whole-application reset on About; this page's own offer is starting
+                             again from nothing. -->
+                        <Button
+                            x:Name="ClearItemsButton"
+                            Margin="0,20,0,0"
+                            MinWidth="132"
+                            Style="{StaticResource DangerButton}"
+                            Content="{DynamicResource Settings.Items.ClearAll}" />
+                    </StackPanel>
+
+                    <!-- Column 0 only, so neither the checkbox nor the hint runs under the
+                         button column beside the list. -->
+                    <StackPanel Grid.Row="2" Margin="2,10,0,0">
+                        <CheckBox
+                            x:Name="LockOrderCheck"
+                            Content="{DynamicResource Settings.Items.LockOrder}"
+                            ToolTip="{DynamicResource Settings.Items.LockOrder.Tip}" />
+
+                        <!-- The other half of the same idea: one fixes the arrangement of a
+                             list that is still open, this one closes the list. Both, and the
+                             dock is exactly as it stands. -->
+                        <CheckBox
+                            x:Name="LockContentsCheck"
+                            Margin="0,8,0,0"
+                            Content="{DynamicResource Settings.Items.LockContents}"
+                            ToolTip="{DynamicResource Settings.Items.LockContents.Tip}" />
+
+                        <!-- Named because it has two readings: an order that cannot be
+                             dragged makes a hint about dragging to reorder a lie. -->
+                        <TextBlock
+                            x:Name="ItemsHint"
+                            Margin="0,8,0,0"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Items.Hint.Reorder}" />
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ==================== EXCLUSIONS ==================== -->
+            <!-- After Items, because it is the other list of programs the user keeps, though
+                 what it qualifies is Behaviour: the edge that page describes does nothing over
+                 the programs listed here while they fill the screen. Called Exclusions
+                 rather than Fullscreen, which read as a setting for going fullscreen. No page
+                 reset — the list is the user's own, like the pinned items, and Remove is how
+                 an entry goes. -->
+            <TabItem Header="{DynamicResource Settings.Page.Exclusions}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.ColumnSpan="2"
+                        Style="{StaticResource PageTitle}"
+                        Text="{DynamicResource Settings.Exclusions.Title}" />
+
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        Margin="2,0,0,12"
+                        Style="{StaticResource Hint}"
+                        Text="{DynamicResource Settings.Exclusions.Hint}" />
+
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="4">
+                        <Grid>
+                            <!-- Two lines to a row beside the program's icon: what it calls
+                                 itself, and where it is — the name alone cannot tell two builds
+                                 of a game apart. -->
+                            <ListBox
+                                x:Name="NoRevealList"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Stretch"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Image
+                                                Width="24"
+                                                Height="24"
+                                                Margin="0,0,12,0"
+                                                VerticalAlignment="Center"
+                                                RenderOptions.BitmapScalingMode="HighQuality"
+                                                Source="{Binding Icon}" />
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Style="{StaticResource CardHint}" Text="{Binding Path}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- An empty card does not explain itself, and empty is how the
+                                 list starts. -->
+                            <TextBlock
+                                x:Name="NoRevealEmptyHint"
+                                Margin="12,10,12,10"
+                                VerticalAlignment="Top"
+                                IsHitTestVisible="False"
+                                Style="{StaticResource Hint}"
+                                Text="{DynamicResource Settings.Exclusions.Empty}" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        Margin="12,0,0,4">
+                        <!-- A dropdown, like the Items page's Add: the programs open right now,
+                             then Browse… for one that is not. Built when it opens, so a game
+                             started with this window already open is in it. -->
+                        <Button
+                            x:Name="NoRevealAddButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Content="{DynamicResource Settings.Exclusions.Add}" />
+
+                        <!-- For the program nobody knows the name of, because a launcher starts
+                             it: finds the launchers' games by itself, and a game can be ticked
+                             whole. -->
+                        <Button
+                            x:Name="NoRevealScanButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Content="{DynamicResource Settings.Exclusions.Scan}" />
+
+                        <!-- The same, for everything that is not a game: a video player, a
+                             browser, a remote desktop — the apps that go fullscreen too. -->
+                        <Button
+                            x:Name="NoRevealScanAppsButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Content="{DynamicResource Settings.Exclusions.ScanApps}" />
+                        <Button
+                            x:Name="NoRevealRemoveButton"
+                            MinWidth="132"
+                            Style="{StaticResource DangerButton}"
+                            Content="{DynamicResource Common.Remove}" />
+                    </StackPanel>
+
+                    <TextBlock
+                        Grid.Row="3"
+                        Margin="2,10,0,0"
+                        Style="{StaticResource Hint}"
+                        Text="{DynamicResource Settings.Exclusions.Matching}" />
+                </Grid>
+            </TabItem>
+
+            <!-- ==================== POSITION ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.Position}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Position.Title}" />
+
+                        <!-- Where along the bottom edge. There is no choice of edge: the bottom
+                             is the only one built, and a card offering left and right greyed out
+                             was a control nobody could use. It comes back with the side edges. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Position.AlongEdge}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Position.AlongEdge.Hint}" />
+                                </StackPanel>
+                                <!-- Filled from the middle rather than from the left, because the
+                                     setting is two-sided. The selection range is what draws that:
+                                     code keeps it between the middle and the value. -->
+                                <!-- Left to right whatever the language: the ends are the ends of
+                                     the screen, not the start and end of a line of text. -->
+                                <Slider
+                                    x:Name="EdgeOffsetSlider"
+                                    Grid.Column="1"
+                                    FlowDirection="LeftToRight"
+                                    Style="{StaticResource RowSlider}"
+                                    IsSelectionRangeEnabled="True"
+                                    Maximum="1"
+                                    Minimum="-1"
+                                    TickFrequency="0.01" />
+                                <TextBlock
+                                    x:Name="EdgeOffsetText"
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="ScreenCard" Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Position.Display}" />
+                                    <TextBlock
+                                        x:Name="ScreenHint"
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Position.Display.Hint}" />
+                                </StackPanel>
+                                <ComboBox
+                                    x:Name="ScreenBox"
+                                    Grid.Column="1"
+                                    MinWidth="230"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetPositionButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Position.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== SYSTEM ==================== -->
+            <TabItem Header="{DynamicResource Settings.Page.System}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.System.Title}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.System.Theme}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.System.Theme.Hint}" />
+                                </StackPanel>
+                                <ComboBox
+                                    x:Name="ThemeBox"
+                                    Grid.Column="1"
+                                    MinWidth="180"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Previewed like the theme: choosing a language changes these words
+                             straight away, and Cancel puts the old ones back. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.System.Language}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.System.Language.Hint}" />
+                                    </StackPanel>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                        <ComboBox x:Name="LanguageBox" MinWidth="200" />
+                                        <Button
+                                            x:Name="LanguageFolderButton"
+                                            Margin="8,0,0,0"
+                                            Content="{DynamicResource Common.OpenFolder}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock
+                                    x:Name="LanguageProblems"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource CardHint}"
+                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.System.RunAtLogin}" />
+                                <CheckBox
+                                    x:Name="RunAtLoginCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.System.ReduceMotion}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.System.ReduceMotion.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="ReduceMotionCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetSystemButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.System.Reset}" />
+
+                        <!-- Import and export are about the settings file as a whole rather
+                             than about one setting, so they are a card of their own, set apart
+                             from the page reset above. Import goes through the same
+                             preview-then-Save path as every other control here, which is what
+                             the hint promises. -->
+                        <Border Style="{StaticResource Card}" Margin="0,20,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.System.SettingsFile}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.System.SettingsFile.Hint}" />
+                                </StackPanel>
+                                <StackPanel
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <Button
+                                        x:Name="ImportButton"
+                                        MinWidth="92"
+                                        Margin="0,0,8,0"
+                                        Content="{DynamicResource Settings.System.Import}" />
+                                    <Button
+                                        x:Name="ExportButton"
+                                        MinWidth="92"
+                                        Content="{DynamicResource Settings.System.Export}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ==================== ABOUT ==================== -->
+            <!-- Last, because it is the one page with nothing on it to set, and so no page reset
+                 — only the whole-application one, which is about every page rather than this.
+                 It is also last in SettingsPage's numbering, which is stored: a page added
+                 anywhere but the end would reopen the dialog one page off for everyone. The
+                 build configuration is called out deliberately: the dock that runs here is the
+                 Release one, and "this fix did not work" has more than once turned out to be a
+                 Debug binary. -->
+            <TabItem Header="{DynamicResource Settings.Page.About}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.About.Title}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- 128 because the .ico has that frame for 100%, and 256 to
+                                     come down from at 150% — see ShowLogo. Big enough for the
+                                     mark's glass tray and highlight to show, which the small
+                                     frames lose, and about the height of the text beside it. -->
+                                <Image
+                                    x:Name="AboutLogo"
+                                    Width="128"
+                                    Height="128"
+                                    Margin="0,0,24,0"
+                                    VerticalAlignment="Center"
+                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock
+                                        FontSize="20"
+                                        FontWeight="SemiBold"
+                                        Text="ArtDock" />
+                                    <TextBlock
+                                        x:Name="AboutTaglineText"
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.About.Tagline}" />
+                                    <TextBlock
+                                        x:Name="AboutCopyrightText"
+                                        Style="{StaticResource CardHint}" />
+                                    <TextBlock
+                                        x:Name="AboutVersionText"
+                                        Margin="0,8,0,0"
+                                        Style="{StaticResource CardHint}" />
+                                    <TextBlock
+                                        x:Name="AboutRuntimeText"
+                                        Style="{StaticResource CardHint}" />
+                                    <TextBlock
+                                        x:Name="SettingsPathText"
+                                        Margin="0,8,0,0"
+                                        Style="{StaticResource CardHint}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Updates, from the public releases repository by Velopack — see
+                             Services/AppUpdater.cs. One button that is first Check and then
+                             Update and restart, for the version the check found, so nothing is
+                             fetched or applied without a press for it. A copy the setup did not
+                             install — a build run from the source tree — says so and offers
+                             nothing, because it has no installation to update. -->
+                        <Border Style="{StaticResource Card}" Margin="0,20,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.About.Updates}" />
+                                    <TextBlock x:Name="UpdateStatusText" Style="{StaticResource CardHint}" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="UpdateButton"
+                                    Grid.Column="1"
+                                    MinWidth="190"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- The whole-application reset lives here rather than on any one
+                             page, because it is about all of them — and on a page with no page
+                             reset of its own, so it cannot be mistaken for one. It says what it
+                             leaves alone, and that the pinned items are not among it — and is
+                             red like Remove and Clear all, because it takes the user's items
+                             off the dock as they do. -->
+                        <Border Style="{StaticResource Card}" Margin="0,4,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.About.StartOver}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.About.StartOver.Hint}" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="ResetButton"
+                                    Grid.Column="1"
+                                    MinWidth="190"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource DangerButton}"
+                                    Content="{DynamicResource Settings.About.StartOver.Button}" />
+                            </Grid>
+                        </Border>
+
+                        <!-- The tray menu has an Exit too, but Windows 11 tucks new tray icons
+                             behind the overflow arrow, and the dock's own menu has no Exit — only
+                             Dock settings…, which leads here. On this page because, like the rest
+                             of it, it is about the application rather than a setting of it.
+                             Unsaved changes go the way Cancel sends them, without asking, since
+                             nothing else in this dialog asks either; the hint says so instead. -->
+                        <Border Style="{StaticResource Card}" Margin="0,4,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Common.ExitArtDock}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.About.Exit.Hint}" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="ExitButton"
+                                    Grid.Column="1"
+                                    MinWidth="92"
+                                    VerticalAlignment="Center"
+                                    Content="{DynamicResource Common.Exit}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <StackPanel
+            Grid.Row="1"
+            Margin="0,16,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <!-- Deliberately not IsCancel: that sets DialogResult, which throws on a window
+                 shown with Show() rather than ShowDialog(). Escape is handled in code. -->
+            <Button x:Name="CancelButton" Margin="0,0,8,0" MinWidth="96" Content="{DynamicResource Common.Cancel}" />
+            <Button
+                x:Name="SaveButton"
+                MinWidth="96"
+                Content="{DynamicResource Common.Save}"
+                IsDefault="True"
+                Style="{DynamicResource AccentButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -1,0 +1,518 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using ArtDock.Dock;
+using ArtDock.Interop;
+
+namespace ArtDock.Views;
+
+/// <summary>
+/// The slim bar an auto-hidden dock leaves behind — the phone's home indicator, just above the
+/// taskbar, under where the dock will come up.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A window of its own, because the dock's is off the bottom of the screen while this is up.
+/// Made by hand rather than as a WPF <see cref="Window"/>, like <see cref="BackdropWindow"/> and
+/// for the same reason: its size is the dock's to set, in device pixels, and WPF's handling of
+/// a change of scale would resize it. So <c>WM_DPICHANGED</c> is swallowed, and the pill is
+/// drawn to fill whatever the window is, rounded from its own height — which makes whatever
+/// scale WPF believes this window is at beside the point.
+/// </para>
+/// <para>
+/// It never takes input. <c>WS_EX_TRANSPARENT</c> passes a click straight through to the window
+/// underneath, which is usually the bottom row of something maximized — a status bar, a
+/// scroll bar. Resting the pointer on it is noticed by polling instead, like everything else
+/// the dock answers; see <c>AutoHideController</c>.
+/// </para>
+/// <para>
+/// It shows the colours behind it <b>inverted</b> — read off the screen by a thread of its own,
+/// since a read waits a whole frame for DWM (see <see cref="ScreenCapture"/>) — so it stands out
+/// against anything, as the phone's does by turning dark over light and light over dark. There
+/// is no choice of look; that was a setting once, and was taken away as a choice nobody needed.
+/// The dock's colour is what it falls back on where Windows will not keep it out of captures of
+/// the screen, since inverting then would mean inverting itself.
+/// </para>
+/// </remarks>
+public sealed class HandleWindow : IDisposable
+{
+    /// <summary>The same as the dock's slide, so the handle arrives as the dock goes and goes as it arrives.</summary>
+    private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(220));
+
+    /// <summary>
+    /// How often what is behind an inverted handle is read: fifteen times a second.
+    /// </summary>
+    /// <remarks>
+    /// Measured at about half a percent of one core, since a read is mostly waiting. What is
+    /// behind a thin bar at the bottom of the screen is a status bar or a scroll bar, which
+    /// rarely moves; a video under it lags by a read at most, which on a bar five pixels tall
+    /// does not show.
+    /// </remarks>
+    private static readonly TimeSpan ReadInterval = TimeSpan.FromMilliseconds(66);
+
+    private readonly HwndSource _source;
+    private readonly nint _hwnd;
+    private readonly Border _pill;
+
+    private (int X, int Y, int Width, int Height)? _placed;
+    private Color? _color;
+
+    /// <summary>
+    /// The look in force: inverting, or the dock's colour for want of it — null before
+    /// <see cref="SetLook"/> has been called.
+    /// </summary>
+    private bool? _inverting;
+
+    /// <summary>
+    /// False once Windows has refused to keep this window out of captures of the screen. It
+    /// cannot invert then — each read would see its own inversion — so it takes the dock's colour.
+    /// </summary>
+    private bool _canInvert = true;
+
+    /// <summary>True from <see cref="Show"/> until <see cref="Hide"/> — fading in, or up.</summary>
+    private bool _wanted;
+
+    /// <summary>True while the window is shown at all, which outlasts <see cref="_wanted"/> by the fade out.</summary>
+    private bool _visible;
+
+    /// <summary>Which fade is the latest, so an earlier one finishing late cannot hide the window.</summary>
+    private int _fade;
+
+    private bool _disposed;
+
+    // ---- reading what is behind ----------------------------------------------
+    //
+    // Everything below _gate is shared with the reading thread and touched only under it.
+
+    private readonly Lock _gate = new();
+
+    /// <summary>What the reading thread reads: where the handle is, in physical pixels.</summary>
+    private (int X, int Y, int Width, int Height) _region;
+
+    /// <summary>The latest inverted read, waiting for the dock's thread to draw it.</summary>
+    private byte[] _inverted = [];
+
+    private int _invertedWidth;
+    private int _invertedHeight;
+    private bool _fresh;
+    private bool _drawPosted;
+
+    /// <summary>Wakes the reading thread early, when the handle has moved or has just come up.</summary>
+    private readonly AutoResetEvent _wake = new(false);
+
+    /// <summary>The run of the reading thread in progress, or null when nothing is being read.</summary>
+    private CancellationTokenSource? _reading;
+
+    /// <summary>What is behind, inverted, as drawn: made at the size of the first read to arrive.</summary>
+    private WriteableBitmap? _behind;
+
+    private readonly ImageBrush _behindBrush = new() { Stretch = Stretch.Fill };
+
+    public HandleWindow()
+    {
+        _pill = new Border { Opacity = 0, SnapsToDevicePixels = true };
+        _pill.SizeChanged += (_, _) => Shape();
+
+        // Pixel for pixel when the read is the size of the window, which is always but for the
+        // moment after a resize: then the last read is stretched until the next one lands,
+        // rather than the handle going blank while it waits.
+        RenderOptions.SetBitmapScalingMode(_pill, BitmapScalingMode.NearestNeighbor);
+
+        _source = new HwndSource(new HwndSourceParameters("ArtDock.Handle")
+        {
+            WindowStyle = unchecked((int)NativeMethods.WS_POPUP),
+            ExtendedWindowStyle = unchecked((int)(
+                NativeMethods.WS_EX_TOOLWINDOW
+                | NativeMethods.WS_EX_NOACTIVATE
+                | NativeMethods.WS_EX_TRANSPARENT)),
+            UsesPerPixelTransparency = true,
+            PositionX = -32000,
+            PositionY = -32000,
+            Width = 1,
+            Height = 1
+        })
+        {
+            RootVisual = _pill
+        };
+
+        _hwnd = _source.Handle;
+        _source.AddHook(OnWindowMessage);
+    }
+
+    public nint Hwnd => _hwnd;
+
+    /// <summary>True from <see cref="Show"/> until <see cref="Hide"/>: the handle is up, or on its way.</summary>
+    public bool IsShown => _wanted;
+
+    /// <summary>Where the handle was last put, in physical pixels; empty before it has been.</summary>
+    public Rect Bounds => _placed is { } placed
+        ? new Rect(placed.X, placed.Y, placed.Width, placed.Height)
+        : Rect.Empty;
+
+    /// <summary>Puts the handle where it goes, in physical pixels — only if it is not there already.</summary>
+    public void Place(Rect bounds)
+    {
+        if (_disposed || bounds.IsEmpty || bounds.Width < 1 || bounds.Height < 1)
+        {
+            return;
+        }
+
+        var (x, y, width, height) =
+            ((int)bounds.X, (int)bounds.Y, (int)bounds.Width, (int)bounds.Height);
+
+        // Checked against where the window actually is as well as against what was asked for,
+        // as every other window of the dock's is: re-placing a layered window where it already
+        // is still re-composes it, and this runs on every frame of the dock's slide.
+        if (_placed == (x, y, width, height)
+            && NativeMethods.GetWindowRect(_hwnd, out var actual)
+            && actual.Left == x && actual.Top == y
+            && actual.Right - actual.Left == width
+            && actual.Bottom - actual.Top == height)
+        {
+            return;
+        }
+
+        _placed = (x, y, width, height);
+        NativeMethods.SetWindowPos(
+            _hwnd, 0, x, y, width, height,
+            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER);
+
+        // Somewhere new has something new behind it; read it now rather than at the next turn.
+        lock (_gate)
+        {
+            _region = (x, y, width, height);
+        }
+
+        _wake.Set();
+    }
+
+    /// <summary>
+    /// Sets the handle's look: the colours behind it inverted — or, where Windows will not keep
+    /// it out of captures of the screen, <paramref name="fallback"/>, the dock's colour,
+    /// outlined in whatever stands out against it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Inverting keeps the window out of screenshots and recordings, because that is what keeps
+    /// it out of its own reads. The first call asks Windows for that, once; a refusal — before
+    /// Windows 10 2004 — is kept, and the handle is drawn in the dock's colour from then on.
+    /// </para>
+    /// <para>
+    /// The dock's colour nearly solid, where the bar is usually see-through. Nothing is blurred
+    /// behind the handle the way the acrylic sheet is behind the bar, and a sliver at the bar's
+    /// own opacity went into whatever it lay over. The hairline is in the opposite tone to the
+    /// fill, so a light handle over a white window is still outlined, and a dark one over a
+    /// dark window still has a light edge.
+    /// </para>
+    /// </remarks>
+    public void SetLook(Color fallback)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var invert = _canInvert;
+
+        if (invert && _inverting is null && !ScreenCapture.ExcludeFromCapture(_hwnd, exclude: true))
+        {
+            _canInvert = false;
+            invert = false;
+        }
+
+        if (invert != _inverting)
+        {
+            _inverting = invert;
+            _color = null;
+
+            if (invert)
+            {
+                _pill.Background = _behindBrush;
+                _pill.BorderBrush = null;
+            }
+
+            Shape();
+            UpdateReading();
+        }
+
+        if (invert || _color == fallback)
+        {
+            return;
+        }
+
+        _color = fallback;
+
+        var luminance =
+            ((0.2126 * fallback.R) + (0.7152 * fallback.G) + (0.0722 * fallback.B)) / 255;
+        var edge = luminance > 0.5
+            ? Color.FromArgb(0x59, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF);
+
+        _pill.Background = Frozen(Color.FromArgb(0xE6, fallback.R, fallback.G, fallback.B));
+        _pill.BorderBrush = Frozen(edge);
+    }
+
+    /// <summary>Brings the handle up, fading in, at the top of the topmost band.</summary>
+    /// <remarks>
+    /// Topmost whatever the dock's own setting. It is a mark for a dock that is away, and one
+    /// that the window in front could cover would be gone exactly when the dock is — which is
+    /// the one time it is for.
+    /// </remarks>
+    public void Show()
+    {
+        if (_disposed || _wanted)
+        {
+            return;
+        }
+
+        _wanted = true;
+
+        if (!_visible)
+        {
+            _visible = true;
+
+            // SW_SHOWNA rather than SW_SHOW: this window must never take the foreground.
+            NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_SHOWNA);
+        }
+
+        NativeMethods.SetWindowPos(
+            _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+
+        UpdateReading();
+        Fade(1);
+    }
+
+    /// <summary>Fades the handle out, and hides its window once it has gone.</summary>
+    public void Hide()
+    {
+        if (_disposed || !_wanted)
+        {
+            return;
+        }
+
+        _wanted = false;
+        Fade(0);
+    }
+
+    private void Fade(double to)
+    {
+        var generation = ++_fade;
+        var animation = new DoubleAnimation(to, FadeDuration);
+
+        animation.Completed += (_, _) =>
+        {
+            // Only the latest fade may put the window away. A handle hidden while it was still
+            // fading in would otherwise be put away by the fade in finishing, and one shown
+            // again while fading out would vanish when the fade out did.
+            if (generation != _fade || _wanted || !_visible || _disposed)
+            {
+                return;
+            }
+
+            _visible = false;
+            NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
+            UpdateReading();
+        };
+
+        // From wherever the last fade had got to, so reversing one mid-way does not jump.
+        _pill.BeginAnimation(UIElement.OpacityProperty, animation);
+    }
+
+    /// <summary>
+    /// Rounds the pill from its own height, and keeps its outline one device pixel wide — or
+    /// takes the outline away, when the pill is what is behind it inverted.
+    /// </summary>
+    /// <remarks>
+    /// Both in whatever units WPF lays this window out in, which is its idea of the scale — and
+    /// that idea is stale by design, since the change-of-scale message is swallowed. Taken from
+    /// the element rather than assumed, the pill is a pill and the hairline a hairline on either
+    /// display whichever scale WPF thinks it is at.
+    /// </remarks>
+    private void Shape()
+    {
+        var dpi = VisualTreeHelper.GetDpi(_pill);
+        _pill.CornerRadius = new CornerRadius(_pill.ActualHeight / 2);
+        _pill.BorderThickness = new Thickness(_inverting == true ? 0 : 1 / dpi.DpiScaleY);
+    }
+
+    // ---- reading what is behind ----------------------------------------------
+
+    /// <summary>
+    /// Starts reading what is behind while the handle is inverting and on screen, and stops
+    /// when it is neither.
+    /// </summary>
+    /// <remarks>
+    /// A run per showing, so each one starts from nothing: the first read is always drawn,
+    /// rather than skipped for matching the last read of the time before, which is no longer
+    /// what the handle is showing if it has been put away since.
+    /// </remarks>
+    private void UpdateReading()
+    {
+        var wanted = _inverting == true && _visible && !_disposed;
+
+        if (wanted && _reading is null)
+        {
+            _reading = new CancellationTokenSource();
+            var stop = _reading.Token;
+
+            new Thread(() => ReadLoop(stop))
+            {
+                IsBackground = true,
+                Name = "ArtDock handle",
+                Priority = ThreadPriority.BelowNormal
+            }.Start();
+        }
+        else if (!wanted && _reading is not null)
+        {
+            // Not waited for. The thread is at most one read from noticing, and anything it
+            // hands over meanwhile is drawn into a window that is hidden.
+            _reading.Cancel();
+            _reading = null;
+        }
+    }
+
+    /// <summary>
+    /// Reads what is behind the handle, and hands it over inverted whenever it has changed.
+    /// </summary>
+    /// <remarks>
+    /// Unchanged is the usual answer — a status bar, a scroll bar — and costs the dock's thread
+    /// nothing: only a read that differs from the one before is inverted and drawn. Anything
+    /// thrown ends the reading and leaves the last read on the handle. A failure here must never
+    /// take the dock down with it, and a background thread's exception would.
+    /// </remarks>
+    private void ReadLoop(CancellationToken stop)
+    {
+        byte[] read = [];
+        byte[] last = [];
+        var lastSize = (Width: 0, Height: 0);
+        var waits = new[] { stop.WaitHandle, _wake };
+
+        try
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                (int X, int Y, int Width, int Height) region;
+                lock (_gate)
+                {
+                    region = _region;
+                }
+
+                var length = region.Width * region.Height * 4;
+                if (length > 0)
+                {
+                    if (read.Length != length)
+                    {
+                        read = new byte[length];
+                    }
+
+                    if (ScreenCapture.TryCopy(region.X, region.Y, region.Width, region.Height, read)
+                        && (lastSize != (region.Width, region.Height) || !read.AsSpan().SequenceEqual(last)))
+                    {
+                        if (last.Length != length)
+                        {
+                            last = new byte[length];
+                        }
+
+                        read.CopyTo(last);
+                        lastSize = (region.Width, region.Height);
+                        HandOver(read, region.Width, region.Height);
+                    }
+                }
+
+                WaitHandle.WaitAny(waits, ReadInterval);
+            }
+        }
+        catch (Exception)
+        {
+            // See the remarks: the handle keeps what it last showed, and the dock carries on.
+        }
+    }
+
+    /// <summary>Inverts a read and asks the dock's thread to draw it, once however many arrive first.</summary>
+    private void HandOver(byte[] read, int width, int height)
+    {
+        lock (_gate)
+        {
+            if (_inverted.Length != read.Length)
+            {
+                _inverted = new byte[read.Length];
+            }
+
+            DockHandle.Invert(read, _inverted);
+            (_invertedWidth, _invertedHeight) = (width, height);
+            _fresh = true;
+
+            if (_drawPosted)
+            {
+                return;
+            }
+
+            _drawPosted = true;
+        }
+
+        _source.Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(DrawBehind));
+    }
+
+    /// <summary>Draws the latest inverted read into the pill.</summary>
+    private void DrawBehind()
+    {
+        lock (_gate)
+        {
+            _drawPosted = false;
+
+            if (!_fresh || _disposed)
+            {
+                return;
+            }
+
+            _fresh = false;
+            var (width, height) = (_invertedWidth, _invertedHeight);
+
+            if (_behind is null || _behind.PixelWidth != width || _behind.PixelHeight != height)
+            {
+                _behind = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+                _behindBrush.ImageSource = _behind;
+            }
+
+            _behind.WritePixels(new Int32Rect(0, 0, width, height), _inverted, width * 4, 0);
+        }
+    }
+
+    private static SolidColorBrush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        // Swallowed, as the backdrop's is: this window is born off screen, possibly on a display
+        // of another scale from the one it is sent to, and WPF's handling of the move would
+        // resize it by the ratio between the two. Its size is the dock's to set.
+        if (msg == NativeMethods.WM_DPICHANGED)
+        {
+            handled = true;
+        }
+
+        return 0;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        UpdateReading();
+        _pill.BeginAnimation(UIElement.OpacityProperty, null);
+        _source.Dispose();
+    }
+}

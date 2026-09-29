@@ -1,0 +1,25 @@
+<Window
+    x:Class="ArtDock.Views.DockWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ArtDock"
+    AllowDrop="True"
+    AllowsTransparency="True"
+    Background="Transparent"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowStyle="None">
+
+    <!-- Pixel snapping is deliberately off. Both SnapsToDevicePixels and
+         UseLayoutRounding quantise positions to whole device pixels, which is right for
+         static chrome and wrong here: the wave moves icons by fractions of a pixel, and
+         snapping turns that smooth drift into a 1px stutter — the icons visibly shake as
+         the wave passes them. Sub-pixel positioning is what makes the motion read as
+         motion. -->
+
+    <!-- The DockBar draws the bar and its icons and owns the magnification wave. It is
+         added in code so its metrics come from one place. Nothing else is in the window:
+         wherever the dock draws nothing, the window is transparent and click-through. -->
+    <Grid x:Name="Root" />
+</Window>

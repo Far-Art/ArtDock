@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+.vs/
+artifacts/
+__pycache__/
+/CLAUDE.md
+/TODO.md
+/TODO-v2.md

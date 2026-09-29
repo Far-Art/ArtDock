@@ -1,0 +1,105 @@
+<Window
+    x:Class="ArtDock.Views.UninstallWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ArtDock"
+    FlowDirection="{DynamicResource Language.FlowDirection}"
+    Language="{DynamicResource Language.Tag}"
+    Icon="/Assets/ArtDock.ico"
+    Width="480"
+    SizeToContent="Height"
+    ResizeMode="NoResize"
+    Topmost="True"
+    WindowStartupLocation="CenterScreen">
+
+    <!-- Styled by WPF's own Fluent theme, like the other dialogs — set here by
+         UninstallWindow.AskToDeleteSettings rather than by App.xaml, since the uninstaller
+         runs this before there is an App. In the taskbar, unlike ConfirmRemoveWindow: nothing
+         of the dock is on screen to lead back to it if it opens behind something. -->
+
+    <Window.Resources>
+        <!-- TextBlock is not a Control, and its own default foreground is black; see the
+             same style in EditPinWindow. -->
+        <Style x:Key="TextBase" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        </Style>
+
+        <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+
+        <!-- Red, as Remove and Clear all are: it takes the user's things away for good. -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,20">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Image
+            Grid.RowSpan="2"
+            Width="48"
+            Height="48"
+            Margin="0,2,16,0"
+            VerticalAlignment="Top"
+            RenderOptions.BitmapScalingMode="HighQuality"
+            Source="/Assets/ArtDock.ico" />
+
+        <TextBlock
+            Grid.Column="1"
+            FontSize="20"
+            FontWeight="SemiBold"
+            Text="{DynamicResource Uninstall.Heading}"
+            TextWrapping="Wrap" />
+
+        <TextBlock
+            Grid.Row="1"
+            Grid.Column="1"
+            Margin="0,8,0,0"
+            Text="{DynamicResource Uninstall.Detail}"
+            TextWrapping="Wrap" />
+
+        <!-- Says out loud what happens to someone who walks away: the question answers itself
+             before Velopack's time for it runs out. -->
+        <TextBlock
+            x:Name="CountdownText"
+            Grid.Row="2"
+            Grid.Column="1"
+            Margin="0,8,0,0"
+            FontSize="12"
+            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+            TextWrapping="Wrap" />
+
+        <!-- Keep is the default, and has the focus, so Enter, Escape and the close box all keep
+             them. Deleting is the one answer that cannot be taken back, so it is the one that
+             has to be chosen. Keep first and the act on the right, as in the other dialogs. -->
+        <StackPanel
+            Grid.Row="3"
+            Grid.ColumnSpan="2"
+            Margin="0,24,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                x:Name="KeepButton"
+                Margin="0,0,8,0"
+                MinWidth="120"
+                Content="{DynamicResource Uninstall.Keep}"
+                IsCancel="True"
+                IsDefault="True" />
+            <Button
+                x:Name="DeleteButton"
+                MinWidth="120"
+                Content="{DynamicResource Uninstall.Delete}"
+                Style="{StaticResource DangerButton}" />
+        </StackPanel>
+    </Grid>
+</Window>

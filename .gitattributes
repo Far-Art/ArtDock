@@ -1,0 +1,7 @@
+# Normalise line endings in the repository so they cannot churn between machines;
+# working copies still get the platform's own endings on checkout.
+* text=auto
+
+# Assets git must never rewrite.
+*.ico binary
+*.png binary

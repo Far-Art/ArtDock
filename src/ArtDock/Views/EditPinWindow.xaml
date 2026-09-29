@@ -1,0 +1,228 @@
+<Window
+    x:Class="ArtDock.Views.EditPinWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="clr-namespace:ArtDock.Localization"
+    Title="{DynamicResource EditItem.Title}"
+    FlowDirection="{DynamicResource Language.FlowDirection}"
+    Language="{DynamicResource Language.Tag}"
+    Icon="/Assets/ArtDock.ico"
+    Width="600"
+    Height="680"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowStartupLocation="CenterScreen">
+
+    <!-- Styled by WPF's own Fluent theme, set in App.xaml. Nothing here paints a colour of
+         its own; the few keys referenced are the system's. -->
+
+    <Window.Resources>
+        <!-- TextBlock is not a Control: nothing in any theme sets its Foreground, and its
+             own default is literally black. Every text style here therefore starts from one
+             that names the system's own text brush, and the implicit style below catches
+             the plain ones. Leaving that out is what put black text on a dark window. -->
+        <Style x:Key="TextBase" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        </Style>
+
+        <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+
+        <Style x:Key="Hint" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+
+        <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="GroupHeader" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="2,14,0,6" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20,16,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Padding="0,0,10,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!-- Name -->
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Name}" />
+                        <TextBox x:Name="NameBox" Grid.Column="1" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <!-- Icon -->
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock
+                            Margin="0,6,0,0"
+                            VerticalAlignment="Top"
+                            Text="{DynamicResource EditItem.Icon}" />
+
+                        <Border
+                            Grid.Column="1"
+                            Width="76"
+                            Height="76"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="6">
+                            <Image x:Name="IconPreview" Width="54" Height="54" />
+                        </Border>
+
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="14,0,0,0"
+                            VerticalAlignment="Center">
+                            <Button x:Name="BrowseButton" Content="{DynamicResource EditItem.ChooseImage}" />
+                            <Button x:Name="ResetIconButton" Margin="0,8,0,0" Content="{DynamicResource EditItem.UseOwnIcon}" />
+                            <TextBlock
+                                x:Name="IconPathText"
+                                Margin="2,8,0,0"
+                                Style="{StaticResource Hint}"
+                                TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <!-- Only for a picture, which is all that has a thumbnail to turn down. -->
+                        <CheckBox
+                            x:Name="UseIconBox"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Grid.ColumnSpan="2"
+                            Margin="0,12,0,0"
+                            Content="{DynamicResource EditItem.UseIconNotThumbnail}"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </Border>
+
+                <!-- What it opens -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Opens}" />
+                            <TextBox x:Name="TargetBox" Grid.Column="1" VerticalAlignment="Center" />
+                            <Button
+                                x:Name="BrowseTargetButton"
+                                Grid.Column="2"
+                                Margin="8,0,0,0"
+                                Content="{DynamicResource Common.Browse}" />
+                        </Grid>
+                        <TextBlock
+                            Margin="80,8,0,0"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource EditItem.Opens.Hint}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource GroupHeader}" Text="{DynamicResource EditItem.Label}" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="130" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Font}" />
+                            <ComboBox
+                                x:Name="FontFamilyBox"
+                                Grid.Column="1"
+                                Margin="0,0,8,0"
+                                MaxDropDownHeight="260" />
+                            <ComboBox x:Name="FontStyleBox" Grid.Column="2" />
+                        </Grid>
+
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="62" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Size}" />
+                            <Slider
+                                x:Name="FontSizeSlider"
+                                Grid.Column="1"
+                                Margin="0,0,12,0"
+                                VerticalAlignment="Center"
+                                Maximum="28"
+                                Minimum="8"
+                                TickFrequency="1"
+                                IsSnapToTickEnabled="True" />
+                            <TextBlock
+                                Grid.Column="2"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                loc:Localized.Key="EditItem.Size.Value"
+                                loc:Localized.Value="{Binding ElementName=FontSizeSlider, Path=Value}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock
+                    Margin="2,12,0,0"
+                    Style="{StaticResource Hint}"
+                    Text="{DynamicResource EditItem.Hint}" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel
+            Grid.Row="1"
+            Margin="0,16,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                x:Name="CancelButton"
+                Margin="0,0,8,0"
+                MinWidth="96"
+                Content="{DynamicResource Common.Cancel}"
+                IsCancel="True" />
+            <Button
+                x:Name="SaveButton"
+                MinWidth="96"
+                Content="{DynamicResource Common.Save}"
+                IsDefault="True"
+                Style="{DynamicResource AccentButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

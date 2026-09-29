@@ -1,0 +1,120 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+
+    <!-- The Windows SDK version keeps the WinRT projections available for the shell work
+         in Phase 2 (AppsFolder enumeration, Store app activation). -->
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <RootNamespace>ArtDock</RootNamespace>
+    <AssemblyName>ArtDock</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- The version is shown on the About page, and with the product name by Explorer on the
+         .exe's Details tab. Still below 1.0 because the left and right edges are not built.
+         Version is the only one worth bumping by hand; the rest describe
+         the project. The description goes into the version resource's Comments, which
+         Explorer does not show; the About page shows Settings.About.Tagline from en.json
+         instead, so it can be translated. The two say the same thing — keep them in step. -->
+    <Version>0.9.0</Version>
+    <Product>ArtDock</Product>
+    <Description>A floating, macOS-style dock for Windows 11. Pin your apps, files and folders, and open or switch to them from a bar whose icons magnify, neighbours and all, as the pointer passes.</Description>
+
+    <!-- Company is what Task Manager's Startup apps page shows as the publisher of the Run key
+         entry autostart writes; left unset it defaults to the assembly name, so the dock was
+         published by itself. The copyright is shown verbatim on the About card, so it is kept
+         free of words — Explorer's Details tab labels it already. Title is left to default to
+         the assembly name on purpose: it is the File description, which Task Manager shows as
+         the process's name. -->
+    <Authors>Artur Farmanov</Authors>
+    <Company>$(Authors)</Company>
+    <Copyright>© 2026 $(Authors)</Copyright>
+
+    <!-- Releases, by Velopack — see Services/AppUpdater.cs and tools/release.ps1, which reads
+         both of these from here so they are set in one place.
+         The repository is where installed docks look for updates. It is public, unlike the
+         source: an installed dock cannot carry a token.
+         The install id names the folder Velopack's setup installs into,
+         %LOCALAPPDATA%\<id>, and treats that folder as its own — its uninstaller removes it.
+         So it must never be "ArtDock", which is where the settings and packs live; a test
+         holds it to that. It must not change once released, either: a changed id is a
+         different app, which the installed one cannot update into. -->
+    <ArtDockReleasesRepository>https://github.com/Far-Art/ArtDock-Releases</ArtDockReleasesRepository>
+    <ArtDockInstallId>ArtDock.App</ArtDockInstallId>
+
+    <!-- Program.Main rather than the one WPF generates from App.xaml, so that Velopack sees
+         the process before the application does. See Program.cs. -->
+    <StartupObject>ArtDock.Program</StartupObject>
+
+    <!-- Embeds the icon as a Win32 resource, which is what Explorer, the taskbar and
+         Alt-Tab read. Without it the app shows the generic .NET glyph. -->
+    <ApplicationIcon>Assets\ArtDock.ico</ApplicationIcon>
+
+    <!-- WPF, not WinUI 3. WinUI 3 XAML windows cannot be made per-pixel transparent on
+         Windows App SDK 2.4 — every documented and undocumented route was measured and
+         failed (see docs/step-2-transparency.md). WPF's AllowsTransparency does it
+         natively, which the dock needs for icons that magnify above the bar. -->
+    <UseWPF>true</UseWPF>
+
+    <!-- Only for the notification-area icon: WPF has no tray API, and WinForms'
+         NotifyIcon is in-box, so this replaces a third-party dependency. -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Required by [LibraryImport] source generation in Interop/. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- WFO0003 tells WinForms apps to declare DPI awareness in code rather than the
+         manifest. This is a WPF app that only borrows WinForms for the tray icon, and WPF
+         reads PerMonitorV2 from app.manifest, which is where it belongs. -->
+    <!-- WPF0001 marks Application.ThemeMode experimental. It is the supported entry point
+         to WPF's own Fluent theme, which is what makes the dialogs look like Windows 11
+         controls rather than like an imitation of them. -->
+    <NoWarn>$(NoWarn);WFO0003;WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Also carried as a WPF resource so the tray and the settings window can pick the
+         frame that matches their size, rather than rescaling one bitmap. -->
+    <Resource Include="Assets\ArtDock.ico" />
+
+    <!-- Marks for the pins that have no target for the shell to take an icon from — see
+         Services/DockCommands.cs. Bigger than the 128px icons are extracted at, because
+         these are the ones that would otherwise be the first to soften under the wave. -->
+    <Resource Include="Assets\icons\*.png" />
+
+    <!-- The built-in languages, English first among them. A manifest resource rather than
+         a WPF one, so the string table can be read without an Application — which is what
+         lets the tests read it, and what lets code that runs before the first window ask
+         for a string. The logical name is what Localization/LanguageLibrary.cs looks for. -->
+    <EmbeddedResource Include="Localization\*.json" LogicalName="ArtDock.Localization.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UseWindowsForms adds these as implicit usings, which then collide with WPF's
+         Brush/Color/Point/Size/Application in every file. Only Services/TrayIcon.cs wants
+         WinForms, and it imports them explicitly. -->
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Compiled in, so the running dock knows where its updates come from. -->
+    <AssemblyMetadata Include="ReleasesRepository" Value="$(ArtDockReleasesRepository)" />
+    <AssemblyMetadata Include="InstallId" Value="$(ArtDockInstallId)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The installer and updater. Keep it at the same version as the vpk tool in
+         dotnet-tools.json, which builds the releases it reads: vpk warns when they differ. -->
+    <PackageReference Include="Velopack" Version="1.2.158" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,79 @@
+<Window
+    x:Class="ArtDock.Views.AlreadyRunningWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ArtDock"
+    FlowDirection="{DynamicResource Language.FlowDirection}"
+    Language="{DynamicResource Language.Tag}"
+    Icon="/Assets/ArtDock.ico"
+    Width="460"
+    SizeToContent="Height"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowStartupLocation="CenterScreen">
+
+    <!-- Styled by WPF's own Fluent theme, set in App.xaml, like the other dialogs. -->
+
+    <Window.Resources>
+        <!-- TextBlock is not a Control, and its own default foreground is black; see the
+             same style in EditPinWindow. -->
+        <Style x:Key="TextBase" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        </Style>
+
+        <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            FontSize="20"
+            FontWeight="SemiBold"
+            Text="{DynamicResource AlreadyRunning.Heading}" />
+
+        <TextBlock
+            x:Name="ReasonText"
+            Grid.Row="1"
+            Margin="0,8,0,0"
+            TextWrapping="Wrap" />
+
+        <!-- Exit apart from the rest, on the left: it is the one that ends something. Show dock
+             is there only where it can work, and which button is the default follows it;
+             SetPresence decides both. -->
+        <Grid Grid.Row="2" Margin="0,24,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button
+                x:Name="ExitButton"
+                MinWidth="96"
+                Content="{DynamicResource Common.ExitArtDock}" />
+
+            <StackPanel
+                Grid.Column="2"
+                Orientation="Horizontal">
+                <Button
+                    x:Name="ShowDockButton"
+                    Margin="0,0,8,0"
+                    MinWidth="96"
+                    Content="{DynamicResource AlreadyRunning.ShowDock}"
+                    Style="{DynamicResource AccentButtonStyle}" />
+                <Button
+                    x:Name="CloseButton"
+                    MinWidth="96"
+                    Content="{DynamicResource Common.Close}"
+                    IsCancel="True" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

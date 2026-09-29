@@ -1,0 +1,1123 @@
+# ArtDock
+
+A macOS-Dock-style application dock for Windows 11 — a floating, always-on-top bar whose
+icons magnify with their neighbours as the pointer approaches.
+
+Settings live in `%LOCALAPPDATA%\ArtDock\settings.json`; settings written under the app's
+former name (ImsDock) are adopted automatically on first run.
+
+It began as the desktop counterpart of the `ims-dock` Angular component (in that project's
+`src/app/components/ims-dock/`): same interaction model, same tuning knobs. Nothing is shared
+at the code level — the web component was the specification, not a dependency, and the two
+have since diverged. The falloff here is a raised cosine rather than a plain one, which is
+what lets the row spread without the dock changing width.
+
+## Running it
+
+```bash
+dotnet run --project src/ArtDock
+```
+
+The dock appears centred on the bottom edge, with a tray icon for settings. Right-click the
+tray icon for **Settings…**, **Hide dock** and **Exit**; `ArtDock.exe --settings` opens the
+dialog directly. The dialog's About page has an **Exit** of its own, for when Windows has
+tucked the tray icon away behind the overflow arrow. Either one discards anything unsaved in
+the dialog, the way Cancel does.
+
+## Installing and releasing
+
+Released copies are installed by a setup, `ArtDock.App-win-Setup.exe`, built by
+[Velopack](https://velopack.io). It installs per user into `%LOCALAPPDATA%\ArtDock.App` —
+no administrator rights, then or on any update — with a Start menu shortcut and an entry in
+Windows' installed apps to remove it by. The installed dock starts when you sign in; the
+System page's *Start ArtDock when I sign in* turns that off, and an update leaves it as it
+was. Settings stay in `%LOCALAPPDATA%\ArtDock`, apart from the install, so updating does
+not touch them. Uninstalling asks: *Keep settings*, the default, leaves them for the next
+install to find; *Delete settings* takes the folder, packs and all, so nothing of ArtDock is
+left. A dock still running is closed before the question — the installed one by Velopack,
+any other copy by the uninstaller asking it to exit. The question keeps them by itself if nobody answers within about 25 seconds, since
+Velopack stops waiting for it at 30.
+
+To make a release, bump `<Version>` in `src/ArtDock/ArtDock.csproj` and run
+
+```powershell
+.\tools\release.ps1
+```
+
+which builds the setup, the packages and the update feed into `artifacts\releases` to try.
+`-Publish` also uploads them as a GitHub release of the public
+`Far-Art/ArtDock-Releases`, which installed docks read their updates from; it needs a
+token that can write there in `$env:GITHUB_TOKEN`. The details, and what Velopack does not
+cover, are in [docs/downloads.md](docs/downloads.md).
+
+## What it does
+
+- **Magnifies** icons on a cosine falloff, with neighbours lifting alongside the hovered one.
+- **Launches pinned apps**, or raises them if they already have a window. Clicking an app
+  that is already in front cycles through its windows.
+- **Shows a dot** under every app that has an open window, kept current by window events
+  rather than polling. A pinned shortcut is matched by what it points at, so one dragged
+  out of the Start menu lights up like anything else.
+- **Floats above other windows**, or not — a dock that can be covered like any other window
+  is one setting away.
+- **Auto-hides** to the screen edge and returns when the cursor reaches the bottom.
+- **Leaves a handle behind when it hides**, unless told not to on the Behaviour page: a slim
+  bar just above the taskbar, centred under where the dock will come up — the phone's home
+  indicator, on a desktop. It fades in as the dock slides away and out as it slides back, and
+  resting the pointer on it for the *Reveal delay* brings the dock back, as holding the edge
+  does. Clicks go straight through it to the window underneath, which is usually the bottom
+  row of something maximized. It is as wide as the dock, following it as icons come and go, or
+  a width of its own. It **inverts the colours behind it**, so it stands out on anything; the
+  inverse is pushed away from the colour behind, since plain inversion gives mid-grey back as
+  mid-grey and the handle would vanish into a grey status bar. What is behind is read off the
+  screen fifteen times a second, on a thread of its own, for about half a percent of one core,
+  and the handle is kept out of screenshots and recordings — which is what keeps it out of its
+  own reads (see *Known gaps*). There is no other look to choose: a checkbox offered the bar's
+  colour instead, and was taken away as a choice not worth a setting. The bar's colour remains
+  only as a fallback, where Windows will not keep a window out of captures. It steps aside
+  while anything takes the whole display in front — a game, a video, borderless or not —
+  though not for an ordinary maximized window; and it is never drawn over a program on the
+  **Exclusions** page that fills the display, asked exactly as the edge asks when it stands
+  down for one. Only auto-hide leaves one: a dock hidden from the tray was put away on
+  purpose. While the settings dialog is open it shows under the dock, so its width can be seen
+  while it is set.
+- **Blurs what is behind the bar**, with a sheet of Windows acrylic — which brings the
+  system's own drop shadow along with it.
+- **Pulses an icon twice** when a click actually launches something (not when it just
+  raises a window that was already open).
+- **Reorder from either side**: dragging a row in the settings dialog lifts it out under the
+  pointer, reorders the list around it as it moves, and moves the icon on the dock at the same
+  time; dragging an icon on the dock reorders the dialog's list to match, while it is open.
+  **Lock the order** on the Items page once it is the order you want, and neither drag will
+  move anything — nor will *Move up* and *Move down*, which grey out with it. Adding,
+  removing and editing items are unaffected: it fixes the arrangement, it does not close the
+  list. A press on a locked dock still launches, so an icon held with an unsteady hand does
+  not simply do nothing.
+- **Lock modification**, the other half of that, on the same page: the dock closes to
+  changes, and nothing can be added to it, taken off it or edited. *Item settings…*, *Add*,
+  *Remove* and *Clear all* grey out in the dialog, and double-clicking a row no longer opens
+  the editor either. On the dock itself the right-click menu drops its commands altogether
+  rather than greying five of them, and says why: one greyed **Locked** where they were,
+  then *Dock settings…* — which is never taken away, so the lock is always one right-click
+  from being undone. A file dropped on the bar is refused with a notice. Reordering is
+  untouched: this closes the list, it does not fix the arrangement.
+- **Drag and drop**: drop a file or a folder onto the bar to pin it where you dropped it —
+  an application, a shortcut, or a document, which opens in whatever owns its type. **Places
+  with no file behind them drop too**: This PC, the Recycle Bin or Control Panel dragged off
+  the desktop or Explorer's navigation pane becomes exactly the pin the Add menu makes for
+  it, and any other place there — Network, Home, Gallery — is pinned by its shell name. Drag an
+  icon sideways to reorder: the wave stays up while you do, because the magnified
+  neighbours are what make the gap the icon will land in legible. A drag held over the dock
+  **opens a slot and previews the icon in it**, faded, so what the
+  drop will produce and where it will land are both visible before it happens — and the
+  preview **grows into** the slot the row opens for it rather than appearing in it whole.
+  Something already on the dock is not pinned twice, and a drop the dock will not take
+  **says why**, in a bubble where a label would be, rather than doing nothing at all — which
+  is also how a dock whose items are locked answers a drop. Icons **slide** into their new
+  slots rather than jumping, whether they are making room for a
+  drop or swapping places in a reorder. A dragged icon **stays on the bar**: it follows the
+  pointer exactly, but only as far as the end slots, so a drag that wanders leaves the icon
+  where it can still be dropped instead of stranding it beside the dock. Dragging an icon off the bar no longer removes it:
+  the gesture fired on a drag that wandered rather than on one that meant it, and losing a
+  pin to a slip of the hand is a poor trade for a shortcut the right-click menu and the
+  settings dialog both already offer.
+- **Right-click an icon** to edit it or remove it, add another item beside it, or open the
+  dock's settings — the item's own entries first, then the dock's; or, while the items are
+  locked, a greyed *Locked* and the settings alone. *Remove from dock* is
+  drawn in the theme's critical colour, the same one the settings dialog's Remove button
+  takes, so the entry that takes something away does not read like the ones that do not.
+  **It asks first**, naming the item and showing its icon, while the dock holds that icon
+  magnified with its label up; *Cancel* is the default, so Enter keeps it. The settings
+  dialog's *Remove* does not ask, because nothing there is kept until Save. Editing covers its name,
+  its icon and what it opens. **A pinned picture is drawn as itself**: its Windows thumbnail,
+  fitted to keep its shape, unless the editor's *Use the file's icon instead of a thumbnail* is
+  ticked; an image chosen for the item wins over both; the label's font, style and size belong to the dock rather than
+  the item, so they apply to every label at once. Labels are bold by default, because a label
+  is read against whatever happens to be behind the dock. The item being edited holds its
+  label open on the bar so the styling can be judged where it is actually used.
+- **The Add menu offers places and actions, not only apps**: alongside *Browse…* and a few
+  of the machine's own applications, **This PC**, the **User folder**, **Downloads**, the
+  **Recycle Bin** and **Start**. They are there because nothing else can supply them, or not as well. This
+  PC and the Recycle Bin are shell namespace extensions rather than shortcuts, so the file
+  dialog cannot pick them, and they can be dropped only from somewhere they are shown —
+  Windows 11 puts only the Recycle Bin on a new desktop. Once pinned they
+  need no special handling, since the shell resolves a `shell:` name for an icon and
+  launches one exactly as it does a path. The user folder could be dropped, but it would
+  then be pinned as `C:\Users\name`, which an imported settings file carries to a machine
+  where that is someone else's folder or nobody's; the preset pins `shell:Profile`, which is
+  whoever is signed in. It is named as Explorer names it, which is the account's full name
+  rather than the folder's (*Artur Farmanov*, not *artur*). The name is read when the pin is
+  made, like every label, so an imported file keeps the exporter's until it is renamed.
+  Downloads is pinned as `shell:Downloads` for the same reason, which also follows the folder
+  if it has been moved out of the user folder.
+  **Settings** is among the machine's own apps, and is pinned as the Store app it is, by its
+  AUMID: the `ms-settings:` address opens it just as well, but the shell draws it as a blank
+  page.
+  **Start is not a target at all**: it has no path, no AUMID and no entry in the shell
+  namespace, so nothing can open it. It is asked for by posting the taskbar the same command
+  its own button sends, and it carries a mark that ships with the dock, because Windows
+  exposes no Start icon anywhere — see *Known gaps*.
+- **Empty the Recycle Bin from the dock**: right-click the pin and the entry is there, above
+  the ones that act on the pin itself. It greys out when the bin is already empty, and it
+  **asks first exactly when Explorer would** — the *Display delete confirmation dialog*
+  setting in the bin's own properties governs it, because the dock does not decide: it hands
+  the whole question to the shell rather than overriding it.
+- **The Recycle Bin's icon follows the bin**, full or empty, whoever changed it: a file
+  deleted into it or restored from it anywhere on the machine, or the bin emptied. The dock
+  redraws from the same announcement Explorer's desktop redraws from, so the two change
+  together. After emptying from its own menu the dock also asks the shell to re-check the
+  bin, because a bin emptied without that check can stay drawn full everywhere, Explorer's
+  desktop included.
+- **Separators**: a divider that occupies a slot and launches nothing. It holds its resting
+  size while its neighbours magnify around it — it is punctuation, not a target. Added from
+  the same Add menu as everything else, and shown in the settings list as the rule it is
+  rather than as an entry named *Separator*.
+- **Starts with a usable dock, once**: a first run — meaning no settings file at all — gives
+  the bar **Start**, **This PC**, the **User folder**, **Downloads**, **Settings**, a
+  separator and the **Recycle Bin**, so a new install is never an empty strip. Those are on every machine; the
+  user's own apps are left to the user, rather than guessed at from what Windows happens to
+  ship. The separator sets the bin off at the end, where a Mac keeps the Trash. Only that
+  first run — or on purpose: **Reset all pages to defaults**, on the About page, puts the
+  dock back to the same set.
+  The Items page's **Clear all** empties the list for good, and a cleared dock stays cleared
+  across restarts instead of being restocked.
+- **Starts when you sign in, unless told not to**: the same first run registers the dock to
+  start at sign-in, and so does the setup, so *Start ArtDock when I sign in* on the System
+  page comes up checked. The first run leaves alone an entry some other copy already made;
+  the setup takes it over, since installing is choosing that copy. Resetting the System page
+  checks it again.
+- **An empty dock is still a dock**: with nothing pinned it draws one empty slot's worth of
+  bar rather than disappearing. That is not decoration — the window is per-pixel transparent
+  and Windows hit-tests it by what was painted, so a dock that drew nothing would be a window
+  clicks fall straight through. The empty bar is what a drop lands on, and what you
+  right-click to reach **Add**.
+- **Moves along its edge**: the Position page slides the dock from the middle towards either
+  end, on a slider that fills from its middle out to the thumb, since the middle is where the
+  setting is measured from — and catches there when dragged to within a few pixels of it, so
+  the centred dock is easy to get back to. The setting is a share of the room there is rather than a
+  distance, so it means the same on every display and at every size of dock. A dock pushed to one end stays at that
+  end: anything that changes its width — an icon added or removed, a drop preview opening
+  its slot — grows it away from the end rather than into it. All the way along, it stops
+  where its magnified wave still keeps the bottom margin's distance from the side of the
+  screen, so at rest it sits a little further in than that, by the room the wave grows into.
+- **Stays put while you configure it** — opening the settings dialog or an item's edit
+  dialog holds the dock on screen, so auto-hide cannot slide it away mid-adjustment.
+- **Comes back to the front** when the cursor is held against the screen edge, whatever the
+  settings — the same gesture that would summon a hidden dock digs out a buried one, blur and
+  all, including from under the window that has focus. Windows will not put a background
+  program over that one, so there the dock joins the windows that float for as long as it is
+  up, and leaves them when it goes back. That holds for a dock set to float
+  above everything too, which another window that floats can still cover. How long to hold
+  is the *Reveal delay*, which is therefore never greyed out. Move away and, after the *Hide
+  delay* — also never greyed out — it goes back under the window it was lifted over, exactly
+  as auto-hide would slide it away: the dock and the strip below it keep it up. It only ever
+  goes back *down*: a window you have brought forward since stays in front of it, and one it
+  was already in front of stays behind.
+- **Answers the pointer only where you can see it.** Moving the pointer onto the visible part
+  of a partly covered dock brings it to the front at once — no *Reveal delay*, since arriving
+  on the dock is already deliberate — and it goes back the same way the edge's lift does. A pointer on a window lying over the dock belongs
+  to that window: the dock does not magnify or label anything underneath it, and a dock
+  entirely under a window does not come up just because you are working in that window over
+  where it is. A dock with nothing over it is left where it is — lifting it would change
+  nothing and still redraw it.
+- **Stays down over the apps you exclude** — games, mostly, which scroll when the pointer
+  reaches the edge of the screen and would otherwise bring the dock up over themselves every
+  time the map moved. While a program on the **Exclusions** page is in front and fills the
+  dock's display, fullscreen or borderless, holding the pointer against the edge does
+  nothing: a hidden dock stays hidden, a covered one stays covered, and the strip under a
+  dock that was already out stops holding it up. The handle a hidden dock leaves behind is not
+  drawn over it either. **The list outranks *Always on top***: a dock set to float above
+  everything drops under such a program while it is in front, and floats again the moment it
+  is not — as does one started, or restarted, while the game was in front, which used to come
+  up over it. Programs are added from those open at the
+  time, by browsing for the `.exe`, or by **scanning for games or apps**, and are recognised by file
+  name, so a game that moves folders when it updates still counts. Only the edge stands down
+  — the tray icon, a second launch and the settings dialog bring the dock back as they
+  always do. The page was called *Fullscreen* at first, which read as a setting for going
+  fullscreen rather than as a list of apps to stay out of the way of.
+- **Finds your games and the programs they run as**: *Scan for games…* on the Exclusions
+  page asks for nothing. It finds the games the launchers on the machine have installed —
+  Steam (every library, on every drive), Battle.net, the EA app, Epic Games, GOG, Ubisoft
+  Connect, the Xbox app, Riot Games and Rockstar Games, whichever are there, each read from
+  its own record — looks through all of them for programs, and lists them under a heading per
+  game, with each program's icon. **Tick a game** and every program in it is ticked; that is
+  the answer for someone who knows the game and not its programs. *Add a folder…* looks
+  through one more, for anything the launchers do not know about.
+  It exists for the game nobody starts by hand — StarCraft II is started from Battle.net, and
+  its folder holds a `StarCraft II.exe` at the top that is only a stub, with the game itself
+  two folders down as `Versions\Base97563\SC2_x64.exe`. So within a game, programs that give
+  the same name are one row, ticked together, and the game is on the list whichever of them it
+  is. Copies of one program in several version folders are one program; installers,
+  updaters, crash reporters and tools a game carries are left out altogether — none of them
+  is the window a game plays in, and a switch to show them was only more to read past — which
+  in the Steam library here leaves each game as the one program it runs as; a row already on
+  the list says so — or how much of it is. It runs in the background, can be stopped with
+  what it found so far kept, passes over folders it may not read and does not follow
+  junctions. Here it finds fourteen game folders in about 50 ms and looks through them in
+  under a second.
+- **Scan for apps…**, beside it, is the same for everything that is not a game — a video
+  player, a browser, a remote desktop. It lists the apps installed on the machine from their
+  Start menu and desktop shortcuts, under the names the Start menu gives them, as one list
+  without headings. A shortcut that runs a console or a control panel ("Administrative
+  Tools" is `control.exe`) is left out, since listing it would stand the dock down over every
+  console; so is anything inside a game's folder, which *Scan for games…* has. Here it finds
+  seventy-three apps in about a second. Store apps are not among them — their Start menu
+  entries are not shortcuts — though one that is open is on the *Add* menu.
+- **Both scans put the likeliest first, and can be filtered**: *Most likely first* ranks a
+  program that is open now above everything, then one whose name is its game's, then one with
+  an icon of its own — every game here has one and not one of the crash handlers and
+  uploaders beside them does — then one that describes itself, then the largest in its game;
+  Windows' own tools sit below installed apps. *By name* is there for someone who knows what
+  they are looking for, and so is the filter above the list, which matches a name, a file
+  name or a game's name. Typing into it does not untick anything it hides.
+- **Program icons in the Exclusions page's lists**: each listed program shows its icon, and
+  so does each entry of the *Add* menu's list of open programs, since a program is known by
+  its icon first.
+- **Every menu entry has an icon**, as in Windows 11's own right-click menus: a glyph from
+  the system's symbol font for each command — the same one for *Settings…* on the tray and
+  *Dock settings…* on the dock — and, in the *Add* menus, the icon of what each entry pins.
+  *Remove from dock*'s glyph is red with its words, and a greyed entry's is greyed.
+- **One dock to a session.** A second launch does not start a second dock. The running one
+  says it is already running, lifts the dock above any windows covering it, and says where
+  the dock is — or, when it cannot be seen (hidden from the tray menu, tucked away by
+  auto-hide, or on no connected display), why not and how to get it back. It offers **Exit
+  ArtDock**, plus **Show dock** where a button can bring the dock back. `--settings` keeps its
+  meaning: launched with it, the running dock opens its settings instead. Two docks would
+  overlap on the same edge, race each other for the settings file, and put two identical
+  icons in the tray.
+- **Configurable** live: icon size, magnification, influence range, gap, bar opacity, bar
+  colour (hex, a colour wheel, a stock swatch, one you have saved, or whatever Windows is
+  tinting the taskbar with), corner roundness, the blurred backdrop, which display the dock
+  lives on — remembered by the monitor itself, so it stays put when Windows renames its
+  displays — and where along its edge, always-on-top, hide/reveal delays, the excluded apps
+  the edge stands down for, pinned apps, the icon set, the language, run-at-login. The dialog
+  is paged — Size, Appearance, Behaviour, Items, Exclusions, Position, System, About — and
+  each page of settings has its own reset; the two pages that hold lists of the user's own,
+  Items and Exclusions, have none. About holds no settings, and so no page reset — it has the
+  whole-application one instead, which puts the pinned items back to the set a new dock
+  starts with and leaves the excluded apps and saved colours alone.
+  Nothing is written until Save; Cancel puts the dock back the way it was found.
+- **Translatable, with English built in**: every word the dock shows — the dialogs, both
+  menus, the drop notices, the messages — comes from one string table,
+  `Localization/en.json`, rather than from the XAML or the code. A translation is a copy of
+  that file dropped into `%LOCALAPPDATA%\ArtDock\Packs\Languages\<name>\pack.json` (the System
+  page's *Open folder* goes there), and the System page's *Language* picker then offers it,
+  beside *Windows display language*, which is the default. Choosing one changes the open
+  dialog there and then and is undone by Cancel, like every other setting. A translation may
+  be partial — anything it leaves out is English — and a string in it that could break the
+  dock, such as one using a placeholder English does not supply, is dropped in favour of the
+  English one. Numbers are formatted in the language's own way (`16 %`, `1,40x` in German),
+  and counts take the language's own plural forms, three of them in Russian. Only English
+  ships so far.
+- **Icon sets**: a folder of PNGs with a `pack.json` saying which image is drawn for what —
+  an executable by name, a path, a Store app, a place such as the Recycle Bin (full and empty
+  separately), a document type, any folder — installed in
+  `%LOCALAPPDATA%\ArtDock\Packs\IconSets`, and chosen on the Appearance page. The most
+  specific match wins; an item the set has nothing for keeps its own icon; and an icon chosen
+  for one item in its own settings still beats the set. The format is in
+  [docs/packs.md](docs/packs.md). No set ships.
+- **Settings can be moved between machines**: the System page exports the settings file and
+  imports one back, pinned items included. An import fills in the pages and shows on the
+  dock immediately, but like every other control here it is not written until Save, so
+  Cancel still undoes it. A file that is not ArtDock settings is refused rather than
+  imported as a silent reset to defaults, and so is one from a newer format than the build
+  can read. Autostart is the one thing that does not travel — that checkbox reflects the
+  Run key rather than the file, so an import cannot quietly register the dock to start on a
+  machine you were only copying your tuning to.
+- **The About page says which build is running**: the last page of the dialog carries the
+  mark, the copyright, the version, whether this is a Debug or Release build, and where the
+  settings file is. The same author, copyright and version are in the executable's own
+  version resource, so Explorer's Details tab shows them, and Task Manager's Startup apps
+  page names the author as the publisher of the autostart entry.
+- **Updates itself, when asked**: the About page's *Check for updates* looks for a newer
+  release and, if there is one, becomes *Update and restart* — which downloads it, closes the
+  dock, and brings the new version back up with the dialog open on the same page. Nothing
+  goes online until the button is pressed. A copy the setup did not install, such as one run
+  from the source tree, says so and offers nothing. Autostart in an installed copy points at
+  Velopack's launcher, which outlasts every update, and uninstalling takes the entry away.
+
+Settings live in `%LOCALAPPDATA%\ArtDock\settings.json` and are written atomically. The
+file opens with a `Version`, which is the format rather than the application's — it is 1,
+and it exists so a later change to what a setting *means* can be migrated rather than
+guessed at. Adding a setting does not move it: an unknown property is ignored on read and
+a missing one falls back to its default, so the file can grow freely. The System page can
+export a copy of it and import one back.
+
+## Layout
+
+```
+src/ArtDock/
+  Dock/        DockMagnify, DockLayout, DockMetrics, DockItem, DockEdge, BarPalette,
+               AutoHideController, DockHandle (where a hidden dock's handle goes)
+  Controls/    DockBar (the rendering surface), DockItemVisual, ColorWheel,
+               AnimatedRowPanel
+  Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet),
+               MenuHost (owner for the context menus), MenuIcons (their glyphs and
+               images), SettingsWindow, EditPinWindow,
+               AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
+  Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
+               WindowsApi, ShellIcons, ShellLink, AppLauncher, Autostart, MonitorDpi,
+               TaskbarColour, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
+               ShellIdList (what Explorer drags besides paths)
+  Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,
+               RunningAppsService, DockPresets, DockCommands, DroppedItems, TrayIcon, Screens,
+               SingleInstance, MemoryTrim, FullscreenApps, ProgramScan,
+               GameLibraries, InstalledApps, AppUpdater (the dock's own updates)
+  Program.cs   the entry point, which hands Velopack's installer launches over first
+  Localization/ en.json (every string), StringTable, LanguageLibrary, Localizer,
+               Localized (formatted text in XAML), PluralRules, LanguagePackFile
+  IconSets/    IconSet (matching and loading), IconSetLibrary, IconSetFile
+  Packs/       PackKind, PackManifest, PackLocations — what every pack has in common
+  Downloads/   interfaces only: the pack catalog, download, verify, install
+tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, metrics,
+                       DockBar window size, empty bar, drag clamp, pin creation,
+                       pin targets, settings portability, Recycle Bin icon,
+                       moving along the edge, localization, icon sets, display
+                       identity, excluded apps, scanning for programs, game
+                       libraries, installed apps, the hidden dock's handle,
+                       dropping shell places, the menus' glyphs, the updater's
+                       install folder
+LICENSE                MIT
+docs/step-2-transparency.md
+docs/packs.md          the language-pack and icon-set formats
+docs/downloads.md      how the dock's updates are delivered and packs are to be, and why
+tools/release.ps1      builds a release with Velopack, and publishes it
+dotnet-tools.json      pins vpk, Velopack's packager, to the library's version
+```
+
+## Design notes
+
+**It is WPF, not WinUI 3.** WinUI 3 was the first choice and was abandoned after measurement:
+a WinUI 3 XAML window cannot be made per-pixel transparent on Windows App SDK 2.4, which the
+dock's silhouette requires. Every route was tried and recorded in
+[`docs/step-2-transparency.md`](docs/step-2-transparency.md). WPF's `AllowsTransparency` does
+it natively, and brings text, tooltips and UI Automation along for free.
+
+**Icons live in fixed slots.** Each icon owns a placeholder slot that never moves, and grows
+about that slot's centre — so an icon's size depends on the pointer, and its position depends
+on nothing at all. The obvious alternative, which the web original gets from flexbox and which
+this started with, is to lay icons out as a running total of their magnified widths. That makes
+every icon's position depend on the widths of all the icons before it, so the row slides
+sideways as the pointer crosses it, and the bar breathes in and out at the icon spacing — the
+dock appears to contract. Slots remove the coupling entirely: magnification is a property of
+one icon, not of the row. `DockLayout` and `DockMagnify` are pure functions with no UI
+dependency, and are unit tested — including that an untouched icon's centre never moves.
+
+**Nothing lays out during a wave.** Icons are placed once at their resting positions; each
+frame only writes a scale and a translate transform, plus one redraw of the bar. No measure
+or arrange pass runs while magnifying.
+
+**The window is deliberately bigger than the bar.** It extends past the bar on every side —
+above for magnified icons and tooltips, sideways for the bar's growth at peak magnification,
+and below for the drop shadow. A layered window is hit-tested against its alpha channel, so
+wherever the dock draws nothing the click passes straight through to whatever is underneath;
+the corollary is that the shadow and the tooltip, being drawn, do absorb clicks.
+
+**The launch pulse is the icon, not a plate over it.** It used to be a white rounded
+rectangle drawn on top, which read as a square appearing over the icon rather than as the
+icon reacting. Pulsing the icon's own opacity leaves nothing on screen that was not already
+there.
+
+**Icons use Fant resampling.** The shell returns 128px icons that are drawn into roughly a
+31-41px box. WPF's default bilinear sampling reads a 2x2 neighbourhood, which at 3-4x
+minification misses most of the source pixels — edges alias, and because the ratio changes
+continuously as an icon magnifies, they crawl while the wave moves.
+`BitmapScalingMode.HighQuality` averages over the whole footprint instead, at no measurable
+cost here.
+
+**The blur is a second window, and it brings the shadow with it.** `AllowsTransparency`
+puts the dock on a layered surface, and DWM composes no material and no shadow behind one —
+which is why the bar was a flat fill and the shadow was drawn by hand. `BackdropWindow` is
+the opposite in every respect: no transparency, nothing drawn in it at all, its frame
+extended across the whole client area so what shows is entirely DWM's acrylic. It is
+`WS_EX_TRANSPARENT`, so a solid window sitting under a dock designed to be clicked through
+still is.
+
+Three details make it work. **The blur comes from the accent policy, not the documented
+`DWMWA_SYSTEMBACKDROP_TYPE`** — DWM's system materials fall back to a flat colour while
+their window is *inactive*, and this window is `WS_EX_NOACTIVATE`, so it is never anything
+else. What that produced was a grey slab with no sign of what was behind it. The accent
+policy is the route the taskbar itself is on and blurs regardless of focus.
+
+**DWM shadows windows that have a sizing frame and nothing else**, so the sheet carries
+`WS_THICKFRAME` and takes it straight back off in `WM_NCCALCSIZE` — it keeps the bar's exact
+size, and the shadow is all that survives of the frame.
+
+**The sheet is inscribed inside the bar rather than shaped to it.** DWM rounds it to a
+radius of its own, about eight pixels, and will not take another; `SetWindowRgn` is not a way
+round that — the region is accepted, and `GetWindowRgnBox` reads the rounded shape back, but
+DWM composes the blur across the whole window rect regardless, leaving a square-cornered slab
+poking out of a stadium-ended bar. So the sheet is pulled inside the bar instead, by exactly
+enough for its corners to clear. That is one equation in two unknowns, which leaves room to
+pick the cheapest solution: almost all of the inset goes on the horizontal, because the bar
+is far wider than it is tall, and an unblurred sliver under each rounded end costs a third of
+what a full-width band along the top and bottom would.
+
+What made all this practical is the falloff — the bar's width holds steady across the middle
+of the dock, so a second window only has to be moved during the entry and exit ramps rather
+than on every frame of a wave.
+
+**The drawn shadow, for when the backdrop is off.** `AllowsTransparency` puts this window on WPF's software
+rendering path, so a real `DropShadowEffect` would recompute a Gaussian blur on the CPU every
+frame the bar changes width — which is every frame of a wave. Two stacked passes of
+rounded rectangles (a tight contact shadow and a displaced key shadow, spaced on a power
+curve) cost nothing to redraw. The bar is clipped out of them, because a shadow is not
+visible through the object casting it.
+
+**The bar breathes; the window behind it does not.** The bar wraps whatever the icons
+occupy at that instant. That is nearly constant — the falloff sums to a constant across the
+middle of the dock — but it narrows by a few pixels near the ends, over a few hundred
+milliseconds. Under a pixel per frame, and the acrylic sheet is a separate window that can
+only be moved in whole pixels: a sub-pixel drift rendered in whole pixels stutters, and it
+was the one part of the dock that did not move smoothly.
+
+Freezing the bar fixed the stutter and lost the breathing, which was worse. So the sheet's
+*window* is parked at the widest the bar ever gets (`DockLayout.SteadyBarWidth`) and never
+moved, and the live bar is cut out of it by a composition clip instead. A clip takes
+fractions of a pixel where a window does not, so the blur's edge follows the bar exactly
+while the window it lives in holds still.
+
+**Every dimension is a multiple of the icon size.** Magnification was already a scale
+factor; influence range now counts how many icons either side of the pointer lift, and the
+gap is a share of an icon rather than a number of pixels. One number sets the dock's size and
+everything else keeps its proportions.
+
+Influence range is the one that mattered most. In pixels it covered a different
+number of neighbours at every icon size, so changing the icon size quietly reshaped the wave
+and made two sliders look like they had moved on their own. It was being rounded to a whole
+number of icon pitches regardless, since that is the condition under which the falloff sums
+to a constant and the dock spreads without changing width — so this is the count it always
+was, said out loud.
+
+A settings file written before the change is converted once — the range through the same
+rounding the dock already did, the gap by dividing by the icon size — so a tuned dock comes
+across looking exactly as it did. Both old values are kept and both new ones are nullable, so
+that "absent" and "zero" stay different things: a dock that has never carried a pixel value
+takes the current default rather than being migrated from a number it never had.
+
+**The window only grows while the dock is being tuned.** Resizing it is the expensive
+thing to get right: it is layered, so it keeps its previous bitmap until WPF renders again,
+and that bitmap has the bar drawn at an offset measured from the old left edge. Composed
+inside the new bounds, the dock appears somewhere it does not belong — and not for a frame
+either, but for as long as the render takes to land.
+
+Dragging the icon-size slider asks for a new window size on every tick, which is what first
+made this visible. The answer that worked was not to make the resize look better but to stop
+doing it: while the settings dialog is open the window never shrinks, so opening and closing
+cost no resize at all, and a drag costs one only when it asks for more room than the window
+already has. A window bigger than it needs to be is invisible — it is transparent wherever
+the dock does not draw, and the bar lands in the same place on the screen either way (see
+*A dock moved along its edge*, below).
+
+Two attempts came before that one and are worth not repeating. Rendering immediately after
+the resize loses a race it cannot win: the new bounds are already live and can be composed
+before the render lands. Resizing off screen and moving in afterwards removes the
+displacement but replaces it with an absence — measured at about 130ms of no dock at all,
+which is worse.
+
+**The dock demonstrates its own wave, and gets out of the way.** Magnification and influence
+range describe the wave, and the wave only exists while a pointer is over the dock — so with
+the settings dialog holding the pointer's attention, both sliders looked like they did
+nothing. `DockBar` walks the pointer from one end of the row to the other and back on a
+raised cosine, which eases to a stop at each end rather than reversing on the spot.
+
+Whoever is actually pointing at the dock outranks the demonstration: the moment a real
+pointer enters, the sweep stands down and the wave behaves exactly as it always does, and
+when the pointer leaves the sweep picks up again — from the phase that puts it where the
+pointer just was, so handing back is a continuation rather than a jump. This is the one place
+a held item does not lock the real cursor out; a menu or an edit dialog still does, because
+there the point is to keep hold of one particular icon while you reach the dialog.
+
+**The wave changes hands without jumping.** A driver taking over — the cursor arriving on a
+dock that is demonstrating itself, and leaving it again — used to move the wave to its own
+position on the frame it took it, across however much dock lay in between. The gap is now
+carried as a lag that eases to nothing over about a fifth of a second. Carried as a lag, and
+not as an eased position: the wave still tracks the cursor one pixel per pixel while the gap
+closes underneath it, so the smoothing is never felt as the dock trailing the pointer.
+
+**The context menus are WPF menus, owned by a window that exists only to own them.** A menu
+needs an owner that can take the foreground, and neither place this app shows one from has
+that: the dock is `WS_EX_NOACTIVATE`, which is what stops it stealing focus from the app you
+are switching to, and the tray icon has no window at all. So the dock's menu was a Win32
+`TrackPopupMenu` and the tray's was WinForms', and both looked like an older Windows than the
+one they were running on. `MenuHost` is the missing window — one pixel, off screen, never
+seen — and once a menu belongs to something that can be given the foreground, the objection
+disappears and it gets themed like everything else. Its glyphs come the same way: they are
+drawn in the theme's own `SymbolThemeFontFamily`, the font it draws a menu's check marks and
+chevrons in, so they are Windows' glyphs rather than a set this project drew (`MenuIcons`).
+
+**The dialogs are on WPF's own Fluent theme, not an imitation of it.** `App.xaml` sets
+`ThemeMode`, which merges `PresentationFramework.Fluent` — Microsoft's WPF implementation of
+the Windows 11 design system, in the box since .NET 9. The controls in the settings and edit
+windows are therefore the real thing: WinUI-shaped sliders, accent buttons, the system's own
+colour resource keys rather than hex this project invented. The settings window sits on Mica
+via `DWMWA_SYSTEMBACKDROP_TYPE`, the same material the Settings app uses, and is laid out the
+same way — left navigation, page title, one card per setting.
+
+The dialogs follow Windows' light or dark setting by default, and can be pinned to either
+from **System → App theme**. `ThemeMode.System` is WPF's own switch for that, so nothing here
+watches for the change; the one thing it does not cover is the window's Mica and title bar,
+which are DWM's and are told separately from `AppTheme.IsDark`.
+
+Two traps worth naming, both the same shape. The Fluent theme supplies its controls as
+*implicit* styles, so an explicit `Style` on a control replaces it outright rather than adding
+to it — every keyed control style here carries `BasedOn`, and without it the control silently
+reverts to the old Aero look, which is what happened to the sliders. And `TextBlock` is not a
+`Control`: no theme sets its `Foreground`, and its own default is literally black. Every text
+style starts from one that names the system's text brush, and an implicit style catches the
+rest. Missing that is what put black text on a dark window.
+
+**The colour wheel is drawn, not templated.** WPF ships no colour picker, and the
+alternative is a dependency for one control. `ColorWheel` generates the hue/saturation disc
+once as a premultiplied bitmap and dims it with a black wash as the brightness comes down.
+The wash is capped well short of opaque on purpose: an accurate one would be exact — HSV's
+value scales all three channels linearly — but a dock bar is usually a dark colour, and an
+accurate wheel at that brightness is a black disc with no hues left to pick from. The wheel
+indicates the brightness; the bar beside it and the swatch above it show what was chosen.
+
+**Labels ask for grayscale antialiasing by name.** `AllowsTransparency` rules ClearType
+out — subpixel coverage cannot be composited against a per-pixel alpha surface — and WPF's
+default `Auto` text rendering mode answers that by dropping antialiasing altogether rather
+than falling back. The result is aliased glyphs on an otherwise smooth dock. `DockBar` sets
+`TextOptions.TextRenderingMode` to `Grayscale` explicitly, and `TextFormattingMode` to
+`Ideal` so glyphs keep their sub-pixel positions as the tooltip slides with the wave.
+
+**The headroom above the bar is measured, not assumed.** A fully magnified icon reaches
+exactly the top of the reserve the window keeps for the tooltip, so a fixed reserve is only
+ever right for one label size — anything larger lost its top edge to the window's own
+clipping. `DockBar` measures every label in the dock (and any font being previewed), sizes
+the reserve to the tallest, and tells the window to grow. That is what `PreferredSizeChanged`
+is for.
+
+**A drop preview is a real item in a real slot.** Rather than drawing an insertion marker,
+the dock rebuilds itself with the incoming item spliced in at the slot it would land in, at
+reduced opacity — so the preview inherits the spreading, the sizing and the icon resolution
+of the real thing for free. The wave is held flat while it is up, for the same reason a
+reorder drag holds it flat: sizes changing under the pointer would move the slot boundaries
+the drop is aiming at. The preview is the one thing in the dock that is born mid-life, so it
+is also the one thing that grows in: it starts at nothing and eases up to full size, anchored
+at the bottom centre like the wave, while its new neighbours slide apart around it.
+
+**A pinned shortcut is stored as the shortcut and matched by its target.** A `.lnk` carries
+arguments, a working directory and an icon its author chose, so replacing it with the
+executable behind it would throw all three away — but no process on the desktop runs under
+the shortcut's own path, so matching on it left the running dot dark for anything pinned from
+the Start menu. `Interop/ShellLink.cs` resolves the target alongside the pin, and
+`DockItem.RunningTarget` is what `RunningAppsService` compares. Plenty of shortcuts
+legitimately resolve to nothing — `File Explorer.lnk` points at a shell folder rather than a
+file — so the match falls back to the shortcut's own path rather than treating that as an
+error.
+
+**Anything that exists can be pinned, and the dock does not sort it into kinds.** A
+document launches through the same `ShellExecute` as an application, takes its icon from the
+same shell call — the shell has one for every registered type, and a generic sheet for the
+rest — and occupies the same slot. The single difference is the running dot, and that is
+ruled out where it is decided rather than by refusing the pin: `DockItem.RunningTarget` is
+null for anything that is not an executable, because what opens a document is its editor,
+whose window belongs to whatever pin starts *that*. Documents were turned away once, on the
+reasoning that a dock of documents is not what anyone means by pinning — a judgement made on
+the user's behalf and enforced by doing nothing at all when they dropped one.
+
+**The sheet's clip is set once, not twice.** `BackdropWindow.Place` used to end by clipping
+the sheet to its own window, which `SyncBackdrop` then immediately replaced with the bar's
+rectangle. The first clip never survived to be seen on purpose — but it was seen by accident,
+whenever DWM composed a frame between the two, as a flash of acrylic at the full width of a
+window that is deliberately parked wider than the bar.
+
+**The bar opens up rather than jumping open.** A slot appearing is worth a whole icon pitch,
+and taking it all at once made the bar snap to its new width and leave its contents to catch
+up — the icons already on the dock jumped half a pitch sideways while the newcomer slid in.
+The bar is drawn as if it held a *fractional* number of slots, easing to the real one on the
+same time constant as the slides, so the row spreads and the bar opens as one movement. The
+wave's own contribution to the width stays instant: the bar has to keep wrapping the icons
+exactly as it passes, and easing that would have it trail them. The acrylic sheet follows for
+free, because its visible edge is a clip cut to the bar, re-cut whenever the bar's shape
+actually changes — its window is parked at the same reserved envelope as the dock's own and
+no longer moves at all when a preview comes and goes.
+
+**The window already owns the slot a drop opens.** The dock asks for a window one icon
+wider than it has, always. Growing to fit a preview and shrinking again when the drag moved
+on was two re-places of a layered window — which shows its old bitmap inside its new bounds
+until it repaints — so waving a file over the bar made the whole dock flinch by half a pitch
+each way, and dropping one did it twice inside a single message: preview down, window in,
+pin added, window back out. The reserve costs nothing to look at, because the window is
+transparent where the dock does not draw and the bar lands in the same place either way.
+
+**A dock moved along its edge is anchored, and its wave is not.** Everything about the dock
+used to be centred — the window in the work area, the bar in the window — and every change
+of width was shared out half to each end. Moved towards one end, the row is anchored instead,
+at the same fraction of its room as the setting: an icon arriving, a drop preview opening
+its slot, the bar easing between the two all grow it away from the end it is nearest, so a
+dock pushed to the left keeps its left end exactly where it was. Centred, that fraction is a
+half, which is the dock as it always was.
+
+The wave is the exception, and has to be. It still grows about the row's middle, because a
+wave held against one end has to push the icon under the pointer away from it — by half the
+wave's growth in the middle of the row, which at a strong magnification is more than half an
+icon, and leaves the pointer over a different icon from the one magnified. So the row keeps
+the wave's reach clear at both ends instead (`DockLayout.WaveReach`). That reach has a closed
+form: the raised cosine sums to a constant over whole pitches, so a full wave adds exactly the
+hovered icon's growth times the pitches the influence spans. It is taken from the metrics
+rather than from the icon count on purpose — a room that grew with a short row would move a
+pushed dock each time it gained an icon.
+
+The window is placed by the same fraction along the screen as the row is along the window,
+and that composes: the bar lands in the same place whatever size the window is. It has to,
+because the settings dialog deliberately holds the window wider than the dock, and a row
+placed any other way would wander along the edge while a slider was dragged. The
+drop-preview reserve and the dialog's held size stay invisible for the same reason.
+
+At either end the window reaches a little past the side of the screen — the slack it keeps
+beside the bar for the shadow is wider than the margin the bar keeps from the edge — and two
+things follow from that. Labels are kept on the screen as well as in the window
+(`DockBar.OnScreen`), or a long name on the end icon is drawn across the edge, onto the
+display next door if there is one. And auto-hide's reveal zone is clipped to the dock's own
+display, so a cursor over there cannot summon it. Separately, because a move along the edge
+shifts both the row inside the window and the window itself, the acrylic sheet is placed
+once per settings change rather than after each: between the two it would be a whole slider
+tick away from the bar.
+
+**The icons are outside WPF's hit-test.** They have to be. The window never takes focus, so
+WPF routes no mouse input to it at all — clicks are read from the window procedure and the
+pointer is polled — and an icon that can be hit is an element an OLE drag can be *over*.
+Splicing a drop preview into the row removes whatever the cursor was on, which raises
+`DragLeave` from inside the handler that just added the preview; the leave-check then took
+the preview down, and the next mouse move put it back, five times a second. With nothing
+under the cursor but the bar, which no rebuild removes, the only leave left is a real one.
+
+**Rebuilding the row carries the elements over.** `DockBar.RebuildVisuals` matches incoming
+items to existing visuals by id and rebinds them, creating and destroying only what actually
+changed. Clearing the canvas and building fresh elements — which is what it used to do — made
+a moving drop preview flicker, because every icon in the dock was discarded and re-rastered
+on each slot the preview passed through. It also meant the window was re-sized on every
+rebuild; it is now re-sized only when the label headroom changes, or when the count it is
+*sized* for does — which a preview never changes, because its slot is already reserved.
+
+**Position is two displacements, added.** Each icon carries a slot it is heading for and a
+slot it is currently at, and eases between them on an exponential decay — an exponential
+rather than a tween because a slot gets re-aimed mid-flight, as the insertion point of a drag
+moves, and a tween would have to be restarted, which is what makes re-aimed animations
+stutter. The transform adds that slide to the wave's spreading. The two are independent, so a
+row still settling from a reorder magnifies correctly while it settles, and a settled row
+adds exactly nothing — the slide term is zero and the geometry is the same as it ever was.
+The dragged icon is the one exception: it is snapped to the cursor rather than eased toward
+it, so it tracks the pointer exactly, and it slides into its slot only once it is dropped.
+
+**Input is polled, not evented.** The window is transparent and hit-tests only where the dock
+draws, so WPF's mouse events cut out over the gaps between magnified icons. A `GetCursorPos`
+per tick is cheap and never misses. The same reasoning applies to edge reveal, which polls
+rather than installing a `WH_MOUSE_LL` hook — a stalled low-level hook degrades input for
+every application on the desktop.
+
+**The dock never takes focus, and that costs it WPF's mouse input.** `WS_EX_NOACTIVATE` keeps
+clicking an icon from stealing the foreground, which is what lets "switch to a running app"
+hand off cleanly, and `WS_EX_TOOLWINDOW` keeps the dock off the taskbar and out of Alt-Tab.
+The catch is that WPF does not route mouse input to a non-activating window at all — no
+`MouseEnter`, no `MouseLeftButtonDown`. The messages still reach the HWND, so clicks are read
+from the window procedure (`DockWindow.OnWindowMessage`) and resolved against the hovered icon
+the cursor poll already tracks.
+
+**Fullscreen is judged by the window in front, and a program by its file name.** The edge
+stands down only while the *foreground* window belongs to a listed program and covers the
+dock's display. The foreground rather than whichever window is topmost there, because
+overlays — a frame counter, a voice chat's — are windows of their own laid over the game,
+and none of them is ever the foreground; the cost is that a game left behind while another
+display has focus no longer counts. Covering the display's bounds rather than its work area,
+so a maximized window, which stops at the taskbar, is not taken for a fullscreen one — unless
+the taskbar hides itself, when it does fill the screen and is counted. The desktop is ruled
+out explicitly: its window covers every display at once (measured here as `(-3840,0)–(2560,2168)`
+across both), and it is the foreground whenever the wallpaper was the last thing clicked.
+Programs are matched on the executable's file name because games move — versioned install
+folders, Steam libraries on another drive — and a match that broke would fail the way that
+matters, with the dock rising over the game again. When a program's path cannot be read,
+which a game's anti-cheat may refuse, the name comes from the system's process list instead,
+which needs no handle to the process. None of it runs until the pointer is at the edge, and an
+empty list — the default — stops it before it reads any window at all. The list consulted is
+the one in force (`DockWindow._applied`), so the settings dialog's changes apply before Save.
+
+**Memory is given back when the dock goes quiet.** The garbage collector runs when an
+allocation budget fills, not when a program goes idle, and a dock at rest allocates about
+33 KB a second — so whatever a dialog, a menu or a run of the wave left behind stayed for as
+long as the dock sat still. Opening the settings dialog once took it from 40 MB to 60, for
+good. `Services/MemoryTrim` reads the allocation counter every 30 seconds, and once an
+interval has been quiet after at least 8 MB of allocation, it collects, waits for the
+finalizers, and collects again in aggressive mode. The finalizers are the part that matters:
+two-thirds of what the dialog left was native memory — surfaces, bitmaps, render resources —
+that only its objects' finalizers free, and an aggressive collection with the finalizers run
+after it gave back only the managed third. It costs about 10 ms, on a pool thread, and
+nothing is paged out to make the figure look smaller.
+
+**The application icon is generated, not drawn once and downscaled.**
+[tools/make-icon.py](tools/make-icon.py) lays the mark out separately at each of the nine
+sizes in `Assets/ArtDock.ico`, on that size's own integer pixel grid, and builds the icon row
+outward from the centre so symmetry is structural rather than arithmetic. The icon that ships
+is the Acrylic treatment of that geometry — a graded ground, a glass tray and a highlight on
+the magnified icon — drawn by [tools/make-brand.py](tools/make-brand.py) on the same grids and
+copied from `brand/windows/ArtDock.ico`; `brand/` has the rest of the set, for the web and
+for light backgrounds. A single 256px
+drawing scaled down does not survive the trip: the icon this replaced spanned
+`[-0.5, 255.5]` instead of `[0, 256]`, which left 50% alpha down the left and top edges
+against a hard clip on the right and bottom — a grey ghost column and a visibly off-centre
+mark at 16px — and its five-icon composition smeared into the small sizes. Below 32px the
+outer icon pair is dropped and the widths are hand-set, because the ratios round to 2px there
+and the magnification wave stops reading. The script asserts every frame is mirror-symmetric
+before writing, and 20px and 40px frames exist so the tray at 125% and 150% has one to pick
+rather than rescaling 24.
+
+**Strings are keys into one table, and the XAML asks for them as `DynamicResource`s.**
+`Localizer` keeps the current language merged into the application's resources as a
+dictionary, so a key in XAML — `Text="{DynamicResource Settings.Size.Title}"` — resolves there,
+and a change of language reaches windows that are already open, which is what lets the
+language picker preview. The table is JSON rather than `.resx` because a `.resx` translation
+compiles to a satellite DLL: installing one would mean installing code into the program
+folder. It is not loose XAML either, because WPF's XAML reader constructs whatever types the
+file names, which would make a language pack a way to run code. A JSON table is only ever
+data. The read-outs beside the sliders were `StringFormat` bindings, which are fixed at
+compile time, cannot be translated, cannot say "1 icon", and format in WPF's default of US
+English whatever the language; `Localized.Key` and `Localized.Value` replace them, and are
+told of a change of language by taking the culture as a resource of their own. A key the code
+names and the table lacks shows up as the key itself — ugly and findable — and a test holds
+the source against `en.json` in both directions, since the compiler cannot.
+
+**Packs are folders of data under the user's local application data.** One folder per pack,
+one per kind — `Packs\Languages`, `Packs\IconSets` — each described by a `pack.json` with a
+common header (`PackManifest`): a format number, a kind, an id, a name, a version, the oldest
+dock it needs. That header is what a download will be checked against, so the packs a user
+copies in by hand and the ones the dock will one day fetch are the same thing to everything
+that reads them. A pack that cannot be used is not silently absent: its picker says which
+folder was skipped and why.
+
+## Planned work
+
+What is left: the left and right edges; the settings dialog being
+unreachable by screen reader; downloadable language packs and icon sets, whose contracts
+are written and whose implementation is not; and, for the dock's own updates, the first
+release to publish them from, and a signature of the project's own on the feed. Then the smaller
+things: sharpening the acrylic backdrop, the memory the dock could still give up — mostly the GPU
+renderer's, and a trade against CPU — and the Exclusions page's blind spot for Store apps.
+
+Version 2 is planned: more than one dock, so a machine with
+several displays can have one on each; colours for the item labels; running apps shown on the
+dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date; the
+blur keeping up with the bar; and subdocks, groups of items that open as a second dock above
+the one they are on.
+
+## Known gaps
+
+- **No keyboard navigation.** `WS_EX_NOACTIVATE` means the window cannot take keyboard focus
+  at all, so the web component's Tab-to-focus parity has no direct equivalent. The right fix
+  is a global hotkey that temporarily allows activation — not yet built.
+- **The acrylic's tint is the system's, not the dock's.** `DWMWA_SYSTEMBACKDROP_TYPE` picks
+  the material and how it is tinted; the bar's own colour is a wash over it rather than the
+  colour of the blur itself.
+- **Store apps can only be pinned by path.** Anything on disk can be pinned by browsing to
+  it or dropping it; AUMID pinning is modelled end to end (`DockItem.Aumid`, `ShellTarget`)
+  but there is no browser for `shell:AppsFolder` yet.
+- **A folder can only be pinned by dropping it.** The Add menu's *Browse…* opens a file
+  dialog, which cannot pick one.
+- **Running-app matching falls back to file name.** Several Windows 11 apps are launcher
+  stubs — pinned `notepad.exe` starts a process under `WindowsApps`. Matching on file name
+  covers that, at the cost of a possible false positive between two different apps that share
+  an executable name.
+- **The bottom edge only.** The Position page has no choice of edge: the dock's geometry is
+  written across the screen rather than down it, so a side dock is a change to the whole
+  layout rather than a setting. Left and right used to be offered greyed out and were taken
+  off the page until they work. Choosing the *display* does work, on a mixed-DPI desktop as
+  well.
+- **A display chosen before the dock learned to recognise monitors is still found by name.**
+  The dock now remembers the monitor itself, but a settings file written earlier holds only
+  Windows' name for the display (`\\.\DISPLAY2`), and Windows can hand those names out
+  afresh — on a wake from sleep, on this machine — which moves such a dock to the other
+  screen by itself. Choosing the display once more on the Position page and saving stores
+  the monitor, and from then on it stays.
+- **A fullscreen Store app is seen as its frame, not as itself.** A packaged app built on
+  the old UWP model draws inside a window that belongs to `ApplicationFrameHost.exe`, so that
+  is the program the Exclusions page sees in front, and the one its menu offers — and listing
+  it would stand the edge down for every such app at once. Games are nearly all ordinary
+  programs, Game Pass ones included, and are unaffected.
+- **Windows exposes no Start icon.** The taskbar's Start button is drawn by the shell's own
+  XAML, compiled into its binaries; there is no image asset named for it anywhere under
+  `SystemApps` or `SystemResources`, no parsing name that resolves to it, and the only
+  Windows mark in `imageres.dll` is welded onto the system-drive icon. So the dock draws its
+  own and ships it in `Assets/icons`. It will not follow a future change to the logo.
+- **The hidden dock's handle is missing from screenshots and recordings.** It inverts what is
+  behind it, and to read that without reading itself it asks Windows to leave it out of every
+  capture of the screen — the Snipping Tool, Print Screen and recorders included. It is on the
+  monitor all the same. The price of having no other look.
+- **Icons are read once and kept for as long as the dock runs**, not cached to disk. The
+  Recycle Bin is the exception — never kept, and re-read whenever the shell says its icon
+  changed. Invisible for most applications, whose icon does not change while they are
+  pinned; one that ships a new icon in an update goes on showing the old one for as long
+  as the dock is running.
+- **English is the only language, and there is no icon set.** The support for both is built;
+  the content is not.
+- **Packs are not downloaded.** They are installed by copying them into place; there is no
+  catalog to browse. `src/ArtDock/Downloads` is interfaces with nothing behind them.
+- **Redraw is not cheap while the pointer is moving.** Sweeping the cursor across the dock
+  continuously costs roughly half of one core; idle is about 2%. Most of that is inherent to
+  `AllowsTransparency`, which re-blits the whole window each frame — the shadow accounts for
+  only about a tenth of it. Not yet optimised. The frame is drawn on the GPU, not in
+  software as this used to say: the Direct3D device is in the process, and forcing software
+  rendering costs about half as much CPU again.
+- **About 35–40 MB in Task Manager**, against 15.5 MB for ObjectDock, which is native code.
+  Most of it is fixed cost — the runtime, WPF, and about 15 MB for the GPU driver's Direct3D
+  device. Software rendering would bring the dock to about 21 MB at the price of CPU while the
+  wave moves, which is undecided. What it no longer does is keep what a burst
+  of activity left behind — see *Memory is given back when the dock goes quiet*.
+
+## Verifying
+
+```bash
+dotnet test tests/ArtDock.Tests
+```
+
+Four hundred and seventy-two tests cover the cosine falloff (peak, range boundary, monotonicity, zero
+range), the layout (prefix sums, bar width, non-overlap across a full pointer sweep, empty
+and single-icon docks, the width the acrylic sheet is parked at, and the hover span, which
+covers the bar wherever the wave is without moving when the wave does), and the tuning values
+being relative — that the wave is identical at any icon size, that the gap keeps its
+proportions, and that a settings file written in pixels is carried over as the count and
+share it always meant.
+
+Later groups guard behaviour that was expensive to get right: that a separator holds its
+resting size while its neighbours magnify, that a stale release cannot put away a held label
+something else has since taken, that a colour or opacity change produces metrics equal to the
+ones in force — which is what lets the appearance path skip the layout, and what stopped
+those sliders flickering — that an arriving drop preview grows in *under* the wave rather
+than instead of it, and that two spellings of the same path are one pin, which is what stops
+a second copy of an app being dropped onto the dock. The last group covers what may be
+pinned at all — a document and a folder by their own names, nothing where there is no file,
+and a pin that is not an executable never claiming to be running. And one pair guards the
+room the window keeps for a drop preview — that it is there before the drop needs it, and
+that a reorder does not ask for a different amount — because a window that resizes to fit a
+preview flinches every time one comes and goes.
+
+One small group covers the bar an empty dock draws — that it exists at all, that it is a
+full-height target rather than a sliver, that emptying a populated dock leaves one slot
+behind rather than the width it had, and, the one that matters, that it actually paints
+pixels: correct geometry is no use if nothing is drawn, because it is the painted alpha that
+Windows hit-tests a layered window by. Two more guard the seam between an empty dock and a
+full one — that the first icon does not collapse the bar it is arriving into, and that a
+second icon still opens a slot, so the floor that fixed the first did not switch the growth
+off altogether.
+
+A group of six holds a dragged icon inside the bar: that one dragged past either end stops
+at the end slot, that the bound follows the dragged icon's own magnified width rather than
+the resting pitch, that no pointer position anywhere on or off the screen puts it outside the
+bar, and that a bar briefly narrower than the icon it holds does not throw — `Math.Clamp`
+does exactly that when its bounds cross, which is reachable for a frame while the bar is
+still opening over an icon that has just arrived.
+
+The newest group covers moving settings between machines: that an export read back is the
+same settings, that the file leads with its format version, that a file written before that
+field existed reads as format 1 rather than as unknown, and that the importer refuses what it
+should — a newer format, a root that is not an object, something that is not JSON, and, the
+one that matters most, a JSON file that is *not* ArtDock settings. That last case parses
+happily and yields a full set of defaults, so without the check an import of the wrong file
+would look like it had worked and would in fact have reset everything.
+
+Five more cover the Add menu's shell places — that *This PC*, the *User folder*, *Downloads*
+and the *Recycle Bin* are offered at all, and that `DockPresets.Create` builds a pin for each despite
+no file existing at its name. That last one is the whole point of them: routed back through
+the existence check every other pin goes through, they would be turned down, and the menu
+entry would fail by quietly doing nothing rather than by erroring. One beside them covers
+*Settings*, which is pinned by AUMID rather than by target, and is offered too; four more that
+the user folder's pin carries the name Explorer shows for it, and that a name the shell
+cannot resolve comes back empty rather than as an exception. Two more cover
+what a new dock starts with — the seven defaults, in order, with the user folder and Downloads
+stored by name rather than as paths and the separator before the Recycle Bin — and that a dock which
+already has pins is left alone.
+
+Twenty-five cover dropping those places, which Explorer drags as a shell ID list and no
+paths. One takes the data object the desktop itself hands to a drag of This PC and the Recycle
+Bin, reads it through WPF's wrapper as a real drop is read, and gets the two preset pins back.
+The rest: that a block built from the shell's own ID lists reads back as the places and files it
+holds, and that a malformed one — a count past the end, an offset past the end, an ID list
+cut short or one that would never advance — reads as nothing rather than being handed to the
+shell. That This PC, the Recycle Bin and Control Panel under each of its three CLSIDs become
+the very pins the Add menu makes, since everything from the Empty entry to icon sets keys on
+the target; that another place is pinned by its shell name under Explorer's name for it, and
+a CLSID registered nowhere is not pinned at all. That a mixed drag keeps its order and its
+files, that a drag of files alone is still read from its paths, and that two drags of
+different places are told apart. And that the drop answers with an effect the source
+offered — a link, for these places, which offer nothing else — and never a move.
+
+Four hold the line around the Recycle Bin: that the pin is recognised by its target rather
+than by the preset key it was added from — since the key is never stored, and the item editor
+takes free text — and that nothing near it is mistaken for it. A false positive there is an
+*Empty Recycle Bin* entry offered on the wrong item, which is an offer to delete permanently
+made about something else.
+
+Two more cover the bin's icon following the bin: that it is read afresh every time rather
+than served from the cache every other icon comes from, and that an icon swapped in place is
+actually drawn once the dock is told. The second is the half that belongs to WPF rather than
+the shell — an element keeps what it drew, so a new icon handed to an item on screen changes
+nothing until the dock repaints it. The shell's side, the announcement that the icon has
+changed, is not unit-tested: the only ways to raise one are to change the bin or to
+broadcast a fake one to every window on the machine.
+
+Twenty-one cover a pinned picture being drawn as itself, from real thumbnails of PNGs and JPEGs
+written for the test in solid colours, so the middle of what comes back tells the
+thumbnail from the shell's icon for the type. The picture comes back in its own shape and
+opaque, which a JPEG's thumbnail had to be shown to be rather than assumed; ticking the
+editor's box gets the square icon instead; an image chosen for the item beats both; and a
+picture rewritten under its pin is read again rather than served from the cache. Which types
+count is asked of Windows, and a web address ending in `.png` never counts, since asking the
+shell for its thumbnail would be a download. One more renders a wide image on the dock and
+finds empty rows above and below it — it was stretched to fill the square before. Two draw red
+over blue and check which comes back on top: a solid colour reads the same either way up,
+which is how the first build shipped every picture upside down with all the others passing.
+The shell hands a thumbnail over with its rows the other way round from an icon's, and a
+header that says otherwise.
+
+Nine cover the pins that act rather than open. The one that matters guards the other
+direction: an ordinary target — an `.exe`, a `shell:` place, an AUMID, a web address, the
+empty string — must never be mistaken for a command, because that check stands between every
+pin in the dock and `ShellExecute`, and a target it claimed by mistake would be a pin that
+silently stopped launching. The rest cover *Start* being offered and pinned as a command, a
+command under the scheme that this build does not recognise being refused rather than guessed
+at, and a command showing no running dot, since nothing runs under one.
+
+Beside them, one test guards the two item locks against `DockSettings.Clone`:
+`DockWindow.ContentsToSave` clones the stored settings before saving them, so a lock the
+clone dropped would be switched off by the next reorder or drop — silently, and by the very
+gestures the locks exist to govern. A second does the same for every stored setting at once,
+by reflection over the file format — each is given a value other than its default and has to
+survive the copy — so a setting added later is covered without anyone remembering to extend
+it. The stakes are wider than the locks: a cancelled settings dialog saves a clone too, so a
+property `Clone` forgets is reset on disk by pressing Cancel.
+
+Forty-one cover moving the dock along its edge. Centred is exactly the dock as it was. Nothing
+the dock can draw leaves its span at any alignment — every point of a wave crossing rows too
+short to hold one and long enough to, at an ordinary magnification and the strongest there
+is — and pushed all the way, the widest wave meets the end of the span exactly rather than
+short of it or past it. The pushed end stays where it is as icons come and go, including
+while the bar is still easing open over a new one. The wave's reach, taken in closed form,
+agrees with the sweep that finds it the long way and bounds every row. A long name on the end
+icon of a pushed dock stays on the screen, which its window does not quite — checked in
+pixels, and checked first that without the fix the same label really does cross the edge.
+And the one that matters most: the row lands in the same place on the screen whatever size
+its window is, which is what lets the settings dialog hold the window wide without the dock
+wandering along the edge under the slider.
+
+Thirty-nine cover the string table. Three read the source: every key the XAML and the code
+name is in `en.json`, every key in `en.json` is named somewhere, and every English string
+formats — the first catches a typo that would show a key on screen, and the second keeps the
+table from filling with strings nothing uses. The rest hold a translation to English: that it
+falls back key by key; that a string using a placeholder English does not supply, or one that
+is not a format string at all, is refused rather than shown — either would throw each time it
+was drawn; that one leaving a placeholder out is allowed; that plurals are chosen by the
+translation's own rules, Russian's three forms included; and that numbers take its culture.
+Around them, the library: English always there and first, an installed pack listed and
+loaded, six kinds of unusable pack reported rather than listed, and following Windows landing
+on the nearest language there is — German for Austrian German, English for Japanese when there
+is no Japanese.
+
+Twenty-two cover icon sets. Most are about which image a pin gets — an executable by name
+wherever it lives, a shortcut by what it runs, a Store app by its id, a place by its target, a
+document by its type, the Recycle Bin full and empty, the most specific match winning whatever
+order the set lists them in, and the first of equals. The rest are about what a set may not
+do, since it is a folder anyone can write to: an image path that climbs out of the folder, a
+rooted one, a UNC one, one that is not a PNG, one that is not there, and a rule that matches
+nothing are each dropped with the rest of the set kept; an id that could not be written safely
+into the settings file is refused; and an image is decoded without the file being held open.
+
+Seven cover finding the display the dock was put on once Windows has renamed the displays,
+which on this machine happens across a wake from sleep. The monitor's path wins over a name
+that now belongs to the other screen; a settings file from before paths were stored goes by
+the name exactly as it did; a path that finds nothing falls through to the name, and so does
+a monitor Windows gives no path for; nothing found is nothing, which the dock turns into the
+main display; and two identical monitors, whose paths differ only by the connector, are told
+apart.
+
+Twenty-five cover the Exclusions page's two questions, and the handle's third. Nine are about
+which program: one moved to another folder by an update is still matched, case is ignored, a
+hand-written file name
+matches as a path does — and nothing overreaches, so `mygame.exe` is not `game.exe`, a
+folder named like the program is not the program, and a blank or null entry in a hand-edited
+file matches nothing rather than everything. Nine are about filling the display,
+against this machine's two displays at their real sizes: exactly, past the edges the way a
+borderless window can, at negative coordinates, spread across both at once — and, the one
+that matters, not a maximized window while the taskbar is showing, not one a row short, not
+one on the other display, and nothing at all before the dock has a display to measure
+against, since an empty rectangle is contained by everything. The settings round trip above
+carries the list as well. The last seven are what the handle a hidden dock leaves behind
+steps aside for, listed or not — a window that has taken the whole display, not an ordinary
+one that fills it — and the one that matters is StarCraft II's window as it really is here:
+maximized, with no title bar, over the whole main display. That is fullscreen, and asking
+only whether a window was maximized said it was not, which left the handle drawn over the
+game. A maximized window with a title bar is not fullscreen, where the taskbar hides itself or
+not; a borderless one is, title bar or not; and nothing short of the display, or on the other
+one, is.
+
+Seventy-two cover the scans' arranging, and the case they are built around is StarCraft II's folder
+as it really is on this machine — twelve programs, three of which call themselves
+"StarCraft II". Those three have to come out as one row, the stub and the game together,
+with the error reporter the only thing hidden and last. Two games that each ship a
+`Launcher.exe` stay two rows, and games come in order of name with each one's helpers last.
+Around that: copies of one program in
+several version folders are one program, and the newest is the one kept; names that differ
+only in case are one row; programs that describe themselves not at all are *not* lumped into
+a row of the nameless; a helper sharing the game's name is kept apart from it, so hiding the
+helpers cannot hide the game; and a program's name is read once however many copies there
+are. Forty-one cases hold the line between helpers and apps by whole words rather than
+substrings — `BlizzardError` is a helper and `Terror` is a game, `setup` is one and
+`Setupper` is not — and the crash reporters the Steam library here turned up among its games
+(`crs-handler`, `breakpad_server`, a bundled `7za`) are held to being helpers, while the games
+beside them (`GoWR`, `tlou-i`, `RiftApart`) are held to not; so are `EAUpdater` and
+`MySQLInstaller`, whose acronyms hid the word that gives them away until they were split off,
+beside `MySQLWorkbench`, which the same split must not make a helper. Nine cover the order:
+with StarCraft II's real programs, the game first and the one with no icon and no name last,
+the game's name outweighing the larger editor, an open program ahead of all of it and a game
+with one open ahead of the other games; a name that is the game's whatever its spacing and
+trademark signs; installed apps ranked as one list, and Windows' tools below them but above a
+program with no icon; and seven the filter, which matches a name, a file name or a game.
+The last four walk a real folder made for the test: programs at every
+depth and nothing else — not a `.txt`, not a `game.exe.bak`, not a folder called `Folder.exe`
+— the folders entered counted, none entered once stopped, and a junction pointing back at its
+own ancestor not followed, which is the loop that would otherwise never end.
+
+Thirty-three cover finding the games in the first place, from the records as they are on
+this machine: both of Steam's libraries read out of `libraryfolders.vdf` with their
+backslashes unescaped, an app manifest's name kept apart from its folder's ("Detroit: Become
+Human" in "Detroit Become Human"), an Epic manifest read — and one that is broken, empty or
+not a manifest at all costing only itself. A game publisher's program is its launcher's game,
+the launcher itself is not, and the one that matters: "Patriot Memory" is nobody's, because
+matching part of a publisher's name found "Riot" in it and offered its RGB software as a game.
+A folder found twice is kept once under the first name given, one that is gone is dropped, a
+quoted path is unquoted, and a game with no name takes its folder's.
+
+Twenty-three cover *Scan for apps…* and the icon test it and the order lean on. A shortcut to
+an app is kept; one to a help file, a document or nothing with a path is not, nor an
+uninstaller — even one that runs the app's own program with an argument, which must not be
+the shortcut the program is offered under — nor a helper's program, nor one that runs a host
+(`control.exe`, `cmd.exe`, `wscript.exe`), nor a game's program, nor one that is gone. An app
+named like a helper is still kept, since only the program's name is judged. Inside a folder
+means under it, not beside it — "StarCraft II Beta" begins with "StarCraft II". And the icon
+test reads real files: Explorer has an icon of its own, a file that is not a program and one
+that is not there have none.
+
+Thirty-six cover the handle a hidden dock leaves behind, most in physical pixels against this
+machine's two displays at their real scales, since the handle is placed by `SetWindowPos` and
+the scale is what is likeliest to go wrong. As wide as the dock it is the bar exactly; with a
+width of its own it is centred on the bar wherever the dock sits along its edge, wider than the
+bar included, and that width is in DIPs, so it is half as wide again in pixels on the 4K
+display; it sits just above the taskbar and never on it, its thickness and lift scale too, and
+every edge is a whole pixel. A width off the slider's range is held to it, and a scale or
+width that is no number falls back rather than placing a window nowhere. Where the pointer
+counts as on it reaches a little above it and down to the taskbar, and no further — below the
+taskbar is the reveal edge. Six more hold that the resting bar it is measured from is the bar a
+dock at rest actually draws, at either end of its edge and empty. The last seven are the
+inverted look: white comes back black and black white, a colour comes back as its opposite,
+what is shown is opaque whatever the read said of alpha, and nothing past the last whole pixel
+is touched — and the one that matters, that no grey from 0 to 255 comes back within fifty
+levels of itself, which a plain inversion fails at mid-grey.
+
+Four cover what the project file tells the updater. The one that matters is that the folder
+Velopack installs into is not the one the settings live in: Velopack treats its folder as its
+own and its uninstaller removes it, so an install id of `ArtDock` would take the user's
+settings and packs with the first uninstall. The others: updates come from a GitHub repository
+over HTTPS, and a copy nobody installed — the test run itself — is not taken for an installed
+one, and starts at sign-in from where it is, both before Velopack has looked for an
+installation and after, which is the state a build run from the source tree is in whenever
+the settings dialog asks.
