@@ -98,6 +98,10 @@ public sealed class DockBar : Canvas
     /// </summary>
     private static readonly Brush StandInBrush = Frozen(Color.FromArgb(0x01, 0x00, 0x00, 0x00));
     private static readonly Brush DotBrush = Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));
+
+    /// <summary>The label bubble. Keep it all but opaque: the labels are ClearType, which
+    /// is blended against this colour, and any of the desktop showing through would show
+    /// through with coloured fringes.</summary>
     private static readonly Brush TooltipFill = Frozen(Color.FromArgb(0xF0, 0x14, 0x16, 0x20));
     private static readonly Brush TooltipText = Frozen(Colors.White);
 
@@ -457,12 +461,15 @@ public sealed class DockBar : Canvas
         // above the bar stays click-through for the window underneath.
         Background = null;
 
-        // Labels come out aliased otherwise. The dock window is AllowsTransparency, which
-        // rules ClearType out — subpixel coverage cannot be composited against per-pixel
-        // alpha — and WPF's Auto mode resolves that by dropping antialiasing altogether
-        // rather than by falling back to grayscale. Asking for grayscale explicitly is what
-        // gets smooth glyph edges on a layered window.
-        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Grayscale);
+        // Labels in ClearType, as Windows draws its own text. The dock window is
+        // AllowsTransparency, where WPF turns ClearType off — subpixel coverage cannot be
+        // composited against per-pixel alpha — and falls back to grayscale, which smooths
+        // only horizontally: the tops and bottoms of every curve stay hard steps. The hint
+        // puts ClearType back, and it is safe here because every word the dock draws sits
+        // on a bubble (TooltipFill) all but opaque. The rendering mode is left alone, so the
+        // system's own font smoothing still decides. Animated hinting was tried first: it
+        // smooths both ways, but unhinted, and the labels came out soft and heavy.
+        RenderOptions.SetClearTypeHint(this, ClearTypeHint.Enabled);
 
         // Ideal formatting places glyphs at their true sub-pixel positions instead of
         // snapping them to the pixel grid, which matters because the tooltip slides with
@@ -2875,14 +2882,14 @@ public sealed class DockBar : Canvas
     internal const string DefaultTooltipFont = "Segoe UI";
 
     /// <summary>Default label size, when an item does not override it.</summary>
-    internal const double DefaultTooltipSize = 12;
+    internal const double DefaultTooltipSize = 14;
 
     /// <summary>
     /// Default emphasis, when an item does not override it.
     /// </summary>
     /// <remarks>
     /// Bold, because a label is read against whatever happens to be behind the dock — a
-    /// desktop, a document, a video — and at twelve points over a translucent bubble the
+    /// desktop, a document, a video — and at label sizes over a translucent bubble the
     /// regular weight is the first thing to lose. <c>Regular</c> remains available as an
     /// explicit choice for anyone who wants it.
     /// </remarks>

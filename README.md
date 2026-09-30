@@ -173,8 +173,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   its icon and what it opens. **A pinned picture is drawn as itself**: its Windows thumbnail,
   fitted to keep its shape, unless the editor's *Use the file's icon instead of a thumbnail* is
   ticked; an image chosen for the item wins over both; the label's font, style and size belong to the dock rather than
-  the item, so they apply to every label at once. Labels are bold by default, because a label
-  is read against whatever happens to be behind the dock. The item being edited holds its
+  the item, so they apply to every label at once. Labels are 14 pt and bold by default,
+  because a label is read against whatever happens to be behind the dock. The item being edited holds its
   label open on the bar so the styling can be judged where it is actually used.
 - **The Add menu offers places and actions, not only apps**: alongside *Browse…* and a few
   of the machine's own applications, **This PC**, the **User folder**, **Downloads**, the
@@ -624,12 +624,16 @@ value scales all three channels linearly — but a dock bar is usually a dark co
 accurate wheel at that brightness is a black disc with no hues left to pick from. The wheel
 indicates the brightness; the bar beside it and the swatch above it show what was chosen.
 
-**Labels ask for grayscale antialiasing by name.** `AllowsTransparency` rules ClearType
-out — subpixel coverage cannot be composited against a per-pixel alpha surface — and WPF's
-default `Auto` text rendering mode answers that by dropping antialiasing altogether rather
-than falling back. The result is aliased glyphs on an otherwise smooth dock. `DockBar` sets
-`TextOptions.TextRenderingMode` to `Grayscale` explicitly, and `TextFormattingMode` to
-`Ideal` so glyphs keep their sub-pixel positions as the tooltip slides with the wave.
+**Labels are ClearType, on a window where WPF turns it off.** On an `AllowsTransparency`
+window WPF drops ClearType, because subpixel coverage cannot be composited against a
+per-pixel alpha surface. Its grayscale fallback smooths glyph edges only horizontally, so
+the tops and bottoms of curves stay hard steps, which reads as aliased at label sizes.
+`DockBar` sets `RenderOptions.ClearTypeHint` to `Enabled`, which tells WPF the text is on
+an opaque background and brings ClearType back. That holds because every label sits on a
+bubble at 94% opacity. The rendering mode is left alone, so the system's own font-smoothing
+setting still decides. `TextHintingMode.Animated` also smooths in both directions, but it
+is unhinted, and the labels came out soft and heavy. `TextFormattingMode` is `Ideal`, so
+glyphs keep their sub-pixel positions as the label slides.
 
 **The headroom above the bar is measured, not assumed.** A fully magnified icon reaches
 exactly the top of the reserve the window keeps for the tooltip, so a fixed reserve is only
