@@ -113,8 +113,9 @@ try {
         Write-Warning 'No earlier release could be read, so this one has no delta, and every update to it downloads it whole.'
     }
 
-    # The Start menu only: the dock is its own launcher, and a desktop shortcut to it is
-    # clutter. The splash is the brand's dark lockup, made at 1x by tools/make-brand.py since
+    # The Start menu and the desktop. A location added here reaches copies already installed
+    # too: an update makes the shortcuts its version adds, though never one the user deleted.
+    # The splash is the brand's dark lockup, made at 1x by tools/make-brand.py since
     # the setup scales it to the display itself; its progress bar, green unless told, is the
     # magnified icon's blue.
     $pack = @(
@@ -129,7 +130,7 @@ try {
         '--icon', $icon,
         '--splashImage', $splash,
         '--splashProgressColor', '#4d5cff',
-        '--shortcuts', 'StartMenuRoot',
+        '--shortcuts', 'Desktop,StartMenuRoot',
         '--outputDir', $releasesDir
     )
     if ($ReleaseNotes) {

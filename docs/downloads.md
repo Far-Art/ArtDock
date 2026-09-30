@@ -112,10 +112,13 @@ so it was taken instead and that interface removed.
 `vpk` into a setup (`ArtDock.App-win-Setup.exe`), a portable zip, a full package, a delta
 from the last release, and the feed installed docks read. The setup installs per user into
 `%LOCALAPPDATA%\ArtDock.App`, so neither it nor any update asks for administrator rights,
-adds a Start menu shortcut — not a desktop one, since the dock is its own launcher — and an
-entry in Windows' installed apps to uninstall it by. The setup, the shortcut and that entry
-all carry `Assets/ArtDock.ico`, and while it installs the setup shows the brand's dark lockup
-from `brand/installer/splash.png`, with its progress bar in the magnified icon's blue.
+adds shortcuts on the Start menu and the desktop, and an entry in Windows' installed apps to
+uninstall it by. The setup, the shortcuts and that entry all carry `Assets/ArtDock.ico`, and
+while it installs the setup shows the brand's dark lockup from `brand/installer/splash.png`,
+with its progress bar in the magnified icon's blue. The desktop shortcut came later than the
+rest. A copy installed without it gets it at its next update, because Velopack makes any
+shortcut location a new version adds. It never re-makes a shortcut the user has deleted, and
+uninstalling removes both.
 
 **The install id is not "ArtDock", and must never be.** Velopack installs into
 `%LOCALAPPDATA%\<install id>` and treats that folder as its own — its uninstaller removes it.

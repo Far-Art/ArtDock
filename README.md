@@ -44,8 +44,8 @@ the dialog, the way Cancel does.
 
 Released copies are installed by a setup, `ArtDock.App-win-Setup.exe`, built by
 [Velopack](https://velopack.io). It installs per user into `%LOCALAPPDATA%\ArtDock.App` —
-no administrator rights, then or on any update — with a Start menu shortcut and an entry in
-Windows' installed apps to remove it by. The installed dock starts when you sign in; the
+no administrator rights, then or on any update — with shortcuts on the Start menu and the
+desktop, and an entry in Windows' installed apps to remove it by. The installed dock starts when you sign in; the
 System page's *Start ArtDock when I sign in* turns that off, and an update leaves it as it
 was. Settings stay in `%LOCALAPPDATA%\ArtDock`, apart from the install, so updating does
 not touch them. Uninstalling asks: *Keep settings*, the default, leaves them for the next
