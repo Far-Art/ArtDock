@@ -192,7 +192,7 @@
     "Settings.System.Export": "Export…",
 
     "Settings.About.Title": "About ArtDock",
-    "Settings.About.Tagline": "A floating, macOS-style dock for Windows 11. Pin your apps, files and folders, and open or switch to them from a bar whose icons magnify, neighbours and all, as the pointer passes.",
+    "Settings.About.Tagline": "A macOS-style application dock for Windows 11. Pin applications, files and folders for quick access.",
     "Settings.About.Version": "Version {0} · {1} build",
     "Settings.About.VersionUnknown": "unknown",
     "Settings.About.SettingsPath": "Settings are stored at {0}",
