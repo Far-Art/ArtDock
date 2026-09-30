@@ -47,11 +47,64 @@ internal static partial class NativeMethods
     internal const uint WS_EX_TRANSPARENT = 0x0000_0020;
     internal const uint WS_EX_NOACTIVATE = 0x0800_0000;
 
+    /// <summary>
+    /// Layered. With <see cref="WS_EX_TRANSPARENT"/> it makes a window click-through: hit-testing
+    /// passes it by entirely. <see cref="WS_EX_TRANSPARENT"/> alone does not, reliably — a window
+    /// with only that can still be what <c>WindowFromPoint</c>, and so a click, finds.
+    /// </summary>
+    internal const uint WS_EX_LAYERED = 0x0008_0000;
+
+    /// <summary>For <see cref="SetLayeredWindowAttributes"/>: the alpha is the window's opacity.</summary>
+    internal const uint LWA_ALPHA = 0x0000_0002;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetLayeredWindowAttributes(nint hWnd, uint crKey, byte bAlpha, uint dwFlags);
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     internal static partial nint GetWindowLongPtr(nint hWnd, int nIndex);
 
     [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     internal static partial nint SetWindowLongPtr(nint hWnd, int nIndex, nint dwNewLong);
+
+    // ---- windows of our own ----------------------------------------------------
+
+    internal delegate nint WindowProc(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct WindowClass
+    {
+        public uint Size;
+        public uint Style;
+        public nint WindowProc;
+        public int ClassExtra;
+        public int WindowExtra;
+        public nint Instance;
+        public nint Icon;
+        public nint Cursor;
+        public nint Background;
+        public string? MenuName;
+        public string ClassName;
+        public nint SmallIcon;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "RegisterClassExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern ushort RegisterClassEx(ref WindowClass windowClass);
+
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern nint CreateWindowEx(
+        uint exStyle, string className, string windowName, uint style,
+        int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
+
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    internal static extern nint DefWindowProc(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyWindow(nint hWnd);
+
+    [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode)]
+    internal static extern nint GetModuleHandle(string? moduleName);
 
     // ---- z-order -------------------------------------------------------------
 

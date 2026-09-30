@@ -171,6 +171,10 @@ public sealed partial class DockWindow : Window
             SyncHandle();
         };
 
+        // The sheet is the window's twin, so it follows a change of size as well as of place:
+        // see BackdropWindow.Follow.
+        SizeChanged += (_, _) => SyncBackdrop();
+
         // Settings are applied from OnSourceInitialized, before the dock has been laid out
         // and while its bar is therefore still nonsense. One sync once the first frame is
         // on screen is what puts the sheet under a bar that actually exists.
@@ -452,17 +456,37 @@ public sealed partial class DockWindow : Window
     /// Brings the acrylic sheet up or takes it down.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The sheet is created the first time it is asked for rather than at startup, so a
     /// dock with the blur turned off never makes a second window at all. Once made it is
     /// hidden rather than destroyed, because building it again costs a DWM round trip and
     /// the setting is a toggle people flip while watching the dock.
+    /// </para>
+    /// <para>
+    /// Taken down, it is not hidden at once: it has been drawing the bar, and the dock takes
+    /// the bar back through WPF's render thread, which was measured reaching the screen a frame
+    /// or two after anything the sheet does. Hidden straight away, the bar would be gone for
+    /// those frames. So the dock draws the bar again first, and the sheet goes once a few of the
+    /// dock's frames have been rendered — which costs, at most, a frame or two of the bar drawn
+    /// twice.
+    /// </para>
     /// </remarks>
     private void ApplyBackdrop(bool enabled)
     {
         if (!enabled)
         {
-            _backdrop?.Hide();
             _dock.DrawsShadow = true;
+
+            if (!_dock.DrawsBar)
+            {
+                _dock.DrawsBar = true;
+                HideBackdropOnceDrawn();
+            }
+            else if (!_backdropLeaving)
+            {
+                _backdrop?.Hide();
+            }
+
             return;
         }
 
@@ -480,95 +504,69 @@ public sealed partial class DockWindow : Window
         SyncBackdrop();
     }
 
-    /// <summary>
-    /// Puts the sheet exactly under the bar, in screen pixels.
-    /// </summary>
+    /// <summary>True while the sheet is waiting to be hidden — see <see cref="HideBackdropOnceDrawn"/>.</summary>
+    private bool _backdropLeaving;
+
+    /// <summary>How many of the dock's frames to wait before the sheet goes.</summary>
     /// <remarks>
-    /// Measured through <see cref="Visual.PointToScreen"/> rather than computed from the
-    /// window's own bounds, because the bar is a shape drawn inside a window that is
-    /// deliberately much larger than it — and because that conversion is the one place the
-    /// display's scaling is already accounted for.
+    /// The dock's frames were measured reaching the screen up to two frames after the
+    /// sheet's changes do; one more for good measure.
     /// </remarks>
-    private void SyncBackdrop()
+    private const int BackdropLeavingFrames = 3;
+
+    /// <summary>
+    /// Hides the sheet once the dock has had time to put the bar it took back on the screen.
+    /// </summary>
+    private void HideBackdropOnceDrawn()
     {
-        if (_holdBackdrop
-            || _backdrop is not { IsVisible: true } backdrop
-            || PresentationSource.FromVisual(_dock) is null)
+        if (_backdropLeaving)
         {
             return;
         }
 
-        // Nothing useful can be measured until the dock has been arranged: PointToScreen
-        // against a zero-sized visual puts the sheet somewhere arbitrary, and on startup
-        // that is exactly when settings are first applied.
-        if (_dock.ActualWidth <= 0 || _dock.ActualHeight <= 0)
+        _backdropLeaving = true;
+        var frames = 0;
+
+        void OnRendering(object? sender, EventArgs e)
         {
-            return;
-        }
-
-        var bar = _dock.BarRect;
-        if (bar.Width <= 0 || bar.Height <= 0)
-        {
-            return;
-        }
-
-        // Inscribed rather than matched. DWM rounds the sheet to a radius of its own,
-        // about eight pixels, and there is no way to give it another: a window region is
-        // accepted but composed straight over, so a stadium-ended bar had a square-cornered
-        // slab poking out of it. Pulling the sheet in by enough that its corners clear the
-        // bar's costs a margin of blur at the edges and is right at every radius.
-        var radius = _dock.Metrics.BarRadius;
-        var scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-
-        if (backdrop.ShapesExactly)
-        {
-            // The window is parked at the widest the bar ever gets and left alone; the live
-            // bar is cut out of it by a clip. A window moves in whole pixels and the bar's
-            // width drifts by well under one per frame near the ends of a wave, so a window
-            // following the bar is what made it look like it was stepping. A clip takes
-            // fractions of a pixel and follows it exactly.
-            var footprint = _dock.MaxBarRect;
-            var origin = _dock.PointToScreen(footprint.TopLeft);
-            var far = _dock.PointToScreen(footprint.BottomRight);
-
-            backdrop.Place(
-                (int)Math.Round(origin.X),
-                (int)Math.Round(origin.Y),
-                (int)Math.Round(far.X - origin.X),
-                (int)Math.Round(far.Y - origin.Y),
-                (int)Math.Round(radius * scale));
-
-            var barTopLeft = _dock.PointToScreen(bar.TopLeft);
-            var barBottomRight = _dock.PointToScreen(bar.BottomRight);
-
-            backdrop.Clip(
-                barTopLeft.X - origin.X,
-                barTopLeft.Y - origin.Y,
-                barBottomRight.X - barTopLeft.X,
-                barBottomRight.Y - barTopLeft.Y,
-                radius * scale);
-        }
-        else
-        {
-            // The fallback cannot be shaped, so a rectangle of blur has to be kept inside
-            // the bar instead — which costs a sliver of blur under each rounded end.
-            var (insetX, insetY) = BackdropInset(bar, radius);
-            bar.Inflate(-insetX, -insetY);
-            if (bar.Width <= 0 || bar.Height <= 0)
+            if (++frames < BackdropLeavingFrames && !_closed)
             {
                 return;
             }
 
-            var topLeft = _dock.PointToScreen(bar.TopLeft);
-            var bottomRight = _dock.PointToScreen(bar.BottomRight);
+            CompositionTarget.Rendering -= OnRendering;
+            _backdropLeaving = false;
 
-            backdrop.Place(
-                (int)Math.Round(topLeft.X),
-                (int)Math.Round(topLeft.Y),
-                (int)Math.Round(bottomRight.X - topLeft.X),
-                (int)Math.Round(bottomRight.Y - topLeft.Y),
-                (int)Math.Round(radius * scale));
+            // Unless the blur came back on while it waited, in which case the sheet is wanted.
+            if (!_applied.BlurBackground)
+            {
+                _backdrop?.Hide();
+            }
         }
+
+        CompositionTarget.Rendering += OnRendering;
+    }
+
+    /// <summary>
+    /// Puts the sheet under the bar — and, where the sheet draws the bar, hands the bar to it.
+    /// </summary>
+    /// <remarks>
+    /// The measuring is the sheet's own (<see cref="BackdropWindow.Follow"/>). The bar is only
+    /// handed over once the sheet has drawn it, and only while the blur is on: a sync that
+    /// arrives while the sheet is on its way out must not take the bar back off the dock.
+    /// </remarks>
+    private void SyncBackdrop()
+    {
+        if (_holdBackdrop
+            || !_applied.BlurBackground
+            || _backdrop is not { IsVisible: true } backdrop
+            || _chrome is not { } chrome
+            || !backdrop.Follow(_dock, chrome.Hwnd))
+        {
+            return;
+        }
+
+        _dock.DrawsBar = !backdrop.DrawsBar;
 
         // Re-asserted here rather than once at startup: showing a topmost window puts it at
         // the top of the topmost band, and that is where this one kept ending up — over the
@@ -578,48 +576,6 @@ public sealed partial class DockWindow : Window
         // Two shadows for one object is one too many.
         _dock.DrawsShadow = !backdrop.HasNativeShadow;
     }
-
-    /// <summary>
-    /// How far inside the bar the acrylic sheet has to sit for its own corners to clear the
-    /// bar's, in device-independent pixels.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The sheet's radius is DWM's, the bar's is the user's, and a rounded rectangle of
-    /// radius <c>a</c> sits inside one of radius <c>b</c> exactly when the corner arcs'
-    /// centres are no more than <c>b - a</c> apart. That is one equation in two unknowns —
-    /// the horizontal and vertical inset — so there is a whole family of insets that work
-    /// and the cheapest one can be picked.
-    /// </para>
-    /// <para>
-    /// Cheapest meaning least blur given up, which is the area of bar left uncovered:
-    /// <c>2·insetX·height + 2·insetY·width</c>. Minimising that against the constraint puts
-    /// almost all of the inset on the horizontal, because the bar is far wider than it is
-    /// tall — an unblurred sliver under each rounded end costs a third of what a full-width
-    /// band along the top and bottom would, and reads as very much less.
-    /// </para>
-    /// </remarks>
-    private static (double X, double Y) BackdropInset(Rect bar, double barRadius)
-    {
-        var slack = Math.Max(0, barRadius - DwmCornerRadius);
-        if (slack <= 0)
-        {
-            return (0, 0);
-        }
-
-        var diagonal = Math.Sqrt((bar.Width * bar.Width) + (bar.Height * bar.Height));
-        if (diagonal <= 0)
-        {
-            return (slack, slack);
-        }
-
-        return (
-            Math.Min(slack * (1 - (bar.Height / diagonal)), (bar.Width / 2) - 1),
-            Math.Min(slack * (1 - (bar.Width / diagonal)), (bar.Height / 2) - 1));
-    }
-
-    /// <summary>The radius DWM rounds windows to, in device-independent pixels.</summary>
-    private const double DwmCornerRadius = 8;
 
     /// <summary>
     /// Keeps the dock immediately above its own backdrop.

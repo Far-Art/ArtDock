@@ -23,7 +23,7 @@ them from there.
   other windows — a slim bar just above the taskbar shows where it will come up. It inverts
   the colours behind it, so it stands out on any background.
 - **Blur behind the bar.** The bar sits on a sheet of Windows acrylic, which blurs whatever
-  is behind it and brings the system's own drop shadow with it.
+  is behind it — drawn with the bar and its shadow in one piece, so the three never come apart.
 
 Each of these, and everything else the dock does, is described under
 [What it does](#what-it-does).
@@ -122,8 +122,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the handle is not drawn there. A dock hidden from the tray has none: it was put away on
   purpose, and only the tray brings it back. While the settings dialog is open it shows under
   the dock, so its width can be seen while it is set.
-- **Blurs what is behind the bar**, with a sheet of Windows acrylic — which brings the
-  system's own drop shadow along with it.
+- **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
+  its shadow along with the blur, so the three move as one.
 - **Pulses an icon twice** when a click actually launches something (not when it just
   raises a window that was already open).
 - **Reorder from either side**: dragging a row in the settings dialog lifts it out under the
@@ -395,12 +395,14 @@ export a copy of it and import one back.
 ```
 src/ArtDock/
   Dock/        DockMagnify, DockLayout, DockMetrics, DockItem, DockEdge, BarPalette,
+               BarShadow (the bar's shadow, for whichever window draws it),
                AutoHideController, DockHandle (where the dock's handle goes),
                DockFront (what the dock does about a fullscreen window, and when the
                handle shows)
   Controls/    DockBar (the rendering surface), DockItemVisual, ColorWheel,
                AnimatedRowPanel
-  Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet),
+  Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet, which
+               draws the bar while the blur is on),
                MenuHost (owner for the context menus), MenuIcons (their glyphs and
                images), SettingsWindow, EditPinWindow,
                AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
@@ -474,57 +476,55 @@ continuously as an icon magnifies, they crawl while the wave moves.
 `BitmapScalingMode.HighQuality` averages over the whole footprint instead, at no measurable
 cost here.
 
-**The blur is a second window, and it brings the shadow with it.** `AllowsTransparency`
-puts the dock on a layered surface, and DWM composes no material and no shadow behind one —
-which is why the bar was a flat fill and the shadow was drawn by hand. `BackdropWindow` is
-the opposite in every respect: no transparency, nothing drawn in it at all, its frame
-extended across the whole client area so what shows is entirely DWM's acrylic. It is
-`WS_EX_TRANSPARENT`, so a solid window sitting under a dock designed to be clicked through
-still is.
+**The blur is a second window, and while it is on, that window draws the bar.**
+`AllowsTransparency` puts the dock on a layered surface, and DWM composes no material behind
+one — which is why the bar was a flat fill. `BackdropWindow` is a second window directly under
+the dock, the same size and in the same place, created by hand with
+`WS_EX_NOREDIRECTIONBITMAP` so that a composition visual can fill it: a host backdrop brush —
+the blurred desktop behind it — cut to the bar's rounded shape by a composition clip, with a
+light wash over it.
 
-Three details make it work. **The blur comes from the accent policy, not the documented
-`DWMWA_SYSTEMBACKDROP_TYPE`** — DWM's system materials fall back to a flat colour while
-their window is *inactive*, and this window is `WS_EX_NOACTIVATE`, so it is never anything
-else. What that produced was a grey slab with no sign of what was behind it. The accent
-policy is the route the taskbar itself is on and blurs regardless of focus.
+**It draws the bar as well as the blur, because two windows would not stay together.** Drawn
+in the dock's own window, the bar reached the screen through WPF's render thread and
+`UpdateLayeredWindow`, and the blur's clip straight from the UI thread through the compositor.
+Captured frame by frame, the blur's edge ran a frame or two ahead of the bar's whenever the bar
+grew or shrank, and by no fixed amount, so no delay could have held them together; over a white
+window it showed, as a strip of blur past the bar's end or of bar with no blur under it. So with
+the blur on, the sheet draws the bar's fill, its rim and its shadow in the same batch as the
+blur, and the dock draws only the icons over them. The sheet is told of the bar's shape a frame
+after the dock has drawn it (`DockBar.RenderedBarRect`), so that it arrives with the icons that
+frame drew, which come the long way round.
 
-**DWM shadows windows that have a sizing frame and nothing else**, so the sheet carries
-`WS_THICKFRAME` and takes it straight back off in `WM_NCCALCSIZE` — it keeps the bar's exact
-size, and the shadow is all that survives of the frame.
+**The dock still owns the bar's clicks.** Its window is hit-tested by the alpha of what it
+paints, so with the bar drawn elsewhere it paints an invisible stand-in — alpha 1 — over the bar
+and its shadow, which took clicks and drops before and still do. The sheet takes none: it is
+layered as well as `WS_EX_TRANSPARENT`, which is what it takes for hit-testing to pass a window
+by every time. `WS_EX_TRANSPARENT` alone does not, reliably, and an earlier sheet with only that
+was found swallowing clicks beside both ends of the bar.
 
-**The sheet is inscribed inside the bar rather than shaped to it.** DWM rounds it to a
-radius of its own, about eight pixels, and will not take another; `SetWindowRgn` is not a way
-round that — the region is accepted, and `GetWindowRgnBox` reads the rounded shape back, but
-DWM composes the blur across the whole window rect regardless, leaving a square-cornered slab
-poking out of a stadium-ended bar. So the sheet is pulled inside the bar instead, by exactly
-enough for its corners to clear. That is one equation in two unknowns, which leaves room to
-pick the cheapest solution: almost all of the inset goes on the horizontal, because the bar
-is far wider than it is tall, and an unblurred sliver under each rounded end costs a third of
-what a full-width band along the top and bottom would.
+**Where composition is not available**, the sheet falls back to DWM's accent policy — the route
+the taskbar is on, which blurs regardless of focus, where the documented
+`DWMWA_SYSTEMBACKDROP_TYPE` materials go flat for a window that is never active, as this one
+never is. That blur cannot be shaped: DWM rounds it to a radius of its own, and a window region
+is accepted but composed straight over. So there the sheet is a rectangle inscribed inside the
+bar, by exactly enough for its corners to clear — almost all of the inset on the horizontal,
+since the bar is far wider than it is tall — carrying a sizing frame, collapsed in
+`WM_NCCALCSIZE`, because DWM shadows only windows with one. The dock draws the bar over it, as
+it always did, and on that path the blur can still trail the bar.
 
-What made all this practical is the falloff — the bar's width holds steady across the middle
-of the dock, so a second window only has to be moved during the entry and exit ramps rather
-than on every frame of a wave.
+**The drawn shadow.** A real `DropShadowEffect` would blur again every frame the bar changes
+width, which is every frame of a wave. Two stacked passes of rounded rectangles (a tight contact
+shadow and a displaced key shadow, spaced on a power curve) cost nothing to redraw
+(`BarShadow`). With the blur off the dock draws them, clipping the bar out, because a shadow is
+not visible through the object casting it; with it on the sheet draws the same rings under the
+blur, which is opaque and hides them where the bar is.
 
-**The drawn shadow, for when the backdrop is off.** `AllowsTransparency` puts this window on WPF's software
-rendering path, so a real `DropShadowEffect` would recompute a Gaussian blur on the CPU every
-frame the bar changes width — which is every frame of a wave. Two stacked passes of
-rounded rectangles (a tight contact shadow and a displaced key shadow, spaced on a power
-curve) cost nothing to redraw. The bar is clipped out of them, because a shadow is not
-visible through the object casting it.
-
-**The bar breathes; the window behind it does not.** The bar wraps whatever the icons
-occupy at that instant. That is nearly constant — the falloff sums to a constant across the
-middle of the dock — but it narrows by a few pixels near the ends, over a few hundred
-milliseconds. Under a pixel per frame, and the acrylic sheet is a separate window that can
-only be moved in whole pixels: a sub-pixel drift rendered in whole pixels stutters, and it
-was the one part of the dock that did not move smoothly.
-
-Freezing the bar fixed the stutter and lost the breathing, which was worse. So the sheet's
-*window* is parked at the widest the bar ever gets (`DockLayout.SteadyBarWidth`) and never
-moved, and the live bar is cut out of it by a composition clip instead. A clip takes
-fractions of a pixel where a window does not, so the blur's edge follows the bar exactly
-while the window it lives in holds still.
+**The bar breathes, in fractions of a pixel.** The bar wraps whatever the icons occupy at that
+instant. That is nearly constant — the falloff sums to a constant across the middle of the dock
+— but it narrows by a few pixels near the ends, over a few hundred milliseconds: under a pixel a
+frame. A window moves in whole pixels, and a sub-pixel drift rendered in whole pixels stutters,
+so the sheet's window never follows the bar. The bar is drawn inside it, in fractions of a
+pixel, measured as WPF draws and not through `PointToScreen`, which rounds to whole pixels.
 
 **Every dimension is a multiple of the icon size.** Magnification was already a scale
 factor; influence range now counts how many icons either side of the pointer lift, and the
@@ -667,11 +667,11 @@ whose window belongs to whatever pin starts *that*. Documents were turned away o
 reasoning that a dock of documents is not what anyone means by pinning — a judgement made on
 the user's behalf and enforced by doing nothing at all when they dropped one.
 
-**The sheet's clip is set once, not twice.** `BackdropWindow.Place` used to end by clipping
+**The sheet's shape is set once, not twice.** `BackdropWindow.Place` used to end by clipping
 the sheet to its own window, which `SyncBackdrop` then immediately replaced with the bar's
 rectangle. The first clip never survived to be seen on purpose — but it was seen by accident,
 whenever DWM composed a frame between the two, as a flash of acrylic at the full width of a
-window that is deliberately parked wider than the bar.
+window that is deliberately wider than the bar.
 
 **The bar opens up rather than jumping open.** A slot appearing is worth a whole icon pitch,
 and taking it all at once made the bar snap to its new width and leave its contents to catch
@@ -680,9 +680,8 @@ The bar is drawn as if it held a *fractional* number of slots, easing to the rea
 same time constant as the slides, so the row spreads and the bar opens as one movement. The
 wave's own contribution to the width stays instant: the bar has to keep wrapping the icons
 exactly as it passes, and easing that would have it trail them. The acrylic sheet follows for
-free, because its visible edge is a clip cut to the bar, re-cut whenever the bar's shape
-actually changes — its window is parked at the same reserved envelope as the dock's own and
-no longer moves at all when a preview comes and goes.
+free, since it draws the bar in whatever shape the dock last drew — its window is the dock
+window's twin, and does not move at all when a preview comes and goes.
 
 **The window already owns the slot a drop opens.** The dock asks for a window one icon
 wider than it has, always. Growing to fit a preview and shrinking again when the drag moved
@@ -862,18 +861,17 @@ renderer's, and a trade against CPU — and the Exclusions page's blind spot for
 
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
-dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date; the
-blur keeping up with the bar; and subdocks, groups of items that open as a second dock above
-the one they are on.
+dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date; and
+subdocks, groups of items that open as a second dock above the one they are on. The blur
+keeping up with the bar was on this list, and is done.
 
 ## Known gaps
 
 - **No keyboard navigation.** `WS_EX_NOACTIVATE` means the window cannot take keyboard focus
   at all, so Tab cannot reach the dock. The right fix
   is a global hotkey that temporarily allows activation — not yet built.
-- **The acrylic's tint is the system's, not the dock's.** `DWMWA_SYSTEMBACKDROP_TYPE` picks
-  the material and how it is tinted; the bar's own colour is a wash over it rather than the
-  colour of the blur itself.
+- **The blur is Windows' own.** Its strength is DWM's and cannot be set, and the bar's colour
+  is a fill over it — over a fixed wash — rather than the colour of the blur itself.
 - **Store apps can only be pinned by path.** Anything on disk can be pinned by browsing to
   it or dropping it; AUMID pinning is modelled end to end (`DockItem.Aumid`, `ShellTarget`)
   but there is no browser for `shell:AppsFolder` yet.
@@ -939,10 +937,15 @@ the one they are on.
 dotnet test tests/ArtDock.Tests
 ```
 
-Four hundred and ninety-nine tests cover the cosine falloff (peak, range boundary, monotonicity, zero
-range), the layout (prefix sums, bar width, non-overlap across a full pointer sweep, empty
-and single-icon docks, the width the acrylic sheet is parked at, and the hover span, which
-covers the bar wherever the wave is without moving when the wave does), and the tuning values
+Five hundred and twenty-two tests cover the cosine falloff (peak, range boundary,
+monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
+sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
+shadow, and the hover span, which covers the bar wherever the wave is without moving when the
+wave does), the bar while the acrylic sheet draws it (the shadow both draw, the invisible
+stand-in that keeps it clickable, the shape the sheet is told once it has been drawn, drawn to
+the fraction of a pixel in a window the twin of the dock's, and a sheet made on any thread),
+what counts as click-through, held against Windows' own hit-testing off every display, and
+the tuning values
 being relative — that the wave is identical at any icon size, that the gap keeps its
 proportions, and that a settings file written in pixels is carried over as the count and
 share it always meant.

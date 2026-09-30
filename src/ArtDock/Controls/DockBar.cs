@@ -75,50 +75,28 @@ public sealed class DockBar : Canvas
 
     // ---- shadow ---------------------------------------------------------------
 
-    /// <summary>One stacked-ring pass making up the composite shadow.</summary>
-    /// <param name="Blur">How far past the bar this pass reaches.</param>
-    /// <param name="OffsetY">Downward displacement, as if lit from above.</param>
-    /// <param name="Layers">How many rings the pass's falloff is built from.</param>
-    /// <param name="Alpha">Per-ring alpha; the pass peaks near <c>1-(1-alpha)^layers</c>.</param>
-    private readonly record struct ShadowPass(double Blur, double OffsetY, int Layers, byte Alpha);
-
-    /// <summary>
-    /// Two passes, the way daylight actually falls on a small object.
-    /// </summary>
-    /// <remarks>
-    /// A single pass cannot be both subtle and convincing: widen it and it becomes a uniform
-    /// halo, tighten it and the bar looks pasted on. The contact pass is tight and barely
-    /// displaced, so the bar reads as resting just above the desktop; the key pass is wide,
-    /// faint and clearly pushed downward, which is what gives the shadow a direction. Peak
-    /// opacity is around 17% where they overlap, immediately under the bar.
-    /// </remarks>
-    private static readonly ShadowPass[] ShadowPasses =
-    [
-        new(Blur: 6, OffsetY: 2, Layers: 8, Alpha: 0x02),
-        new(Blur: 18, OffsetY: 8, Layers: 16, Alpha: 0x02)
-    ];
-
+    /// <summary>One brush per pass of <see cref="BarShadow"/>, which says what the shadow is.</summary>
     private static readonly Brush[] ShadowBrushes =
-        [.. ShadowPasses.Select(pass => Frozen(Color.FromArgb(pass.Alpha, 0x00, 0x00, 0x00)))];
-
-    /// <summary>
-    /// Exponent spacing the rings. Above 1 they crowd near the bar, which is what gives each
-    /// pass a dense core and a long faint tail rather than a linear, banded ramp.
-    /// </summary>
-    private const double ShadowFalloff = 1.6;
-
-    /// <summary>The furthest any pass reaches, offset included.</summary>
-    private static readonly double ShadowReach =
-        ShadowPasses.Max(pass => pass.Blur + pass.OffsetY) + 2;
+        [.. BarShadow.Passes.Select(pass => Frozen(Color.FromArgb(pass.Alpha, 0x00, 0x00, 0x00)))];
 
     /// <summary>
     /// Room below the bar for the shadow to fall into. The window clips its own content, so
     /// with the bar flush against the window's bottom edge the shadow is sliced off in a hard
-    /// flat line.
+    /// flat line — and so does the acrylic sheet, which is the same size as the window and
+    /// draws the shadow itself while the blur is on.
     /// </summary>
-    private static readonly double ShadowSlack = ShadowReach;
+    private static readonly double ShadowSlack = BarShadow.Reach;
 
-    private static readonly Brush BarBorderBrush = Frozen(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF));
+    /// <summary>The bar's rim: a pixel of white drawn over its fill, just inside its edge.</summary>
+    public static Color BarBorder { get; } = Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF);
+
+    private static readonly Brush BarBorderBrush = Frozen(BarBorder);
+
+    /// <summary>
+    /// What stands in for the bar while the sheet behind it draws it: a single step of alpha,
+    /// which no eye can tell from nothing and Windows can — see <see cref="DrawsBar"/>.
+    /// </summary>
+    private static readonly Brush StandInBrush = Frozen(Color.FromArgb(0x01, 0x00, 0x00, 0x00));
     private static readonly Brush DotBrush = Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));
     private static readonly Brush TooltipFill = Frozen(Color.FromArgb(0xF0, 0x14, 0x16, 0x20));
     private static readonly Brush TooltipText = Frozen(Colors.White);
@@ -129,6 +107,9 @@ public sealed class DockBar : Canvas
     private Color _barColor = BarPalette.Default;
     private double _barOpacity = 0.5;
     private Brush _barFill = Frozen(Color.FromArgb(0x80, 0xCC, 0xD2, 0xFF));
+
+    /// <summary>The bar's fill as it is painted: its colour, at its opacity.</summary>
+    public Color BarFill => ((SolidColorBrush)_barFill).Color;
 
     private DockLayout _layout;
 
@@ -510,13 +491,16 @@ public sealed class DockBar : Canvas
     public event EventHandler? PreferredSizeChanged;
 
     /// <summary>
-    /// Raised when the drawn bar changes shape, so anything sitting under it can follow.
+    /// Raised when the drawn bar changes shape, so anything sitting under it can follow —
+    /// with <see cref="RenderedBarRect"/>, as the frame after the one that drew it begins.
     /// </summary>
     /// <remarks>
     /// Not once per frame, despite the bar being redrawn that often: the raised-cosine
     /// falloff sums to a constant across the middle of the dock, so the bar's width holds
     /// steady once the wave is up and only moves during the entry and exit ramps, and a
-    /// little at the ends. That is what makes it practical for a second window to track it.
+    /// little at the ends. That is what makes it practical for a second window to track it —
+    /// which, while the blur is on, is what draws the bar, so it is told of every change and
+    /// not only of whole pixels: see <see cref="AnnounceDrawnBar"/>.
     /// </remarks>
     public event EventHandler<Rect>? BarRectChanged;
 
@@ -525,6 +509,42 @@ public sealed class DockBar : Canvas
     /// real one, since two shadows for one object is one too many.
     /// </summary>
     public bool DrawsShadow
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    } = true;
+
+    /// <summary>
+    /// Whether this control paints the bar — its fill, its rim and its shadow. Off while the
+    /// acrylic sheet behind the dock paints them instead.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sheet draws the bar so that the bar's outline and the blur under it are one thing
+    /// on screen. Drawn here, they were two: this window's frames reach the screen through
+    /// WPF's render thread and <c>UpdateLayeredWindow</c>, the sheet's straight from this
+    /// thread through the compositor, and measured frame by frame the blur's edge ran ahead of
+    /// the bar's by one frame or two — a strip of blur past the bar's end while it grew, and of
+    /// bar without blur while it shrank, plain to see over a white window.
+    /// </para>
+    /// <para>
+    /// Off, the bar is not simply left out: a window with <c>AllowsTransparency</c> is
+    /// hit-tested by the alpha of what it paints, and a bar that painted nothing would pass
+    /// every click, right-click and drop through to whatever is behind — the lesson of the empty
+    /// dock. So the area the bar and its shadow cover is painted with a single step of alpha,
+    /// which keeps it the dock's without anyone being able to see it.
+    /// </para>
+    /// </remarks>
+    public bool DrawsBar
     {
         get;
         set
@@ -1861,25 +1881,38 @@ public sealed class DockBar : Canvas
             : (args.RenderingTime - _lastFrame).TotalMilliseconds;
         _lastFrame = args.RenderingTime;
 
-        TrackCursor();
+        // First, while the shape is still the one the last frame drew.
+        _frame++;
+        AnnounceDrawnBar();
 
-        // After TrackCursor, which would otherwise put the real pointer back.
-        AdvanceSweep(deltaMs);
+        _inFrame = true;
+        try
+        {
+            TrackCursor();
 
-        // After both, so a handover either of them has just started still draws this frame
-        // at the position it is taking the wave from.
-        AdvanceHandover(deltaMs);
+            // After TrackCursor, which would otherwise put the real pointer back.
+            AdvanceSweep(deltaMs);
 
-        AdvanceRamp(deltaMs);
-        AdvanceFlash(deltaMs);
-        AdvanceIcons(deltaMs);
-        ApplyWave();
+            // After both, so a handover either of them has just started still draws this frame
+            // at the position it is taking the wave from.
+            AdvanceHandover(deltaMs);
+
+            AdvanceRamp(deltaMs);
+            AdvanceFlash(deltaMs);
+            AdvanceIcons(deltaMs);
+            ApplyWave();
+        }
+        finally
+        {
+            _inFrame = false;
+        }
 
         // Once the wave is flat, the pointer has gone and nothing is animating, there is
-        // nothing left to do; the cursor watch takes over until it comes back.
+        // nothing left to do; the cursor watch takes over until it comes back — once the last
+        // shape drawn has been announced, which takes a frame after it.
         if (!_rampRunning && _progress <= 0 && _pointer is null && _flashIndex < 0
             && !_dragging && _focusIndex < 0 && !_slotsMoving && !_iconsGrowing
-            && !BarIsResizing && !_sweeping)
+            && !BarIsResizing && !_sweeping && _announceAt is null)
         {
             UnhookRendering();
         }
@@ -2186,12 +2219,11 @@ public sealed class DockBar : Canvas
             _offsets[i] = _slotOffsets[slot];
         }
 
-        // Announced from here rather than from ApplyWave, which only runs while something
-        // is animating. Removing an item from the settings dialog with the pointer away
-        // from the dock changes the bar without a single frame being rendered, and the
-        // acrylic sheet behind it was left at the old size until something else woke the
-        // dock up.
-        RaiseBarRectChanged();
+        // Noted from here rather than from ApplyWave, which only runs while something is
+        // animating. Removing an item from the settings dialog with the pointer away from the
+        // dock changes the bar without a frame of the wave being run, and the acrylic sheet
+        // behind it was left at the old size until something else woke the dock up.
+        NoteBarShape();
     }
 
     /// <summary>
@@ -2287,9 +2319,10 @@ public sealed class DockBar : Canvas
         if (_items.Count == 0)
         {
             // No wave to compute, but the empty bar still has a shape, and the acrylic sheet
-            // behind it follows whatever is announced from here. RaiseBarRectChanged drops an
-            // unchanged rectangle, so this costs nothing on the frames where it has settled.
-            RaiseBarRectChanged();
+            // behind it follows whatever is announced from here. NoteBarShape notes
+            // nothing for an unchanged rectangle, so this costs nothing on the frames where it
+            // has settled.
+            NoteBarShape();
             return;
         }
 
@@ -2323,11 +2356,32 @@ public sealed class DockBar : Canvas
         InvalidateVisual();
     }
 
-    /// <summary>Last bar shape handed out, so an unchanged one is not announced again.</summary>
-    private Rect _reportedBarRect = Rect.Empty;
+    /// <summary>
+    /// The bar as this control has drawn it: its shape as of the last frame rendered, in this
+    /// element's coordinates. <see cref="Rect.Empty"/> until it has been drawn once.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not <see cref="BarRect"/>, which is the shape being computed for the frame to come, and
+    /// is on the screen only once WPF has rendered that frame and handed it over. What follows
+    /// the bar from another window — the acrylic sheet, which draws the bar while the blur is on
+    /// — has to follow this instead, or it runs ahead of the icons.
+    /// </para>
+    /// <para>
+    /// Measured frame by frame: the sheet's changes reach the screen about a frame after they
+    /// are made, straight from this thread through the compositor; this window's reach it two
+    /// or three frames after the frame that computed them, through WPF's render thread and
+    /// <c>UpdateLayeredWindow</c>. A sheet told of a shape as soon as it was computed drew the
+    /// bar a frame or two ahead of its own icons — the end icon's margin inside the bar swung
+    /// from 10 to 25 pixels while a slot opened, where it holds at 17 or 18 when one window
+    /// draws both. Told of it at the start of the frame after the one that drew it, the sheet's
+    /// shorter road makes up the difference.
+    /// </para>
+    /// </remarks>
+    public Rect RenderedBarRect { get; private set; } = Rect.Empty;
 
     /// <summary>
-    /// The radius that went with it.
+    /// The corner radius that went with <see cref="RenderedBarRect"/>.
     /// </summary>
     /// <remarks>
     /// Part of the shape, and not implied by the rectangle: turning the roundness slider
@@ -2335,32 +2389,98 @@ public sealed class DockBar : Canvas
     /// sheet behind the bar kept whatever corners it had until something else happened to
     /// resize the dock.
     /// </remarks>
-    private double _reportedRadius = -1;
+    public double RenderedBarRadius { get; private set; } = -1;
 
-    private void RaiseBarRectChanged()
+    /// <summary>Frames of the render loop so far, counted as each begins.</summary>
+    private long _frame;
+
+    /// <summary>True while a frame of the render loop is being computed.</summary>
+    private bool _inFrame;
+
+    /// <summary>
+    /// The frame at whose start the bar's latest change will have been drawn, and can be
+    /// announced; null while nothing is waiting to be.
+    /// </summary>
+    private long? _announceAt;
+
+    /// <summary>
+    /// The shape last noted, so a frame that computes the same shape again notes nothing — the
+    /// geometry is recomputed on every frame of the wave, most of them changing nothing, and a
+    /// note keeps the render loop running.
+    /// </summary>
+    private (Rect Rect, double Radius) _noted = (Rect.Empty, -1);
+
+    /// <summary>
+    /// Notes that the bar has changed shape, to be announced once it has been drawn — see
+    /// <see cref="RenderedBarRect"/>.
+    /// </summary>
+    private void NoteBarShape()
     {
-        if (BarRectChanged is null)
+        var rect = BarRect;
+        var radius = Metrics.BarRadius;
+        if (SameShape(rect, radius, _noted.Rect, _noted.Radius))
         {
             return;
         }
+
+        _noted = (rect, radius);
+
+        // Nothing follows the bar, so there is nothing to keep in step: the shape is taken as
+        // drawn at once, and no frame is run to announce it.
+        if (BarRectChanged is null)
+        {
+            (RenderedBarRect, RenderedBarRadius) = (rect, radius);
+            return;
+        }
+
+        // A change made while a frame is being computed is drawn with that frame; one made
+        // between frames — a settings change, a rebuild, a layout — with the next. Either way it
+        // is announced as the frame after that begins. (Announcing the second kind a frame
+        // sooner was tried, measured, and left a size slider's steps less well matched.)
+        var drawnIn = _inFrame ? _frame : _frame + 1;
+        _announceAt = Math.Max(_announceAt ?? 0, drawnIn + 1);
+        EnsureRendering();
+    }
+
+    /// <summary>
+    /// At the start of a frame, before it changes anything: tells whatever follows the bar the
+    /// shape the frames before this one drew — by any amount worth drawing.
+    /// </summary>
+    /// <remarks>
+    /// Any amount: it used to take half a DIP to count, which was fine for a sheet hidden under
+    /// a bar drawn here. With the blur on the sheet draws the bar itself, and a bar that moved
+    /// in half-DIP steps would visibly step where the wave drifts it by less than a pixel a
+    /// frame — and come to rest up to half a DIP from where the icons say it is, the last small
+    /// move never being announced.
+    /// </remarks>
+    private void AnnounceDrawnBar()
+    {
+        if (_announceAt is not { } at || _frame < at)
+        {
+            return;
+        }
+
+        _announceAt = null;
 
         var rect = BarRect;
         var radius = Metrics.BarRadius;
-
-        if (_reportedBarRect != Rect.Empty
-            && Math.Abs(radius - _reportedRadius) < 0.01
-            && Math.Abs(rect.X - _reportedBarRect.X) < 0.5
-            && Math.Abs(rect.Y - _reportedBarRect.Y) < 0.5
-            && Math.Abs(rect.Width - _reportedBarRect.Width) < 0.5
-            && Math.Abs(rect.Height - _reportedBarRect.Height) < 0.5)
+        if (SameShape(rect, radius, RenderedBarRect, RenderedBarRadius))
         {
             return;
         }
 
-        _reportedBarRect = rect;
-        _reportedRadius = radius;
-        BarRectChanged(this, rect);
+        (RenderedBarRect, RenderedBarRadius) = (rect, radius);
+        BarRectChanged?.Invoke(this, rect);
     }
+
+    /// <summary>The same shape, to a hundredth of a DIP — which is to say, drawn the same.</summary>
+    private static bool SameShape(Rect a, double aRadius, Rect b, double bRadius) =>
+        !a.IsEmpty && !b.IsEmpty
+        && Math.Abs(aRadius - bRadius) < 0.01
+        && Math.Abs(a.X - b.X) < 0.01
+        && Math.Abs(a.Y - b.Y) < 0.01
+        && Math.Abs(a.Width - b.Width) < 0.01
+        && Math.Abs(a.Height - b.Height) < 0.01;
 
 
     // ---- rendering -----------------------------------------------------------
@@ -2450,22 +2570,18 @@ public sealed class DockBar : Canvas
     /// The widest the bar ever gets, in this element's coordinates.
     /// </summary>
     /// <remarks>
-    /// The acrylic sheet's window is sized to this once and then left alone, and the live
-    /// bar is cut out of it by a clip instead. A window can only be moved in whole pixels,
-    /// and the bar's width drifts by well under a pixel per frame near the ends of a wave —
-    /// moving the window to follow that is what made the bar look like it was stepping. A
-    /// composition clip takes fractions of a pixel, so the sheet's edge can follow the bar
-    /// exactly while the window it lives in never moves at all.
+    /// The envelope the window is sized around, with room beside it for the shadow: the
+    /// acrylic sheet is the same size as the window and draws the bar and its shadow while the
+    /// blur is on, so anything of either outside the window would be cut off. It used to be the
+    /// sheet's own size, when the sheet only blurred and the bar was drawn here.
     /// </remarks>
     public Rect MaxBarRect
     {
         get
         {
-            // Parked at the same envelope the window is sized for, so the slot a preview
-            // opens moves the clip and not the sheet's own window — and never narrower than
-            // the bar is drawn at this instant, which matters while the bar is closing over
-            // an icon that has gone: the drawn width outlives the count by a few frames, and
-            // a sheet trimmed to the new count would leave the bar's ends unblurred.
+            // The same envelope the window is sized for, and never narrower than the bar is
+            // drawn at this instant, which matters while the bar is closing over an icon that
+            // has gone: the drawn width outlives the count by a few frames.
             var slots = Math.Max(SizedCount, (int)Math.Ceiling(_barSlots));
             var resting = _layout.RestingWidth(slots);
             var width = _layout.SteadyBarWidth(slots, 1);
@@ -2485,6 +2601,12 @@ public sealed class DockBar : Canvas
         var radius = Metrics.BarRadius;
         var bar = BarRect;
 
+        if (!DrawsBar)
+        {
+            DrawStandIn(drawingContext, bar, radius);
+            return;
+        }
+
         if (DrawsShadow)
         {
             DrawShadow(drawingContext, bar, radius);
@@ -2496,56 +2618,69 @@ public sealed class DockBar : Canvas
     }
 
     /// <summary>
+    /// Paints, invisibly, what the bar and its shadow cover, while the sheet behind the dock
+    /// draws them — so they go on taking clicks and drops exactly where they did when they
+    /// were drawn here. See <see cref="DrawsBar"/>.
+    /// </summary>
+    /// <remarks>
+    /// The shadow's footprint included, because it always was the dock's: every ring of it is
+    /// painted, faint as it is, so a right-click in the strip below the bar opened the dock's
+    /// menu, and a drop there landed. One figure per pass, filled as a union, so nowhere is
+    /// painted twice and nowhere reaches more than the one step of alpha.
+    /// </remarks>
+    private void DrawStandIn(DrawingContext drawingContext, Rect bar, double radius)
+    {
+        var area = new GeometryGroup { FillRule = FillRule.Nonzero };
+        area.Children.Add(new RectangleGeometry(bar, radius, radius));
+
+        if (DrawsShadow)
+        {
+            for (var pass = 0; pass < BarShadow.Passes.Count; pass++)
+            {
+                var ring = BarShadow.Outermost(bar, radius, pass);
+                area.Children.Add(new RectangleGeometry(ring.Bounds, ring.Radius, ring.Radius));
+            }
+        }
+
+        area.Freeze();
+        drawingContext.DrawGeometry(StandInBrush, pen: null, area);
+    }
+
+    /// <summary>
     /// Approximates a soft drop shadow with a stack of concentric rounded rectangles whose
-    /// alpha accumulates towards the bar.
+    /// alpha accumulates towards the bar — see <see cref="BarShadow"/> for its shape.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A real <c>DropShadowEffect</c> would have to hang off a live element, and
-    /// <c>AllowsTransparency</c> puts this window on WPF's software rendering path — so its
-    /// Gaussian blur would be recomputed on the CPU every frame the bar changes width, which
-    /// is every frame of a wave. A stack of cheap rounded rectangles costs nothing to redraw.
+    /// A real <c>DropShadowEffect</c> would have to hang off a live element and blur it again
+    /// every frame the bar changes width, which is every frame of a wave. A stack of cheap
+    /// rounded rectangles costs nothing to redraw.
     /// </para>
     /// <para>
-    /// Two details do the work of making it read as a shadow rather than as an outline. The
-    /// layers are spaced on a power curve, so they crowd together near the bar and thin out
-    /// towards the edge — the dense-then-long-tail falloff a real penumbra has, instead of a
-    /// linear ramp with visible banding. And the bar itself is clipped out, because a shadow
-    /// is not visible through the object casting it; without that, the accumulated black
-    /// sits behind a translucent bar and dirties its colour.
+    /// The bar itself is clipped out, because a shadow is not visible through the object
+    /// casting it; without that, the accumulated black sits behind a translucent bar and dirties
+    /// its colour. The sheet, when it draws the shadow, gets the same effect for nothing: the
+    /// blur it lays over the bar is opaque.
     /// </para>
     /// </remarks>
     private static void DrawShadow(DrawingContext drawingContext, Rect bar, double radius)
     {
-
         // Even-odd over two figures punches the bar out of the region: the standard donut,
         // and far cheaper per frame than a boolean geometry combine.
         var region = new GeometryGroup { FillRule = FillRule.EvenOdd };
-        region.Children.Add(new RectangleGeometry(Rect.Inflate(bar, ShadowReach, ShadowReach)));
+        region.Children.Add(new RectangleGeometry(Rect.Inflate(bar, BarShadow.Reach, BarShadow.Reach)));
         region.Children.Add(new RectangleGeometry(bar, radius, radius));
         region.Freeze();
 
         drawingContext.PushClip(region);
 
-        for (var index = 0; index < ShadowPasses.Length; index++)
-        {
-            var pass = ShadowPasses[index];
-            var brush = ShadowBrushes[index];
+        Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
+        BarShadow.Rings(bar, radius, scale: 1, rings);
 
-            for (var layer = pass.Layers; layer >= 1; layer--)
-            {
-                var spread = pass.Blur * Math.Pow((double)layer / pass.Layers, ShadowFalloff);
-                drawingContext.DrawRoundedRectangle(
-                    brush,
-                    pen: null,
-                    new Rect(
-                        bar.X - spread,
-                        bar.Y - spread + pass.OffsetY,
-                        bar.Width + (spread * 2),
-                        bar.Height + (spread * 2)),
-                    radius + spread,
-                    radius + spread);
-            }
+        foreach (var ring in rings)
+        {
+            drawingContext.DrawRoundedRectangle(
+                ShadowBrushes[ring.Pass], pen: null, ring.Bounds, ring.Radius, ring.Radius);
         }
 
         drawingContext.Pop();

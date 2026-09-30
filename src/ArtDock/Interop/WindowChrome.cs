@@ -360,8 +360,26 @@ public sealed class WindowChrome
     /// </remarks>
     private static bool TakesThePointer(nint window) =>
         WindowsApi.IsWindowVisible(window)
-        && ((uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_EXSTYLE) & NativeMethods.WS_EX_TRANSPARENT) == 0
+        && !IsClickThrough((uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_EXSTYLE))
         && !WindowsApi.IsCloaked(window);
+
+    /// <summary>
+    /// True when Windows' hit-testing passes a window with these extended styles by altogether:
+    /// layered, and transparent.
+    /// </summary>
+    /// <remarks>
+    /// Both, not transparent alone, which this used to take for enough. A window that is only
+    /// <c>WS_EX_TRANSPARENT</c> is not reliably passed by: on 2026-09-30 the dock's own sheet,
+    /// which had only that, turned out to be what <c>WindowFromPoint</c> — and so a click — found
+    /// beside the bar, though tests off the screen passed such a window by as often as not, for
+    /// reasons never pinned down. Layered as well, a window was passed by every time. And one that is not
+    /// layered paints like any window, so it hides what is under it. Counted as passing the
+    /// pointer, such a window lying over the dock would have been taken for nothing: the dock
+    /// waving under a pointer whose click went elsewhere, and believed in sight when buried.
+    /// </remarks>
+    public static bool IsClickThrough(uint exStyle) =>
+        (exStyle & (NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT))
+        == (NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT);
 
     private static nint Above(nint window) => NativeMethods.GetWindow(window, NativeMethods.GW_HWNDPREV);
 

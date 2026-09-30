@@ -300,9 +300,11 @@ public class DockAlongEdgeTests
     [InlineData(9)]
     public void PushedToEitherEnd_TheWindowStillHoldsTheWave(int count) => OnStaThread(() =>
     {
-        // The sheet's envelope is the widest the bar can get. It has to stay inside the
-        // window's slack at both ends, short row or long — a short row lifts by less than the
-        // reach it is given, which is the extra width the window asks for it.
+        // The envelope is the widest the bar can get. It has to stay inside the window's slack
+        // at both ends, short row or long — a short row lifts by less than the reach it is
+        // given, which is the extra width the window asks for it. And its shadow has to stay
+        // inside the window: the acrylic sheet is the window's twin and draws the shadow while
+        // the blur is on, so any of it past the window's edge would be cut off.
         var metrics = Metrics();
 
         foreach (var alignment in new[] { 0.0, 1.0 })
@@ -319,7 +321,15 @@ public class DockAlongEdgeTests
                 $"{count} at {alignment}: the envelope ends at {envelope.Right}, inside the slack");
             Assert.True(
                 drawn.Left >= envelope.Left - 1e-6 && drawn.Right <= envelope.Right + 1e-6,
-                $"{count} at {alignment}: the bar is not inside the sheet parked behind it");
+                $"{count} at {alignment}: the bar is not inside the envelope");
+
+            for (var pass = 0; pass < BarShadow.Passes.Count; pass++)
+            {
+                var shadow = BarShadow.Outermost(envelope, metrics.BarRadius, pass).Bounds;
+                Assert.True(
+                    shadow.Left >= 0 && shadow.Right <= bar.ActualWidth && shadow.Bottom <= bar.ActualHeight,
+                    $"{count} at {alignment}: the widest bar's shadow reaches {shadow}, outside the {bar.ActualWidth}×{bar.ActualHeight} window");
+            }
         }
     });
 
