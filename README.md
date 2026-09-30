@@ -1,16 +1,32 @@
 # ArtDock
 
-A macOS-Dock-style application dock for Windows 11 — a floating, always-on-top bar whose
-icons magnify with their neighbours as the pointer approaches.
+A macOS-style application dock for Windows 11. Pin applications, files and folders to a
+floating bar whose icons magnify as the pointer approaches, and launch or switch between
+them from there.
 
-Settings live in `%LOCALAPPDATA%\ArtDock\settings.json`; settings written under the app's
-former name (ImsDock) are adopted automatically on first run.
+## Highlights
 
-It began as the desktop counterpart of the `ims-dock` Angular component (in that project's
-`src/app/components/ims-dock/`): same interaction model, same tuning knobs. Nothing is shared
-at the code level — the web component was the specification, not a dependency, and the two
-have since diverged. The falloff here is a raised cosine rather than a plain one, which is
-what lets the row spread without the dock changing width.
+- **Steps aside for a window that fills the screen.** When the window in front is maximized
+  or fullscreen on the dock's display, the dock slides off the edge as auto-hide would,
+  even with auto-hide turned off. Hold the pointer against the bottom edge under it and it
+  comes back up; once that window is no longer in front, the dock is back where it was.
+- **An exclusion list for the programs it must never interrupt.** Games, mostly, which scroll
+  when the pointer reaches the edge of the screen. While a listed program fills the display,
+  the edge does nothing and the dock stays down. The list can be filled by scanning: the
+  games installed by Steam, Battle.net, the EA app, Epic Games, GOG, Ubisoft Connect, the
+  Xbox app, Riot Games and Rockstar Games, or the apps on the Start menu.
+- **Settings that show on the dock as you change them.** Every slider, colour and switch in
+  the settings dialog reaches the dock at once, so a change is judged on the dock itself
+  rather than imagined. Nothing is written until Save, and Cancel puts the dock back the way
+  it was found.
+- **A handle that marks a hidden dock.** While the dock is out of sight — slid away, or under
+  other windows — a slim bar just above the taskbar shows where it will come up. It inverts
+  the colours behind it, so it stands out on any background.
+- **Blur behind the bar.** The bar sits on a sheet of Windows acrylic, which blurs whatever
+  is behind it and brings the system's own drop shadow with it.
+
+Each of these, and everything else the dock does, is described under
+[What it does](#what-it-does).
 
 ## Running it
 
@@ -429,8 +445,7 @@ it natively, and brings text, tooltips and UI Automation along for free.
 
 **Icons live in fixed slots.** Each icon owns a placeholder slot that never moves, and grows
 about that slot's centre — so an icon's size depends on the pointer, and its position depends
-on nothing at all. The obvious alternative, which the web original gets from flexbox and which
-this started with, is to lay icons out as a running total of their magnified widths. That makes
+on nothing at all. The obvious alternative, which this started with, is to lay icons out as a running total of their magnified widths. That makes
 every icon's position depend on the widths of all the icons before it, so the row slides
 sideways as the pointer crosses it, and the bar breathes in and out at the icon spacing — the
 dock appears to contract. Slots remove the coupling entirely: magnification is a property of
@@ -854,7 +869,7 @@ the one they are on.
 ## Known gaps
 
 - **No keyboard navigation.** `WS_EX_NOACTIVATE` means the window cannot take keyboard focus
-  at all, so the web component's Tab-to-focus parity has no direct equivalent. The right fix
+  at all, so Tab cannot reach the dock. The right fix
   is a global hotkey that temporarily allows activation — not yet built.
 - **The acrylic's tint is the system's, not the dock's.** `DWMWA_SYSTEMBACKDROP_TYPE` picks
   the material and how it is tinted; the bar's own colour is a wash over it rather than the
