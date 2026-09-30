@@ -11,12 +11,14 @@ using ArtDock.Interop;
 namespace ArtDock.Views;
 
 /// <summary>
-/// The slim bar an auto-hidden dock leaves behind — the phone's home indicator, just above the
-/// taskbar, under where the dock will come up.
+/// The slim bar that marks the dock while it is out of sight — slid away by auto-hide, or under
+/// the windows in front — the phone's home indicator, just above the taskbar, under where the
+/// dock will come up.
 /// </summary>
 /// <remarks>
 /// <para>
-/// A window of its own, because the dock's is off the bottom of the screen while this is up.
+/// A window of its own, because the dock's is off the bottom of the screen, or under other
+/// windows, while this is up.
 /// Made by hand rather than as a WPF <see cref="Window"/>, like <see cref="BackdropWindow"/> and
 /// for the same reason: its size is the dock's to set, in device pixels, and WPF's handling of
 /// a change of scale would resize it. So <c>WM_DPICHANGED</c> is swallowed, and the pill is
@@ -24,10 +26,11 @@ namespace ArtDock.Views;
 /// scale WPF believes this window is at beside the point.
 /// </para>
 /// <para>
-/// It never takes input. <c>WS_EX_TRANSPARENT</c> passes a click straight through to the window
-/// underneath, which is usually the bottom row of something maximized — a status bar, a
-/// scroll bar. Resting the pointer on it is noticed by polling instead, like everything else
-/// the dock answers; see <c>AutoHideController</c>.
+/// It never takes input, and nothing watches for the pointer on it: it is a mark and nothing
+/// more. <c>WS_EX_TRANSPARENT</c> passes a click straight through to the window underneath,
+/// which is usually the bottom row of something maximized — a status bar, a scroll bar. Resting
+/// the pointer on it brought the dock up until 2026-09-30, when that was taken away on request;
+/// the edge below the taskbar is the way up.
 /// </para>
 /// <para>
 /// It shows the colours behind it <b>inverted</b> — read off the screen by a thread of its own,
@@ -40,8 +43,22 @@ namespace ArtDock.Views;
 /// </remarks>
 public sealed class HandleWindow : IDisposable
 {
-    /// <summary>The same as the dock's slide, so the handle arrives as the dock goes and goes as it arrives.</summary>
-    private static readonly Duration FadeDuration = new(TimeSpan.FromMilliseconds(220));
+    /// <summary>The same as the dock's slide, so the handle arrives as the dock goes.</summary>
+    private static readonly Duration FadeInDuration = new(TimeSpan.FromMilliseconds(220));
+
+    /// <summary>
+    /// Far quicker the other way: gone before the dock coming back has risen past it.
+    /// </summary>
+    /// <remarks>
+    /// It used to take the slide's time as well, and read as the handle going only once the
+    /// dock had arrived — reported on 2026-09-30. The handle sits just under where the bar comes
+    /// to rest (the bar's bottom at 1380 on the main display, the handle from 1381), so the
+    /// rising bar covers it about 40 ms into the slide's ease and uncovers it again about
+    /// 180 ms in, settling just above it — and a handle a fifth of the way from gone, in colours
+    /// pushed away from whatever is behind, is plain to see. Eighty milliseconds has it all but
+    /// gone before the bar reaches it.
+    /// </remarks>
+    private static readonly Duration FadeOutDuration = new(TimeSpan.FromMilliseconds(80));
 
     /// <summary>
     /// How often what is behind an inverted handle is read: fifteen times a second.
@@ -144,9 +161,6 @@ public sealed class HandleWindow : IDisposable
     }
 
     public nint Hwnd => _hwnd;
-
-    /// <summary>True from <see cref="Show"/> until <see cref="Hide"/>: the handle is up, or on its way.</summary>
-    public bool IsShown => _wanted;
 
     /// <summary>Where the handle was last put, in physical pixels; empty before it has been.</summary>
     public Rect Bounds => _placed is { } placed
@@ -258,9 +272,10 @@ public sealed class HandleWindow : IDisposable
 
     /// <summary>Brings the handle up, fading in, at the top of the topmost band.</summary>
     /// <remarks>
-    /// Topmost whatever the dock's own setting. It is a mark for a dock that is away, and one
-    /// that the window in front could cover would be gone exactly when the dock is — which is
-    /// the one time it is for.
+    /// Topmost whatever the dock's own setting. It is a mark for a dock that is out of sight,
+    /// and one that the window in front could cover would be gone exactly when the dock is —
+    /// which is the one time it is for. Being put there once is not being kept there, though;
+    /// see <see cref="KeepOnTop"/>.
     /// </remarks>
     public void Show()
     {
@@ -287,6 +302,56 @@ public sealed class HandleWindow : IDisposable
         Fade(1);
     }
 
+    /// <summary>
+    /// Puts a handle that is up back at the top of the topmost band, if it has lost its place
+    /// there or one of <paramref name="dock"/>'s windows has come above it — and, when
+    /// <paramref name="overOthers"/>, if a window of another program has come to lie over it.
+    /// </summary>
+    /// <param name="overOthers">True on a change of foreground; see the remarks.</param>
+    /// <param name="dock">The dock's own windows — the dock and its acrylic sheet — or 0.</param>
+    /// <remarks>
+    /// <para>
+    /// Over the dock's own windows always. A dock that floats enters the topmost band after the
+    /// handle and lands above it, and the dock's window reaches down over the handle's strip
+    /// because the dock draws the bar's shadow there itself (the acrylic sheet has none of its
+    /// own on the composition path): while the settings dialog showed the handle under the
+    /// dock, turning <em>Always on top</em> on laid that shadow across it and dimmed it, and
+    /// turning it off put it back. Reported on 2026-09-30, and read off the z-order the same
+    /// day: dock, then sheet, then the dialog, then the handle, all topmost.
+    /// </para>
+    /// <para>
+    /// <see cref="Show"/> put it there once, and nothing kept it there: a window that floats
+    /// and came to the front afterwards was drawn over it for as long as the handle stayed up,
+    /// which with auto-hide can be all day. Reported on 2026-09-30 as the handle not being on
+    /// top of other windows.
+    /// </para>
+    /// <para>
+    /// Checked before acting, as every window here is, since re-asserting a z-order that is
+    /// already right still re-composes the window. And over other windows only when asked —
+    /// on a change of foreground. The shell's own passing popups float too, and sit just above
+    /// the taskbar where the handle is — a button's thumbnails, a tooltip — and a handle that
+    /// climbed back over whatever lay on it a few times a second would climb over those.
+    /// </para>
+    /// </remarks>
+    public void KeepOnTop(bool overOthers, ReadOnlySpan<nint> dock)
+    {
+        if (_disposed || !_wanted)
+        {
+            return;
+        }
+
+        if (WindowChrome.IsTopmostWindow(_hwnd)
+            && !WindowChrome.IsUnderAny(_hwnd, dock)
+            && !(overOthers && WindowChrome.IsUnderAnother(_hwnd)))
+        {
+            return;
+        }
+
+        NativeMethods.SetWindowPos(
+            _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+    }
+
     /// <summary>Fades the handle out, and hides its window once it has gone.</summary>
     public void Hide()
     {
@@ -302,7 +367,7 @@ public sealed class HandleWindow : IDisposable
     private void Fade(double to)
     {
         var generation = ++_fade;
-        var animation = new DoubleAnimation(to, FadeDuration);
+        var animation = new DoubleAnimation(to, to > 0 ? FadeInDuration : FadeOutDuration);
 
         animation.Completed += (_, _) =>
         {

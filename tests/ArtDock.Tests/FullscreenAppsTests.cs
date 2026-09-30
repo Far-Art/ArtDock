@@ -104,7 +104,7 @@ public class FullscreenAppsTests
         Assert.True(FullscreenApps.Contains(apps, @"C:\Games\game.exe"));
     }
 
-    // ---- does it fill the display --------------------------------------------------
+    // ---- does it fill the display — the Exclusions page's question -----------------
 
     /// <summary>The main display: 2560 × 1440 at the origin.</summary>
     private static readonly Rect Main = new(0, 0, 2560, 1440);
@@ -183,56 +183,67 @@ public class FullscreenAppsTests
         Assert.False(FullscreenApps.Fills(Main, new Rect(0, 0, 0, 0)));
     }
 
-    // ---- what the hidden dock's handle steps aside for --------------------------
+    // ---- what the dock goes under, whatever Always on top says ------------------
     //
-    // Any program that has taken the whole display, listed or not — and not an ordinary
-    // maximized window, which fills the display where the taskbar hides itself.
+    // The window in front covering the dock display's work area: maximized there, with the
+    // taskbar showing or not, or fullscreen. Asked on 2026-09-30 — fullscreen first, then the
+    // same day maximized — which retired what these tests used to hold: whether a window
+    // filling the display was fullscreen or only maximized, told apart by its title bar and
+    // its state. Both now get the same answer, so the question is geometry alone. The desktop,
+    // which covers everything, is ruled out by ForegroundApp.
+
+    /// <summary>The main display's work area: everything above its 48px taskbar.</summary>
+    private static readonly Rect MainWork = new(0, 0, 2560, 1392);
+
+    /// <summary>The 4K display's work area.</summary>
+    private static readonly Rect FourKWork = new(-3840, 8, 3840, 2088);
 
     /// <summary>
-    /// The one that matters, as StarCraft II's window really is on this machine: maximized, no
-    /// title bar, over the whole main display. Asking only "is it maximized?" took it for an
-    /// ordinary window and left the handle drawn over the game.
+    /// The one asked for: the maximize button, with the taskbar showing — as Windows reports
+    /// the window, its invisible resize border hanging 8px past the work area on every side.
     /// </summary>
     [Fact]
-    public void AMaximizedWindowWithNoTitleBarOverTheDisplay_IsFullscreen()
+    public void AMaximizedWindow_FillsTheWorkAreaWhileTheTaskbarShows()
     {
-        Assert.True(FullscreenApps.IsFullscreen(Main, Main, maximized: true, captioned: false));
+        var maximized = new Rect(-8, -8, 2560 + 16, 1392 + 16);
+
+        Assert.True(FullscreenApps.Fills(maximized, MainWork));
     }
 
     [Fact]
-    public void AMaximizedWindowWithATitleBar_IsNotFullscreen_EvenWhereTheTaskbarHidesItself()
+    public void AMaximizedWindowThatDrawsItsOwnFrame_FillsTheWorkAreaExactly()
     {
-        Assert.False(FullscreenApps.IsFullscreen(Main, Main, maximized: true, captioned: true));
+        // A browser with no invisible border reports the work area itself.
+        Assert.True(FullscreenApps.Fills(MainWork, MainWork));
     }
 
     [Fact]
-    public void AMaximizedWindowWithATitleBar_IsNotFullscreen_WhileTheTaskbarShows()
+    public void AFullscreenWindow_FillsTheWorkAreaToo()
     {
-        var maximized = new Rect(0, 0, 2560, 1392);
-        Assert.False(FullscreenApps.IsFullscreen(maximized, Main, maximized: true, captioned: true));
-    }
-
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void ABorderlessWindowOverTheDisplay_IsFullscreen_TitleBarOrNot(bool captioned)
-    {
-        var borderless = new Rect(-4, -4, 2568, 1448);
-        Assert.True(FullscreenApps.IsFullscreen(borderless, Main, maximized: false, captioned));
+        Assert.True(FullscreenApps.Fills(Main, MainWork));
+        Assert.True(FullscreenApps.Fills(new Rect(-4, -4, 2568, 1448), MainWork));
     }
 
     [Fact]
-    public void AFullscreenWindowOnTheOtherDisplay_IsNotFullscreenOnThisOne()
+    public void ASnappedHalf_DoesNotFillTheWorkArea()
     {
-        Assert.False(FullscreenApps.IsFullscreen(FourK, Main, maximized: true, captioned: false));
-        Assert.True(FullscreenApps.IsFullscreen(FourK, FourK, maximized: true, captioned: false));
+        var leftHalf = new Rect(-8, -8, 1280 + 16, 1392 + 16);
+
+        Assert.False(FullscreenApps.Fills(leftHalf, MainWork));
     }
 
     [Fact]
-    public void AWindowThatDoesNotFillTheDisplay_IsNotFullscreen_HoweverItIsStyled()
+    public void AWindowOneRowShortOfTheTaskbar_DoesNotFillTheWorkArea()
     {
-        var shortOfTheBottom = new Rect(0, 0, 2560, 1439);
-        Assert.False(FullscreenApps.IsFullscreen(shortOfTheBottom, Main, maximized: true, captioned: false));
-        Assert.False(FullscreenApps.IsFullscreen(shortOfTheBottom, Main, maximized: false, captioned: false));
+        Assert.False(FullscreenApps.Fills(new Rect(0, 0, 2560, 1391), MainWork));
+    }
+
+    [Fact]
+    public void AWindowMaximizedOnTheOtherDisplay_DoesNotFillThisOnesWorkArea()
+    {
+        var maximizedThere = new Rect(-3840 - 8, 8 - 8, 3840 + 16, 2088 + 16);
+
+        Assert.False(FullscreenApps.Fills(maximizedThere, MainWork));
+        Assert.True(FullscreenApps.Fills(maximizedThere, FourKWork));
     }
 }

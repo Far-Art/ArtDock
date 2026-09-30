@@ -45,12 +45,15 @@ public sealed class AutoHideController
     /// </remarks>
     private const double RevealZoneHeight = 3;
 
-    /// <summary>Horizontal slack around the dock's own width for the reveal zone.</summary>
-    private const double RevealZoneSlack = 80;
-
     private readonly Window _window;
     private readonly WindowChrome _chrome;
     private readonly Func<bool> _isPointerOverDock;
+
+    /// <summary>
+    /// True when a window of another program lies over the dock — the owner's
+    /// <see cref="WindowChrome.IsCovered"/>, which needs the bar's place on the screen.
+    /// </summary>
+    private readonly Func<bool> _isCovered;
 
     /// <summary>
     /// Lifts the dock above whatever covers it, and its acrylic sheet with it, and says which
@@ -103,10 +106,11 @@ public sealed class AutoHideController
     private readonly Func<bool> _standDown;
 
     /// <summary>
-    /// True when the pointer is resting on the handle a hidden dock leaves behind — false
-    /// whenever there is no handle up.
+    /// The bar at rest on the screen, in physical pixels — the owner's, which measures it the way
+    /// the handle is placed from; empty before the dock has been laid out. Only its left and
+    /// right are asked: they bound both zones sideways, see <see cref="IsUnderDock(double, Rect, Rect)"/>.
     /// </summary>
-    private readonly Func<bool> _isPointerOnHandle;
+    private readonly Func<Rect> _restingBar;
 
     private readonly DispatcherTimer _watch = new()
     {
@@ -132,31 +136,123 @@ public sealed class AutoHideController
         Window window,
         WindowChrome chrome,
         Func<bool> isPointerOverDock,
+        Func<bool> isCovered,
         Func<nint> raise,
         Action holdAbove,
         Action<nint> lower,
         Func<bool> standDown,
-        Func<bool> isPointerOnHandle)
+        Func<Rect> restingBar)
     {
         _window = window;
         _chrome = chrome;
         _isPointerOverDock = isPointerOverDock;
+        _isCovered = isCovered;
         _raise = raise;
         _holdAbove = holdAbove;
         _lower = lower;
         _standDown = standDown;
-        _isPointerOnHandle = isPointerOnHandle;
+        _restingBar = restingBar;
 
-        // Always running, whatever the settings. With auto-hide off the edge is still watched,
-        // to lift a dock that has been covered — see WatchEdgeForRaise — and that is wanted
+        // Always running, whatever the settings. With nothing hiding the dock the edge is still
+        // watched, to lift a dock that has been covered — see WatchForLift — and that is wanted
         // for a dock set to float above everything as much as for one that is not: another
-        // window that floats can still cover it.
+        // window that floats can still cover it. While something hides it — auto-hide, or a
+        // maximized or fullscreen window in front — the same edge brings it back instead.
         _watch.Tick += OnTick;
         _watch.Start();
     }
 
-    /// <summary>Whether auto-hide is active at all. Turning it off reveals the dock.</summary>
+    /// <summary>Whether auto-hide is on in the settings. Turning it off reveals the dock.</summary>
     public bool IsEnabled { get; private set; }
+
+    /// <summary>
+    /// True while a window in front fills the dock's display — maximized there or fullscreen —
+    /// and the dock hides as auto-hide would, whatever the setting; see <see cref="Yield"/>.
+    /// </summary>
+    public bool IsYielding { get; private set; }
+
+    /// <summary>
+    /// True while the dock hides and reveals itself: auto-hide is on, or it is yielding to a
+    /// window in front.
+    /// </summary>
+    public bool Hides => IsEnabled || IsYielding;
+
+    /// <summary>
+    /// True while the dock is away because it was put away on purpose — hidden from the tray
+    /// while nothing was hiding it — which only the tray brings back.
+    /// </summary>
+    /// <remarks>
+    /// Not the edge, and not a window in front going: a dock put away from the tray while a
+    /// maximized window is in front would otherwise come back the moment that window did, or
+    /// the moment the pointer brushed the bottom of the screen. Nor is it marked by the handle,
+    /// which would be offering something the pointer cannot do.
+    /// </remarks>
+    public bool IsPutAway { get; private set; }
+
+    /// <summary>
+    /// Hides the dock while a window in front fills its display, as auto-hide would — and
+    /// brings it back when that window goes, unless something else still has it hidden.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for on 2026-09-30, in place of the dock going under such a window. Going under
+    /// left the dock where it was, so bringing it up from the edge was a change of z-order with
+    /// nothing to see; hiding means the edge brings it up the way auto-hide does, sliding in
+    /// from the bottom, and it slides away again once the pointer has left — the auto-hide
+    /// path, every part of it, for as long as the window is in front.
+    /// </para>
+    /// <para>
+    /// At once, rather than after the hide delay — unless the pointer is on the dock, as it is
+    /// when an icon has just been clicked that opens maximized; then it goes when the pointer
+    /// leaves, as auto-hide's would. The hide delay is there so that stepping off the bar for a
+    /// moment does not send the dock away, and a window taking the display is no such moment.
+    /// </para>
+    /// <para>
+    /// A lift in progress is handed over rather than let go: a dock held above a window that
+    /// has just been maximized under the pointer stays held until the slide away has taken it
+    /// off the screen, which is where the hiding lets go.
+    /// </para>
+    /// </remarks>
+    public void Yield(bool yielding)
+    {
+        if (IsYielding == yielding)
+        {
+            return;
+        }
+
+        IsYielding = yielding;
+        _outsideSince = DateTime.MaxValue;
+
+        if (yielding)
+        {
+            _lifted = false;
+            _liftedOver = 0;
+
+            if (_holds == 0 && !_isPointerOverDock() && !IsCursorInKeepAliveZone())
+            {
+                Hide();
+            }
+
+            return;
+        }
+
+        // Auto-hide carries on as it was, and a dock put away from the tray stays away.
+        if (IsEnabled || IsPutAway)
+        {
+            return;
+        }
+
+        if (Visibility is DockVisibility.Shown or DockVisibility.Revealing)
+        {
+            // Up at the edge's asking when the window went: from here it is a lift like any
+            // other, let go of once the pointer has been away for the hide delay.
+            _lifted = true;
+            _liftedOver = 0;
+            return;
+        }
+
+        Reveal();
+    }
 
     /// <summary>
     /// True once the current visit to the edge has raised the dock.
@@ -167,7 +263,7 @@ public sealed class AutoHideController
     /// </remarks>
     private bool _raised;
 
-    /// <summary>Delay before a cursor at the screen edge brings the dock back.</summary>
+    /// <summary>Delay before a cursor at the screen edge brings the dock back or lifts it.</summary>
     public TimeSpan RevealDelay { get; set; } = TimeSpan.FromMilliseconds(120);
 
     /// <summary>
@@ -207,25 +303,33 @@ public sealed class AutoHideController
     /// </summary>
     private double _revealEdgeY;
 
-    /// <summary>The display's left and right edges, in DIPs, which bound both zones sideways.</summary>
-    private double _displayLeft = double.NegativeInfinity;
-    private double _displayRight = double.PositiveInfinity;
+    /// <summary>
+    /// The whole of the dock's display, in physical pixels, which bounds both zones sideways
+    /// along with the bar — see <see cref="IsUnderDock(double, Rect, Rect)"/>.
+    /// </summary>
+    private Rect _display = Rect.Empty;
 
-    /// <summary>Records where the dock sits when shown; call after positioning it.</summary>
-    public void AnchorTo(double shownTop, double revealEdgeY, double displayLeft, double displayRight)
+    /// <summary>
+    /// Records where the dock sits when shown and when hidden, and where the bottom of its
+    /// display is, in DIPs — and the display's whole area in physical pixels, as the bar and the
+    /// cursor are measured across. Call after positioning the dock, which puts a hidden one where
+    /// it hides.
+    /// </summary>
+    /// <remarks>
+    /// Both worked out by the owner, from the same physical pixels and the same scale. The
+    /// hidden place used to be worked out here, as the shown top plus the window's height — and
+    /// the height was WPF's, which lags a change of scale, while the top was not: after a wake
+    /// that briefly counted the dock on the 4K display, the two were in different scales and
+    /// the dock hid 48 pixels short, with the top of its bar over the taskbar. Nor is a hidden
+    /// dock moved from here any more, through WPF's units: the owner has already placed it in
+    /// physical ones.
+    /// </remarks>
+    public void AnchorTo(double shownTop, double hiddenTop, double revealEdgeY, Rect display)
     {
         _shownTop = shownTop;
+        _hiddenTop = hiddenTop;
         _revealEdgeY = revealEdgeY;
-        _displayLeft = displayLeft;
-        _displayRight = displayRight;
-
-        // Far enough down that the whole window, shadow included, clears the screen.
-        _hiddenTop = shownTop + _window.Height + 4;
-
-        if (Visibility == DockVisibility.Hidden)
-        {
-            _window.Top = _hiddenTop;
-        }
+        _display = display;
     }
 
     public void SetEnabled(bool enabled)
@@ -237,18 +341,24 @@ public sealed class AutoHideController
 
         IsEnabled = enabled;
 
-        // Auto-hide takes the dock from here, and hiding is its way of putting it back — but
-        // not out of the topmost band, if a lift had to hold it there.
-        if (_lifted)
-        {
-            _lower(0);
-            _lifted = false;
-        }
-
+        // Whichever way the dock was being held up — a lift with auto-hide off, a reveal with
+        // it on — it is let go of here: the other one has it from now on, and neither lets go
+        // of a hold the other took. A lift puts the dock back by lowering it and a reveal by
+        // hiding it, and a dock left in the topmost band by one would stay there for good.
+        _lifted = false;
         _liftedOver = 0;
         _outsideSince = DateTime.MaxValue;
+        _lower(0);
 
         if (enabled)
+        {
+            // Auto-hide has the dock from here, and the edge brings it back whatever put it away.
+            IsPutAway = false;
+            return;
+        }
+
+        // Still hidden, and rightly, while a window in front fills the display.
+        if (IsYielding)
         {
             return;
         }
@@ -283,10 +393,10 @@ public sealed class AutoHideController
     {
         var now = DateTime.UtcNow;
 
-        if (!IsEnabled)
+        if (!Hides)
         {
             WatchHover();
-            WatchEdgeForRaise(now);
+            WatchForLift(now);
             WatchForLeaving(now);
             return;
         }
@@ -324,7 +434,9 @@ public sealed class AutoHideController
             return;
         }
 
-        if (IsRevealAsked())
+        // A dock put away from the tray is not brought back by the edge, even while a window in
+        // front has it hiding the way auto-hide would.
+        if (IsEdgeHeld() && !IsPutAway)
         {
             if (_atEdgeSince == DateTime.MaxValue)
             {
@@ -342,28 +454,23 @@ public sealed class AutoHideController
     }
 
     /// <summary>
-    /// True when the cursor is asking for a hidden dock back: held against the reveal edge, or
-    /// resting on the handle the dock left behind — and the edge is not standing down.
-    /// </summary>
-    /// <remarks>
-    /// The handle waits out the same <see cref="RevealDelay"/> as the edge, and for more reason:
-    /// it lies over the bottom rows of other windows, where the pointer goes on business of its
-    /// own, whereas the edge is only reached by pushing past the taskbar. It yields to a program
-    /// the edge stands down for, too. It is not normally up over one — it steps aside for
-    /// anything that fills the display — but a maximized window where the taskbar hides itself
-    /// fills the display and keeps its handle, and the edge's list counts it all the same.
-    /// </remarks>
-    private bool IsRevealAsked() =>
-        (IsCursorAtRevealEdge() || _isPointerOnHandle()) && !_standDown();
-
-    /// <summary>
     /// True when the cursor is held against the reveal edge and the edge is not standing
-    /// down for a fullscreen program — where both bringing the dock back and lifting it start.
+    /// down for a fullscreen program — where both bringing a hidden dock back and lifting a
+    /// covered one start.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The edge and nothing else. The handle marks where the dock is and does not bring it: it
+    /// did, by resting the pointer on it, until 2026-09-30, when it was made a mark only on
+    /// request. It lies over the bottom rows of other windows — status bars, scroll bars —
+    /// where the pointer goes on business of its own, whereas the edge is only reached by
+    /// pushing past the taskbar.
+    /// </para>
+    /// <para>
     /// Standing down resets the hold rather than pausing it. The pointer can sit at the edge
     /// for as long as the game is scrolling, and once the game is left the dock should need a
     /// hold of its own, not arrive the instant focus moves because the old one ran out long ago.
+    /// </para>
     /// </remarks>
     private bool IsEdgeHeld() => IsCursorAtRevealEdge() && !_standDown();
 
@@ -372,9 +479,12 @@ public sealed class AutoHideController
     /// </summary>
     /// <remarks>
     /// The same edge, and the same dwell, that would summon a hidden dock. Nothing slides —
-    /// the dock is already on screen — so all this does is put it back on top.
+    /// the dock is already on screen — so all this does is put it back on top: over the
+    /// windows that bury a dock that does not float, and over one that floats lying over a dock
+    /// that does. A maximized or fullscreen window in front is not one of these: the dock hides
+    /// for that, and the edge brings it back by revealing it (<see cref="Yield"/>).
     /// </remarks>
-    private void WatchEdgeForRaise(DateTime now)
+    private void WatchForLift(DateTime now)
     {
         if (!IsEdgeHeld())
         {
@@ -458,7 +568,7 @@ public sealed class AutoHideController
     /// </remarks>
     private void Lift()
     {
-        if (_standDown() || !_chrome.IsCovered())
+        if (_standDown() || !_isCovered())
         {
             return;
         }
@@ -471,7 +581,7 @@ public sealed class AutoHideController
         // A window covering the dock without having the focus is lifted over the ordinary
         // way; the one that has it needs the topmost band, which is open to anyone — it is
         // how a dock set to float stays up.
-        if (_chrome.IsCovered())
+        if (_isCovered())
         {
             _holdAbove();
         }
@@ -488,7 +598,7 @@ public sealed class AutoHideController
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The other half of <see cref="WatchEdgeForRaise"/>, as hiding is of revealing: the
+    /// The other half of <see cref="WatchForLift"/>, as hiding is of revealing: the
     /// same zone keeps it up — the dock, and the strip below it down to the edge — and the
     /// same <see cref="HideDelay"/> has to pass outside it, so stepping off the bar on the
     /// way to an icon does not drop it. Nor does anything holding the dock on screen, such as
@@ -523,45 +633,73 @@ public sealed class AutoHideController
 
         if (now - _outsideSince >= HideDelay)
         {
-            _lower(_liftedOver);
+            // No longer lifted before it is lowered: lowering ends with the owner's look at what
+            // is in front, and that look should find the lift over.
+            var over = _liftedOver;
             _lifted = false;
             _liftedOver = 0;
             _outsideSince = DateTime.MaxValue;
+            _lower(over);
         }
     }
 
-    /// <summary>Reads the cursor in screen DIPs, matching the window's own coordinates.</summary>
-    private bool TryGetCursor(out Point cursor)
+    /// <summary>
+    /// Reads the cursor in screen DIPs, matching the window's own coordinates — and across in
+    /// physical pixels, as Windows gives it, which is what the bar is measured across in.
+    /// </summary>
+    private bool TryGetCursor(out Point cursor, out double across)
     {
         cursor = default;
+        across = 0;
         if (!NativeMethods.GetCursorPos(out var raw))
         {
             return false;
         }
 
-        // GetCursorPos is in physical pixels; everything else here is in DIPs.
+        // GetCursorPos is in physical pixels; everything else here is in DIPs, bar the span
+        // across that is under the dock.
         var dpi = VisualTreeHelper.GetDpi(_window);
         cursor = new Point(raw.X / dpi.DpiScaleX, raw.Y / dpi.DpiScaleY);
+        across = raw.X;
         return true;
     }
 
     /// <summary>
-    /// True when <paramref name="x"/> is across the dock, give or take the slack — and on the
-    /// dock's own display.
+    /// True when a pointer at <paramref name="x"/> across the screen is under the dock: across
+    /// the bar at rest, and on the dock's own display. All three in physical pixels.
     /// </summary>
     /// <remarks>
-    /// Bounded by the display as well as by the dock. A dock moved to one end of its edge has
-    /// its slack reaching past the side of the screen, and on a desktop with another display
-    /// beside this one, a cursor over there — on a different screen entirely, at whatever
-    /// height this one's bottom edge happens to fall — would summon the dock, or keep it out.
+    /// <para>
+    /// As wide as the bar and no wider, since 2026-09-30. It was the dock's whole window and
+    /// 80 DIPs more at each end — the window keeps room beside the bar for the wave to grow
+    /// into, and for the slot a drop opens — which came out at about half as wide again as the
+    /// dock, so the edge brought the dock up for a pointer well to the side of it. Measured the
+    /// way the handle is placed from, so where the handle is as wide as the dock the two line up.
+    /// The window's own width was WPF's too, which lags a change of scale; the bar is read off
+    /// the screen.
+    /// </para>
+    /// <para>
+    /// Bounded by the display as well. The dock's placement keeps the bar on its screen, but a
+    /// bar with more icons than its screen is wide reaches past the side, and on a desktop with
+    /// another display beside this one, a cursor over there — on a different screen entirely, at
+    /// whatever height this one's bottom edge happens to fall — would summon the dock, or keep
+    /// it out.
+    /// </para>
+    /// <para>
+    /// Nothing is under a dock that has not been laid out, or placed on a display, yet.
+    /// </para>
     /// </remarks>
-    private bool IsWithinDockColumn(double x) =>
-        x >= Math.Max(_displayLeft, _window.Left - RevealZoneSlack)
-        && x < Math.Min(_displayRight, _window.Left + _window.Width + RevealZoneSlack);
+    public static bool IsUnderDock(double x, Rect bar, Rect display) =>
+        !bar.IsEmpty
+        && !display.IsEmpty
+        && x >= Math.Max(bar.Left, display.Left)
+        && x < Math.Min(bar.Right, display.Right);
+
+    /// <summary>True when a pointer at <paramref name="x"/>, in physical pixels, is under the dock.</summary>
+    private bool IsUnderDock(double x) => IsUnderDock(x, _restingBar(), _display);
 
     /// <summary>
-    /// True when the cursor is pressed against the bottom of the display, within the
-    /// horizontal span the dock occupies.
+    /// True when the cursor is pressed against the bottom of the display, under the dock.
     /// </summary>
     /// <remarks>
     /// Bounded below as well as above. An open half-plane would also match a cursor on a
@@ -570,25 +708,33 @@ public sealed class AutoHideController
     /// taskbar summoned the dock.
     /// </remarks>
     private bool IsCursorAtRevealEdge() =>
-        TryGetCursor(out var cursor)
+        TryGetCursor(out var cursor, out var across)
         && cursor.Y >= _revealEdgeY - RevealZoneHeight
         && cursor.Y <= _revealEdgeY
-        && IsWithinDockColumn(cursor.X);
+        && IsUnderDock(across);
 
     /// <summary>
     /// The region that keeps a revealed dock on screen: the dock itself and everything below
     /// it down to the screen edge.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Without the strip below the dock, revealing is self-defeating. The cursor summons the
     /// dock by touching the screen edge, but the dock floats a margin above that edge — so
     /// the instant it arrives the cursor is not on it, the hide timer starts, and the dock
     /// slides away again a moment later. The user sees a flicker rather than a dock.
+    /// </para>
+    /// <para>
+    /// As wide as the edge that brings the dock up, and narrowed with it on 2026-09-30: never
+    /// narrower, or a dock brought up from the end of the edge would find the pointer outside
+    /// what keeps it up, and go again. The dock itself is <see cref="_isPointerOverDock"/>'s,
+    /// and reaches as far as the wave does.
+    /// </para>
     /// </remarks>
     private bool IsCursorInKeepAliveZone() =>
-        TryGetCursor(out var cursor)
+        TryGetCursor(out var cursor, out var across)
         && cursor.Y >= _shownTop
-        && IsWithinDockColumn(cursor.X);
+        && IsUnderDock(across);
 
     public void Hide()
     {
@@ -597,8 +743,17 @@ public sealed class AutoHideController
             return;
         }
 
+        // Hidden with nothing hiding the dock is the tray's Hide dock: put away on purpose.
+        // Before the change of visibility, which the handle hears about and asks this.
+        IsPutAway = !Hides;
+
         Visibility = DockVisibility.Hiding;
         _outsideSince = DateTime.MaxValue;
+
+        // A dock hidden while lifted — from the tray, with auto-hide off — is not lifted any
+        // more: there is nothing on screen to put back under anything.
+        _lifted = false;
+        _liftedOver = 0;
 
         // Click-through the moment it starts leaving, so the sliding window never swallows a
         // click meant for whatever is underneath.
@@ -608,9 +763,35 @@ public sealed class AutoHideController
         {
             Visibility = DockVisibility.Hidden;
             _atEdgeSince = DateTime.MaxValue;
+
+            // Out of the topmost band once it is off the screen, and not before: let go of on
+            // the way down, the dock would drop under the window it is sliding over, and be
+            // seen to.
+            _lower(0);
         });
     }
 
+    /// <summary>
+    /// Slides the dock back on screen, over whatever is in front.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Held in the topmost band until it hides again, unless it floats there anyway. A raise
+    /// alone is what this used to do, and Windows declines that over the window in the
+    /// foreground — so with <em>Always on top</em> off it slid up <em>under</em> whatever had
+    /// the focus. Found on 2026-09-28 and reported on 2026-09-30. The lift had the same
+    /// refusal, and checks whether it got through; a reveal cannot check, since the dock starts
+    /// below the bottom of the screen where nothing covers it, and a dock that is being
+    /// revealed is wanted on top in any case. It is also what brings the dock up over a
+    /// maximized or fullscreen window it is yielding to, which is always the foreground.
+    /// </para>
+    /// <para>
+    /// With nothing hiding the dock — auto-hide off, and no window in front filling its
+    /// display — what reveals it is the tray, the settings dialog, auto-hide being turned off,
+    /// or such a window going; and nothing hides it again to let go. So it counts as a lift,
+    /// which is let go of like one, once the pointer has been away for the hide delay.
+    /// </para>
+    /// </remarks>
     public void Reveal()
     {
         if (Visibility is DockVisibility.Revealing or DockVisibility.Shown)
@@ -618,10 +799,19 @@ public sealed class AutoHideController
             return;
         }
 
+        IsPutAway = false;
         Visibility = DockVisibility.Revealing;
         _atEdgeSince = DateTime.MaxValue;
         _chrome.SetClickThrough(false);
         _raise();
+        _holdAbove();
+
+        if (!Hides && !_lifted)
+        {
+            _lifted = true;
+            _liftedOver = 0;
+            _outsideSince = DateTime.MaxValue;
+        }
 
         Slide(_shownTop, () =>
         {

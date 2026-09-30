@@ -59,28 +59,53 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   rather than polling. A pinned shortcut is matched by what it points at, so one dragged
   out of the Start menu lights up like anything else.
 - **Floats above other windows**, or not — a dock that can be covered like any other window
-  is one setting away.
-- **Auto-hides** to the screen edge and returns when the cursor reaches the bottom.
-- **Leaves a handle behind when it hides**, unless told not to on the Behaviour page: a slim
-  bar just above the taskbar, centred under where the dock will come up — the phone's home
-  indicator, on a desktop. It fades in as the dock slides away and out as it slides back, and
-  resting the pointer on it for the *Reveal delay* brings the dock back, as holding the edge
-  does. Clicks go straight through it to the window underneath, which is usually the bottom
-  row of something maximized. It is as wide as the dock, following it as icons come and go, or
-  a width of its own. It **inverts the colours behind it**, so it stands out on anything; the
-  inverse is pushed away from the colour behind, since plain inversion gives mid-grey back as
-  mid-grey and the handle would vanish into a grey status bar. What is behind is read off the
-  screen fifteen times a second, on a thread of its own, for about half a percent of one core,
-  and the handle is kept out of screenshots and recordings — which is what keeps it out of its
-  own reads (see *Known gaps*). There is no other look to choose: a checkbox offered the bar's
-  colour instead, and was taken away as a choice not worth a setting. The bar's colour remains
-  only as a fallback, where Windows will not keep a window out of captures. It steps aside
-  while anything takes the whole display in front — a game, a video, borderless or not —
-  though not for an ordinary maximized window; and it is never drawn over a program on the
-  **Exclusions** page that fills the display, asked exactly as the edge asks when it stands
-  down for one. Only auto-hide leaves one: a dock hidden from the tray was put away on
-  purpose. While the settings dialog is open it shows under the dock, so its width can be seen
-  while it is set.
+  is one setting away. Either way it is **never over a window that fills its display** — a
+  game, a video, a presentation, borderless or not, or any window maximized there with the
+  taskbar showing: while one is in front the dock **slides away, as auto-hide does**, pops
+  back up over it when the pointer reaches the bottom edge, and slides off again once the
+  pointer has left; when that window goes, the dock slides back. If the pointer is on the
+  dock when the window takes the display — an icon just clicked that opens maximized — it
+  waits until the pointer leaves. The taskbar, Alt+Tab, Start and the like coming to the
+  front leave it as it is, so switching between windows does not bounce it. Only the window
+  in front counts, so one left maximized while you work on another display has the dock back
+  over it. A dock put away from the tray stays away through all of this.
+- **Auto-hides** to the screen edge and returns when the cursor reaches the bottom — over
+  whatever has the focus, *Always on top* or not. It used to slide up *under* the focused
+  window when the dock did not float. With the setting off it still hides, as above, while a
+  maximized or fullscreen window is in front. The bottom **under the dock**, that is: across
+  the bar and no wider, so it lines up with a handle as wide as the dock, and the strip below a
+  dock that is up keeps it up across the same width. Until 2026-09-30 it was the dock's whole
+  window and 80 pixels more at each end — the window keeps room beside the bar for the wave —
+  about half as wide again as the dock.
+- **Marks itself with a handle while it is out of sight**, unless told not to on the Behaviour
+  page: a slim bar just above the taskbar, centred under where the dock will come up — the
+  phone's home indicator, on a desktop. Out of sight means slid away — by auto-hide, or for a
+  maximized or fullscreen window in front — or on screen with none of the bar showing for the
+  windows over it, as a dock that does not float can be; a dock only partly covered can be
+  seen, and has none. So it works with auto-hide off as well, and the setting is no longer
+  greyed without it. It fades in as the dock slides away or is covered, at the slide's pace,
+  and out in a fraction of that as it comes back — gone before the rising bar has passed it,
+  since the bar comes to rest just above it. **It is a mark only**: the pointer resting on it does nothing, and holding
+  the edge is what brings the dock up — resting on it used to, and was taken away because it
+  lies over the bottom rows of other windows, where the pointer goes on business of its own.
+  Clicks go straight through it to the window underneath, which is usually the bottom row of
+  something maximized. It is as wide as the dock, following it as
+  icons come and go, or a width of its own. It **inverts the colours behind it**, so it stands
+  out on anything; the inverse is pushed away from the colour behind, since plain inversion
+  gives mid-grey back as mid-grey and the handle would vanish into a grey status bar. What is
+  behind is read off the screen fifteen times a second, on a thread of its own, for about half
+  a percent of one core, and the handle is kept out of screenshots and recordings — which is
+  what keeps it out of its own reads (see *Known gaps*). There is no other look to choose: a
+  checkbox offered the bar's colour instead, and was taken away as a choice not worth a
+  setting. The bar's colour remains only as a fallback, where Windows will not keep a window
+  out of captures. It **floats over everything**, fullscreen windows included, and climbs
+  back to the top when a window that floats comes to the front over it — the dock's own
+  included, so a dock set to float does not lay its bar's shadow across the handle while the
+  settings dialog shows one under the other — except a program on
+  the **Exclusions** page that fills the display, which the dock does not come up over, so
+  the handle is not drawn there. A dock hidden from the tray has none: it was put away on
+  purpose, and only the tray brings it back. While the settings dialog is open it shows under
+  the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic — which brings the
   system's own drop shadow along with it.
 - **Pulses an icon twice** when a click actually launches something (not when it just
@@ -202,15 +227,16 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   screen, so at rest it sits a little further in than that, by the room the wave grows into.
 - **Stays put while you configure it** — opening the settings dialog or an item's edit
   dialog holds the dock on screen, so auto-hide cannot slide it away mid-adjustment.
-- **Comes back to the front** when the cursor is held against the screen edge, whatever the
+- **Comes back to the front** when the cursor is held against the screen edge under it, whatever the
   settings — the same gesture that would summon a hidden dock digs out a buried one, blur and
-  all, including from under the window that has focus. Windows will not put a background
+  all, including from under the window that has focus and from under a fullscreen one. Windows will not put a background
   program over that one, so there the dock joins the windows that float for as long as it is
   up, and leaves them when it goes back. That holds for a dock set to float
   above everything too, which another window that floats can still cover. How long to hold
   is the *Reveal delay*, which is therefore never greyed out. Move away and, after the *Hide
   delay* — also never greyed out — it goes back under the window it was lifted over, exactly
-  as auto-hide would slide it away: the dock and the strip below it keep it up. It only ever
+  as auto-hide would slide it away: the dock and the strip below it, as wide as the dock, keep
+  it up. It only ever
   goes back *down*: a window you have brought forward since stays in front of it, and one it
   was already in front of stays behind.
 - **Answers the pointer only where you can see it.** Moving the pointer onto the visible part
@@ -219,16 +245,21 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   to that window: the dock does not magnify or label anything underneath it, and a dock
   entirely under a window does not come up just because you are working in that window over
   where it is. A dock with nothing over it is left where it is — lifting it would change
-  nothing and still redraw it.
+  nothing and still redraw it. A dock that has not settled on screen — hidden, or sliding
+  either way — answers the pointer nowhere and takes no clicks, so the wave starts only once
+  a dock coming back has landed, and a hidden dock that something has moved back onto the
+  screen — as a wake from sleep once did — is put back within a quarter of a second.
 - **Stays down over the apps you exclude** — games, mostly, which scroll when the pointer
   reaches the edge of the screen and would otherwise bring the dock up over themselves every
   time the map moved. While a program on the **Exclusions** page is in front and fills the
   dock's display, fullscreen or borderless, holding the pointer against the edge does
   nothing: a hidden dock stays hidden, a covered one stays covered, and the strip under a
-  dock that was already out stops holding it up. The handle a hidden dock leaves behind is not
-  drawn over it either. **The list outranks *Always on top***: a dock set to float above
-  everything drops under such a program while it is in front, and floats again the moment it
-  is not — as does one started, or restarted, while the game was in front, which used to come
+  dock that was already out stops holding it up. The handle is not drawn over it either. Any
+  window filling the display sends the dock away, but only a listed one keeps it away: **the
+  list outranks the pointer as well as *Always on top*** — the edge does not bring the dock
+  back over such a program, and the dock goes under it as well as away, so its slide happens
+  behind the game rather than over it. It comes back the moment the program is not in front,
+  and one started, or restarted, while the game was in front stays away too — it used to come
   up over it. Programs are added from those open at the
   time, by browsing for the `.exe`, or by **scanning for games or apps**, and are recognised by file
   name, so a game that moves folders when it updates still counts. Only the edge stands down
@@ -348,7 +379,9 @@ export a copy of it and import one back.
 ```
 src/ArtDock/
   Dock/        DockMagnify, DockLayout, DockMetrics, DockItem, DockEdge, BarPalette,
-               AutoHideController, DockHandle (where a hidden dock's handle goes)
+               AutoHideController, DockHandle (where the dock's handle goes),
+               DockFront (what the dock does about a fullscreen window, and when the
+               handle shows)
   Controls/    DockBar (the rendering surface), DockItemVisual, ColorWheel,
                AnimatedRowPanel
   Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet),
@@ -374,7 +407,8 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        pin targets, settings portability, Recycle Bin icon,
                        moving along the edge, localization, icon sets, display
                        identity, excluded apps, scanning for programs, game
-                       libraries, installed apps, the hidden dock's handle,
+                       libraries, installed apps, the dock's handle, what
+                       the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
                        install folder
 LICENSE                MIT
@@ -668,11 +702,13 @@ placed any other way would wander along the edge while a slider was dragged. The
 drop-preview reserve and the dialog's held size stay invisible for the same reason.
 
 At either end the window reaches a little past the side of the screen — the slack it keeps
-beside the bar for the shadow is wider than the margin the bar keeps from the edge — and two
-things follow from that. Labels are kept on the screen as well as in the window
-(`DockBar.OnScreen`), or a long name on the end icon is drawn across the edge, onto the
-display next door if there is one. And auto-hide's reveal zone is clipped to the dock's own
-display, so a cursor over there cannot summon it. Separately, because a move along the edge
+beside the bar for the shadow is wider than the margin the bar keeps from the edge — so labels
+are kept on the screen as well as in the window (`DockBar.OnScreen`), or a long name on the
+end icon is drawn across the edge, onto the display next door if there is one. Auto-hide's
+reveal zone followed from it too while it was the window's width and more; it is the bar's
+now, which the placement keeps on the screen, and is clipped to the dock's own display all the
+same, for a bar with more icons than the display is wide — a cursor on the display next door
+cannot summon it. Separately, because a move along the edge
 shifts both the row inside the window and the window itself, the acrylic sheet is placed
 once per settings change rather than after each: between the two it would be a whole slider
 tick away from the bar.
@@ -731,9 +767,22 @@ Programs are matched on the executable's file name because games move — versio
 folders, Steam libraries on another drive — and a match that broke would fail the way that
 matters, with the dock rising over the game again. When a program's path cannot be read,
 which a game's anti-cheat may refuse, the name comes from the system's process list instead,
-which needs no handle to the process. None of it runs until the pointer is at the edge, and an
-empty list — the default — stops it before it reads any window at all. The list consulted is
-the one in force (`DockWindow._applied`), so the settings dialog's changes apply before Save.
+which needs no handle to the process. The list consulted is the one in force
+(`DockWindow._applied`), so the settings dialog's changes apply before Save. What is in front
+is looked at four times a second and at every change of foreground (`DockWindow.CheckFront`),
+since the dock hides for any window that fills its display. That test asks a different
+question from the list's: whether the window in front covers the display's *work area*
+(`ForegroundApp.FillsWorkArea`), which a window maximized with the taskbar showing does and a
+fullscreen one does too — one geometric question, no style or state read, and no program
+named. It replaced a test that told fullscreen from merely maximized by the window's title bar
+and state, which stopped mattering once both were to get the same answer. The shell's passing
+windows are not asked at all: while the taskbar, Alt+Tab's switcher, Start or the like is in
+front, the dock holds still (`ForegroundApp.IsPassingShellInFront`) — Alt+Tab's switcher is
+exactly the work area, and would otherwise slide the dock away and back on every switch. An
+empty list — the default — stops the list's test before it reads any window at all. The hiding
+is auto-hide's own path, run while such a window is in front whatever the setting
+(`AutoHideController.Yield`), and the rules — hide, show, and when the handle shows — are
+`Dock/DockFront`, apart from the windows, and unit-tested.
 
 **Memory is given back when the dock goes quiet.** The garbage collector runs when an
 allocation budget fills, not when a program goes idle, and a dock at rest allocates about
@@ -840,10 +889,14 @@ the one they are on.
   `SystemApps` or `SystemResources`, no parsing name that resolves to it, and the only
   Windows mark in `imageres.dll` is welded onto the system-drive icon. So the dock draws its
   own and ships it in `Assets/icons`. It will not follow a future change to the logo.
-- **The hidden dock's handle is missing from screenshots and recordings.** It inverts what is
+- **The dock's handle is missing from screenshots and recordings.** It inverts what is
   behind it, and to read that without reading itself it asks Windows to leave it out of every
   capture of the screen — the Snipping Tool, Print Screen and recorders included. It is on the
   monitor all the same. The price of having no other look.
+- **The handle floats over a fullscreen game that is not on the Exclusions page.** That was
+  asked for — it marks the dock the game has on top of it — but a window floating over a
+  fullscreen game can cost the game its direct path to the display, and a video its controls'
+  bottom row. Listing the program takes the handle, and the dock, off it.
 - **Icons are read once and kept for as long as the dock runs**, not cached to disk. The
   Recycle Bin is the exception — never kept, and re-read whenever the shell says its icon
   changed. Invisible for most applications, whose icon does not change while they are
@@ -871,7 +924,7 @@ the one they are on.
 dotnet test tests/ArtDock.Tests
 ```
 
-Four hundred and seventy-two tests cover the cosine falloff (peak, range boundary, monotonicity, zero
+Four hundred and ninety-nine tests cover the cosine falloff (peak, range boundary, monotonicity, zero
 range), the layout (prefix sums, bar width, non-overlap across a full pointer sweep, empty
 and single-icon docks, the width the acrylic sheet is parked at, and the hover span, which
 covers the bar wherever the wave is without moving when the wave does), and the tuning values
@@ -1030,7 +1083,7 @@ a monitor Windows gives no path for; nothing found is nothing, which the dock tu
 main display; and two identical monitors, whose paths differ only by the connector, are told
 apart.
 
-Twenty-five cover the Exclusions page's two questions, and the handle's third. Nine are about
+Twenty-four cover the Exclusions page's two questions, and the dock's own third. Nine are about
 which program: one moved to another folder by an update is still matched, case is ignored, a
 hand-written file name
 matches as a path does — and nothing overreaches, so `mygame.exe` is not `game.exe`, a
@@ -1041,14 +1094,15 @@ borderless window can, at negative coordinates, spread across both at once — a
 that matters, not a maximized window while the taskbar is showing, not one a row short, not
 one on the other display, and nothing at all before the dock has a display to measure
 against, since an empty rectangle is contained by everything. The settings round trip above
-carries the list as well. The last seven are what the handle a hidden dock leaves behind
-steps aside for, listed or not — a window that has taken the whole display, not an ordinary
-one that fills it — and the one that matters is StarCraft II's window as it really is here:
-maximized, with no title bar, over the whole main display. That is fullscreen, and asking
-only whether a window was maximized said it was not, which left the handle drawn over the
-game. A maximized window with a title bar is not fullscreen, where the taskbar hides itself or
-not; a borderless one is, title bar or not; and nothing short of the display, or on the other
-one, is.
+carries the list as well. The last six are what the dock goes under whatever *Always on
+top* says, listed or not: a window in front covering the display's work area. The one that
+matters is the maximize button with the taskbar showing, as Windows reports the window, its
+invisible border hanging past the work area on every side; then a window that draws its own
+frame and is the work area exactly, and a fullscreen one, which covers more. Not a snapped
+half, not a window one row short of the taskbar, and not one maximized on the other display.
+Seven used to hold the line between fullscreen and merely maximized — StarCraft II's window,
+maximized with no title bar over the whole main display, was the case that mattered — and went
+when both came to get the same answer.
 
 Seventy-two cover the scans' arranging, and the case they are built around is StarCraft II's folder
 as it really is on this machine — twelve programs, three of which call themselves
@@ -1097,16 +1151,34 @@ means under it, not beside it — "StarCraft II Beta" begins with "StarCraft II"
 test reads real files: Explorer has an icon of its own, a file that is not a program and one
 that is not there have none.
 
-Thirty-six cover the handle a hidden dock leaves behind, most in physical pixels against this
+Twenty cover what the dock does about the window in front of its display, and when the handle
+marks it (`DockFront`). Nothing filling the display has the dock where the settings have it; a
+window filling it — maximized or fullscreen — has it hide; and a program on the Exclusions page
+outranks both. Keeping a dock the pointer has brought up is not tested here: while the dock
+hides for a window, that is auto-hide's own keeping of a revealed dock under the pointer,
+reused whole. The handle comes as the dock hides and goes as it comes back, even from under a
+window; marks a dock on screen that cannot be seen, hiding or not, and not one that can; is
+not offered for a dock put away from the tray, which only the tray brings back; marks nothing
+turned off; is never drawn over a listed program, even for a hidden dock or with the settings
+dialog open; and shows under a dock in plain sight while that dialog is open.
+
+Eleven cover where across the screen the edge brings the dock up, and the strip below a dock
+that is up keeps it there (`AutoHideController.IsUnderDock`), in physical pixels on both
+displays: under the bar and no wider — not a pixel past either end, nor out in the room the
+window keeps for the wave, where the edge answered until 2026-09-30 — so it lines up exactly
+with a handle as wide as the dock; a bar wider than its display cut at the display's sides, so
+a pointer on the display next door is not under it; and nothing under a dock not yet laid out.
+
+Thirty-three cover the handle itself, most in physical pixels against this
 machine's two displays at their real scales, since the handle is placed by `SetWindowPos` and
 the scale is what is likeliest to go wrong. As wide as the dock it is the bar exactly; with a
 width of its own it is centred on the bar wherever the dock sits along its edge, wider than the
 bar included, and that width is in DIPs, so it is half as wide again in pixels on the 4K
 display; it sits just above the taskbar and never on it, its thickness and lift scale too, and
 every edge is a whole pixel. A width off the slider's range is held to it, and a scale or
-width that is no number falls back rather than placing a window nowhere. Where the pointer
-counts as on it reaches a little above it and down to the taskbar, and no further — below the
-taskbar is the reveal edge. Six more hold that the resting bar it is measured from is the bar a
+width that is no number falls back rather than placing a window nowhere. (Three more held
+where the pointer counted as on it, and went when resting on it stopped bringing the dock.)
+Six more hold that the resting bar it is measured from is the bar a
 dock at rest actually draws, at either end of its edge and empty. The last seven are the
 inverted look: white comes back black and black white, a colour comes back as its opposite,
 what is shown is opaque whatever the read said of alpha, and nothing past the last whole pixel

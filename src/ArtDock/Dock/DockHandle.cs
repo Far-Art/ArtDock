@@ -3,8 +3,9 @@ using System.Windows;
 namespace ArtDock.Dock;
 
 /// <summary>
-/// Where the handle an auto-hidden dock leaves behind goes: a slim bar just above the taskbar,
-/// centred under where the dock will come up.
+/// Where the handle that marks a dock out of sight goes: a slim bar just above the taskbar,
+/// centred under where the dock will come up. A mark only — the pointer resting on it does
+/// nothing, and the edge below the taskbar is what brings the dock up.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -32,15 +33,6 @@ public static class DockHandle
     /// rests at the default margin, so it sits under the dock rather than in its place.
     /// </remarks>
     public const double Lift = 6;
-
-    /// <summary>
-    /// How far above the handle the pointer still counts as on it, in DIPs.
-    /// </summary>
-    /// <remarks>
-    /// Five DIPs is a thin thing to rest a pointer on. Below it the target already reaches down
-    /// to the taskbar, so this is the only side that needs the help.
-    /// </remarks>
-    public const double Reach = 6;
 
     public const double MinWidth = 40;
     public const double MaxWidth = 600;
@@ -127,27 +119,4 @@ public static class DockHandle
 
     private static byte Push(int value, int toward) =>
         (byte)(value + ((toward - value) * PushPercent / 100));
-
-    /// <summary>
-    /// Where the pointer counts as on the handle: the handle, a little above it, and everything
-    /// below it down to the taskbar.
-    /// </summary>
-    /// <remarks>
-    /// Down to the work area's bottom and no further. Below that is the taskbar, which the
-    /// pointer visits for reasons of its own, and below the taskbar is the reveal edge, which
-    /// is a way back of its own already.
-    /// </remarks>
-    public static Rect Target(Rect handle, double workAreaBottom, double scale)
-    {
-        if (handle.IsEmpty)
-        {
-            return Rect.Empty;
-        }
-
-        var pixels = scale > 0 && double.IsFinite(scale) ? scale : 1;
-        var top = handle.Top - (Reach * pixels);
-        var bottom = Math.Max(handle.Bottom, workAreaBottom);
-
-        return new Rect(handle.Left, top, handle.Width, bottom - top);
-    }
 }

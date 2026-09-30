@@ -278,7 +278,7 @@ public sealed partial class SettingsWindow : Window
             slider.ValueChanged += (_, _) => Preview();
         }
 
-        foreach (var check in new[] { AutoHideCheck, HandleCheck, HandleMatchDockCheck })
+        foreach (var check in new[] { HandleCheck, HandleMatchDockCheck })
         {
             check.Checked += (_, _) => UpdateHandleControls();
             check.Unchecked += (_, _) => UpdateHandleControls();
@@ -1600,11 +1600,15 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Greys the handle with auto-hide off, its width with the handle off, and the width slider
-    /// while the width is the dock's — a control that responds but changes nothing is worse than
-    /// one that says it is not in charge.
+    /// Greys the handle's width with the handle off, and the width slider while the width is the
+    /// dock's — a control that responds but changes nothing is worse than one that says it is
+    /// not in charge.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The handle itself is not greyed with auto-hide off any more, since 2026-09-30: it marks a
+    /// dock that is under other windows as well as one that has slid away.
+    /// </para>
     /// <para>
     /// Disabled is not enough on its own. A disabled card dims, because the <c>Card</c> style
     /// says so, but nothing dims a panel inside one: a <c>TextBlock</c> keeps its colour whether
@@ -1619,16 +1623,14 @@ public sealed partial class SettingsWindow : Window
     /// </remarks>
     private void UpdateHandleControls()
     {
-        var card = AutoHideCheck.IsChecked == true;
         var options = HandleCheck.IsChecked == true;
         var width = HandleMatchDockCheck.IsChecked != true;
 
-        HandleCard.IsEnabled = card;
         HandleOptionsPanel.IsEnabled = options;
         HandleWidthRow.IsEnabled = width;
 
-        HandleOptionsPanel.Opacity = card && !options ? DisabledOpacity : 1;
-        HandleWidthRow.Opacity = card && options && !width ? DisabledOpacity : 1;
+        HandleOptionsPanel.Opacity = options ? 1 : DisabledOpacity;
+        HandleWidthRow.Opacity = options && !width ? DisabledOpacity : 1;
     }
 
     /// <summary>How far a disabled part of a card is dimmed: as far as the <c>Card</c> style dims a disabled card.</summary>

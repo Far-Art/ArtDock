@@ -21,7 +21,7 @@ public enum DockPresence
     /// <summary>Slid off the edge by auto-hide; the cursor at that edge brings it back.</summary>
     AutoHidden,
 
-    /// <summary>Hidden from the tray menu with auto-hide off, so only the tray brings it back.</summary>
+    /// <summary>Put away from the tray menu while nothing was hiding it, so only the tray brings it back.</summary>
     HiddenFromTray,
 
     /// <summary>Shown, but on no display that is connected.</summary>
@@ -77,28 +77,20 @@ public sealed partial class DockWindow : Window
     /// </summary>
     private double _handleScale = 1;
 
-    /// <summary>The handle a hidden dock leaves behind; made the first time it is wanted.</summary>
+    /// <summary>The handle that marks the dock while it is out of sight; made the first time it is wanted.</summary>
     private HandleWindow? _handle;
 
-    /// <summary>Where the pointer counts as on the handle, in physical pixels.</summary>
-    private Rect _handleTarget = Rect.Empty;
-
     /// <summary>
-    /// Looks at what is in front while there is a handle up, so it can step aside for a game
-    /// or a video that fills the display, and come back when that goes.
+    /// Looks, a few times a second, at what is in front of the dock's display — see
+    /// <see cref="CheckFront"/>.
     /// </summary>
     /// <remarks>
-    /// A quarter of a second: going fullscreen is not something the handle has to beat, and
-    /// the look is a handful of calls with no program resolved.
+    /// A quarter of a second: a window going fullscreen or being maximized is not something the
+    /// dock has to beat — the maximize animation takes about as long — a change of foreground
+    /// is heard at once by the hook besides, and the look is a handful of calls with no program
+    /// resolved unless the Exclusions page lists any.
     /// </remarks>
-    private readonly DispatcherTimer _handleWatch = new() { Interval = TimeSpan.FromMilliseconds(250) };
-
-    /// <summary>
-    /// Looks, a few times a second, for a program on the Exclusions page filling the dock's
-    /// display in front — see <see cref="CheckAside"/>. Runs only while the list has anything
-    /// on it.
-    /// </summary>
-    private readonly DispatcherTimer _asideWatch = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    private readonly DispatcherTimer _frontWatch = new() { Interval = TimeSpan.FromMilliseconds(250) };
 
     /// <summary>Held as a field so the collector cannot take the delegate the hook still calls.</summary>
     private readonly WindowsApi.WinEventProc _onForeground;
@@ -108,12 +100,21 @@ public sealed partial class DockWindow : Window
 
     /// <summary>
     /// The window the dock has stood aside for — put under, and out of the topmost band — while
-    /// it is a program on the Exclusions page filling the dock's display; 0 when there is none.
+    /// it fills the dock's display in front; 0 when there is none.
     /// </summary>
     private nint _asideFor;
 
-    /// <summary>True while something fills the dock's display in front, and the handle is standing aside.</summary>
-    private bool _fullscreenInFront;
+    /// <summary>
+    /// True while a program on the Exclusions page is in front and fills the dock's display —
+    /// when the dock stays under it whatever else asks, and the handle is not shown.
+    /// </summary>
+    private bool _excludedInFront;
+
+    /// <summary>
+    /// True while the dock is on screen and nothing of its bar can be seen, for the windows
+    /// lying over it — see <see cref="CheckSight"/>.
+    /// </summary>
+    private bool _outOfSight;
 
     /// <summary>
     /// Set once the window has closed, so a late settings preview — the dialog closing after
@@ -181,14 +182,12 @@ public sealed partial class DockWindow : Window
             // Showing a window puts it at the top of its band, over whatever is in front —
             // an excluded game included, which is what a dock restarted in the middle of one
             // used to be drawn over until something moved it.
-            CheckAside();
+            CheckFront();
         };
         Root.Children.Add(_dock);
 
-        _handleWatch.Tick += OnHandleWatch;
-
-        _asideWatch.Tick += (_, _) => CheckAside();
-        _onForeground = (_, _, _, _, _, _, _) => CheckAside();
+        _frontWatch.Tick += (_, _) => CheckFront();
+        _onForeground = (_, _, _, _, _, _, _) => CheckFront(foregroundChanged: true);
 
         _runningApps.Changed += OnRunningAppsChanged;
         _settings.Changed += (_, updated) => Dispatcher.Invoke(() => ApplySettings(updated));
@@ -207,9 +206,8 @@ public sealed partial class DockWindow : Window
             _runningApps.Dispose();
             _backdrop?.Dispose();
             _binWatch?.Dispose();
-            _handleWatch.Stop();
             _handle?.Dispose();
-            _asideWatch.Stop();
+            _frontWatch.Stop();
             UnhookForeground();
         };
     }
@@ -219,6 +217,18 @@ public sealed partial class DockWindow : Window
 
     /// <summary>True when the dock is on screen rather than hidden at the edge.</summary>
     public bool IsDockShown => _autoHide?.Visibility is not (DockVisibility.Hidden or DockVisibility.Hiding);
+
+    /// <summary>
+    /// True when the dock has settled on screen: shown, and not sliding either way — what it
+    /// takes for the dock to answer the pointer and take clicks.
+    /// </summary>
+    /// <remarks>
+    /// Stricter than <see cref="IsDockShown"/>, which counts a dock on its way back as shown —
+    /// rightly, for the tray and a second launch, which ask whether the dock is coming or
+    /// going. Not so for the pointer: the edge that brought the dock back has the pointer right
+    /// under it, and the wave would start while the bar was still rising.
+    /// </remarks>
+    private bool IsSettled => _autoHide is { Visibility: DockVisibility.Shown };
 
     /// <summary>Whether the dock can be seen where it stands — what a second launch asks.</summary>
     /// <remarks>
@@ -235,7 +245,20 @@ public sealed partial class DockWindow : Window
             {
                 // With auto-hide on, the tray's Hide is the same slide the timer does, and the
                 // edge brings it back either way.
-                return autoHide.IsEnabled ? DockPresence.AutoHidden : DockPresence.HiddenFromTray;
+                if (autoHide.IsPutAway)
+                {
+                    return DockPresence.HiddenFromTray;
+                }
+
+                if (autoHide.IsEnabled)
+                {
+                    return DockPresence.AutoHidden;
+                }
+
+                // Away only because a window in front fills the display. The notice this is
+                // asked for takes the foreground from that window, and the dock comes back for
+                // anything that does not fill the display — so by the time it is read, the dock
+                // is where the rest of this looks for it.
             }
 
             return IsVisible && MonitorDpi.IsOnAnyDisplay(new WindowInteropHelper(this).Handle)
@@ -252,19 +275,41 @@ public sealed partial class DockWindow : Window
         _chrome = new WindowChrome(this);
         _chrome.ApplyDockStyles();
 
-        // So the pointer on a window lying over the dock is that window's, not the dock's.
-        _dock.IsCoveredAt = _chrome.IsCoveredAt;
+        // So the pointer on a window lying over the dock is that window's, not the dock's — and
+        // anywhere at all is someone else's until the dock has settled on screen. The pointer
+        // is polled, not delivered, so a dock that still had some of itself on the screen while
+        // it counted as hidden waved and labelled its icons under a pointer that was on the
+        // taskbar; reported after a wake on 2026-09-30. On its way back it is no different: the
+        // pointer that brought it is right there at the edge, and the wave started under a bar
+        // still sliding up — asked the same day to wait until the slide has landed.
+        var chrome = _chrome;
+        _dock.IsCoveredAt = (x, y) => !IsSettled || chrome.IsCoveredAt(x, y);
 
         // Clicks have to come from the window procedure: the dock is deliberately
         // WS_EX_NOACTIVATE, and WPF does not route mouse input to a non-activating window.
         var source = (HwndSource)PresentationSource.FromVisual(this)!;
         source.AddHook(OnWindowMessage);
         _autoHide = new AutoHideController(
-            this, _chrome, _dock.IsPointerOverDock, Raise, HoldAbove, Lower, IsFullscreenAppInFront,
-            IsPointerOnHandle);
+            this, _chrome, _dock.IsPointerOverDock, IsCovered, Raise, HoldAbove, Lower,
+            IsFullscreenAppInFront, RestingBarOnScreen);
 
-        // The handle arrives as the dock slides away and goes as it slides back.
-        _autoHide.VisibilityChanged += (_, _) => SyncHandle();
+        // The handle arrives as the dock slides away and goes as it slides back. Whether the
+        // dock can be seen is only asked of a dock that is on screen, so that is asked again
+        // too — a dock that has just arrived may have arrived under something.
+        _autoHide.VisibilityChanged += (_, _) =>
+        {
+            if (!CheckSight())
+            {
+                SyncHandle();
+            }
+        };
+
+        // What is in front is watched for as long as the dock is up, whatever the settings: the
+        // dock hides for anything that fills its display, and the handle comes up over it. The
+        // hook is out of context, so its callback arrives on this thread through the message
+        // loop, which is running by the time anything can change the foreground.
+        _frontWatch.Start();
+        HookForeground();
 
         // Before the first ApplySettings, which is where the bin's icon is first read: a
         // change landing between the two is then either in that read or announced after it.
@@ -320,8 +365,10 @@ public sealed partial class DockWindow : Window
 
         // Last, after ApplyAlwaysOnTop has set the band: the list may have changed, and a
         // re-apply for any other reason — a display change, a preview — must leave a dock that
-        // is standing aside where it is.
-        SyncAsideWatch();
+        // is standing aside where it is. It also asks again whether the dock can be seen, for
+        // the handle, which a change of display, of size or of the handle's own setting can
+        // each change.
+        CheckFront();
     }
 
     /// <summary>
@@ -617,11 +664,11 @@ public sealed partial class DockWindow : Window
     /// dropped out would put the blur over every other window with no dock on it.
     /// </para>
     /// <para>
-    /// The setting floats the dock only while it is not standing aside for a program on the
-    /// Exclusions page (<see cref="StandAside"/>). That is decided here, where the band is set,
-    /// and not by moving the windows behind this method's back: it runs on every re-apply of
-    /// the settings — a display change, a preview — and the sheet re-asserts whatever band it
-    /// is given each time, so a stand-aside it did not know about would lift the blur back over
+    /// The setting floats the dock only while it is not standing aside for a window filling its
+    /// display (<see cref="StandAside"/>). That is decided here, where the band is set, and not
+    /// by moving the windows behind this method's back: it runs on every re-apply of the
+    /// settings — a display change, a preview — and the sheet re-asserts whatever band it is
+    /// given each time, so a stand-aside it did not know about would lift the blur back over
     /// the game at the next one.
     /// </para>
     /// </remarks>
@@ -678,6 +725,16 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
+        // A dock that has not settled on screen — hidden, or sliding either way — starts
+        // nothing. Hidden it is click-through as well, but that is a window style, and a hidden
+        // dock should not depend on one flag to be out of the way; sliding back it is not, and a
+        // click there would land on an icon still on its way to where it is drawn. A button
+        // coming up is still let through, to finish a gesture begun while the dock was settled.
+        if (!IsSettled && msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONUP)
+        {
+            return 0;
+        }
+
         switch (msg)
         {
             case NativeMethods.WM_LBUTTONDOWN:
@@ -1444,10 +1501,10 @@ public sealed partial class DockWindow : Window
     /// </summary>
     /// <remarks>
     /// Also what auto-hide calls, both to bring a hidden dock back and to lift a covered one
-    /// when the cursor is held against the edge or rests on the dock. Not above the window
-    /// in the foreground, though, unless this process holds the foreground at the time:
-    /// Windows declines that silently. The lift checks, and falls back on
-    /// <see cref="HoldAbove"/>.
+    /// when the cursor is held against the edge or arrives on the dock.
+    /// Not above the window in the foreground, though, unless this process holds the
+    /// foreground at the time: Windows declines that silently. The lift checks, and falls back
+    /// on <see cref="HoldAbove"/>; a reveal, which cannot check, holds regardless.
     /// </remarks>
     /// <returns>
     /// The window the dock was directly under, for <see cref="Lower"/> to put it back under —
@@ -1462,8 +1519,42 @@ public sealed partial class DockWindow : Window
         // Raised on its own, the dock leaves the sheet where it was, under whatever it has
         // just risen above: the bar would be drawn over that window rather than over a blur.
         RestackBackdrop();
+        CheckSight();
+        KeepHandleOnTop();
 
         return under;
+    }
+
+    /// <summary>
+    /// True when a window of another program lies over the dock — what a lift asks before it
+    /// lifts, and again after raising to see whether that got through.
+    /// </summary>
+    private bool IsCovered() =>
+        _chrome is { } chrome && chrome.IsCovered(RestingBarOnScreen());
+
+    /// <summary>
+    /// The bar at rest, in physical screen pixels where the window is now — empty before the
+    /// dock has been laid out, when nothing about it can be measured.
+    /// </summary>
+    /// <remarks>
+    /// What a lift asks is covered; and, across, where the edge brings the dock up and the strip
+    /// below a dock that is up keeps it there (<see cref="AutoHideController.IsUnderDock(double, Rect, Rect)"/>)
+    /// — as wide as the dock, measured as the handle's width is.
+    /// </remarks>
+    private Rect RestingBarOnScreen()
+    {
+        if (PresentationSource.FromVisual(_dock) is null || _dock.ActualWidth <= 0 || _dock.ActualHeight <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        var bar = _dock.RestingBarRect;
+        if (bar.Width <= 0 || bar.Height <= 0)
+        {
+            return Rect.Empty;
+        }
+
+        return new Rect(_dock.PointToScreen(bar.TopLeft), _dock.PointToScreen(bar.BottomRight));
     }
 
     /// <summary>
@@ -1481,7 +1572,8 @@ public sealed partial class DockWindow : Window
     /// entitled to refuse to put a background program's window over the one in the
     /// foreground, and refuses silently. Entering the topmost band is not refused — it is
     /// how a dock set to float stays up — so the dock goes there for as long as the pointer
-    /// is on it. The sheet first, so the dock, going second, lands above it.
+    /// is on it, or auto-hide has it revealed. The sheet first, so the dock, going second,
+    /// lands above it.
     /// </remarks>
     public void HoldAbove()
     {
@@ -1503,6 +1595,8 @@ public sealed partial class DockWindow : Window
 
         _heldAbove = true;
         RestackBackdrop();
+        CheckSight();
+        KeepHandleOnTop();
     }
 
     /// <summary>Lets go of a <see cref="HoldAbove"/>: both windows back to the ordinary band.</summary>
@@ -1534,29 +1628,37 @@ public sealed partial class DockWindow : Window
     /// lifted it over — if that is still a move down.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The sheet goes first. Moved second, it would be left over the window for a frame with
     /// the dock already gone from on top of it: a patch of blur, floating on its own. The
     /// other way round, the frame in between has the bar without its blur, which is what a
     /// raise shows too and reads as nothing.
+    /// </para>
+    /// <para>
+    /// Then a look at what is in front, since the dock may be coming down in front of a window
+    /// that fills its display: it does not stand aside for one while it is up on request, and
+    /// waiting for the next look would leave it over the game for up to a quarter of a second.
+    /// So the caller has to have stopped counting the dock as up before it calls this.
+    /// </para>
     /// </remarks>
     public void Lower(nint window)
     {
         LetDown();
 
-        if (_chrome is not { } chrome || !chrome.CanGoUnder(window))
+        if (_chrome is { } chrome && chrome.CanGoUnder(window))
         {
-            return;
+            if (_backdrop is { IsVisible: true } backdrop && backdrop.Hwnd != 0)
+            {
+                NativeMethods.SetWindowPos(
+                    backdrop.Hwnd, window, 0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            }
+
+            chrome.GoUnder(window);
+            RestackBackdrop();
         }
 
-        if (_backdrop is { IsVisible: true } backdrop && backdrop.Hwnd != 0)
-        {
-            NativeMethods.SetWindowPos(
-                backdrop.Hwnd, window, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
-        }
-
-        chrome.GoUnder(window);
-        RestackBackdrop();
+        CheckFront();
     }
 
     /// <summary>
@@ -1566,56 +1668,52 @@ public sealed partial class DockWindow : Window
     /// <remarks>
     /// The list in force, not the stored one, so a program added in the settings dialog is
     /// honoured before Save — and one removed there stops being honoured on Cancel. Asked
-    /// only while the pointer is down at the edge; an empty list, the usual case, costs
-    /// nothing even then.
+    /// a few times a second by <see cref="CheckFront"/>, and whenever the pointer is down at
+    /// the edge; an empty list, the usual case, costs nothing either way.
     /// </remarks>
     private bool IsFullscreenAppInFront() =>
         _applied.NoRevealApps is { Count: > 0 } apps
         && _foreground.FillingDisplay(_display) is { } program
         && FullscreenApps.Contains(apps, program);
 
-    // ---- standing aside for an excluded app ----------------------------------------------
+    // ---- what is in front -----------------------------------------------------------------
 
     /// <summary>
-    /// Runs the stand-aside watch while the Exclusions list has anything on it, and brings it
-    /// up to date now.
+    /// Looks at what is in front of the dock's display, and puts the dock and its handle where
+    /// that wants them: away while a window fills the display, back once there is none, and the
+    /// handle over whatever is not a program on the Exclusions page. The rules are
+    /// <see cref="DockFront"/>'s; this reads what they are asked and moves the windows they
+    /// answer for.
     /// </summary>
+    /// <param name="foregroundChanged">
+    /// True when this is the foreground changing, which is when a window that floats may have
+    /// come up over the handle — see <see cref="HandleWindow.KeepOnTop"/>.
+    /// </param>
     /// <remarks>
+    /// <para>
+    /// <b>The dock is not on top of anything that fills its display</b> — a game, a video, a
+    /// presentation, or a window maximized with the taskbar showing — whatever <em>Always on
+    /// top</em> says; asked on 2026-09-30, fullscreen first and maximized the same day. It hides
+    /// as auto-hide would (<see cref="AutoHideController.Yield"/>): slides away, pops back up
+    /// from the bottom when the pointer is held against the edge, and slides away again once
+    /// the pointer has left. It went under such a window at first, which left nothing to see
+    /// when it came back up; hiding was asked for the same day, for the animation. Only the
+    /// foreground is asked, as the Exclusions page has always asked it: overlays are never the
+    /// foreground, and a window that is has the user's attention — so a maximized window left
+    /// behind while the user works on the other display has the dock back over it.
+    /// </para>
+    /// <para>
+    /// <b>A program on the Exclusions page outranks all of that</b>: the dock goes under it as
+    /// well as away — under first, so the slide happens behind the game rather than over it —
+    /// and the edge does not bring it back: the pointer's ways of bringing the dock up stand
+    /// down for such a program by themselves.
+    /// </para>
+    /// <para>
     /// A timer and a hook both. The hook answers a change of foreground the moment it happens —
     /// alt-tabbing back into a game with the dock set to float would otherwise show the dock
     /// over it for up to a tick — and the timer catches what no foreground change announces: a
-    /// game that goes fullscreen while already in front, or a window that raised the dock.
-    /// </remarks>
-    private void SyncAsideWatch()
-    {
-        var wanted = !_closed && _chrome is not null && _applied.NoRevealApps is { Count: > 0 };
-        if (wanted != _asideWatch.IsEnabled)
-        {
-            if (wanted)
-            {
-                _asideWatch.Start();
-                HookForeground();
-            }
-            else
-            {
-                _asideWatch.Stop();
-                UnhookForeground();
-            }
-        }
-
-        CheckAside();
-    }
-
-    /// <summary>
-    /// Stands the dock aside while a program on the Exclusions page is in front and fills the
-    /// dock's display, and lets it back once that is over.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The pointer's ways of bringing the dock up — the edge, the hover — already stand down
-    /// for such a program. This covers the rest: a dock set to float above everything, which
-    /// sat over the game for as long as the game was played, and a dock that was started, or
-    /// restarted, while the game was in front, which came up on top of it.
+    /// window maximized, restored or made fullscreen while already in front, a window that
+    /// raised the dock, a window moved over the dock or away from it.
     /// </para>
     /// <para>
     /// Safe to call as often as anything likes: it acts only on a change, and checks where the
@@ -1623,33 +1721,98 @@ public sealed partial class DockWindow : Window
     /// recomposes it.
     /// </para>
     /// </remarks>
-    private void CheckAside()
+    private void CheckFront(bool foregroundChanged = false)
     {
         if (_closed || _chrome is null)
         {
             return;
         }
 
-        if (IsFullscreenAppInFront())
+        // The taskbar, Alt+Tab, Start and the like come and go over whatever is in front, and
+        // everything holds still for them — see ForegroundApp.IsPassingShellInFront.
+        var marked = false;
+        if (!ForegroundApp.IsPassingShellInFront())
         {
-            StandAside(WindowsApi.GetForegroundWindow());
+            var excluded = IsFullscreenAppInFront();
+
+            // The general test is not asked once the list has answered, which settles it.
+            var action = DockFront.Decide(
+                excluded,
+                filledInFront: !excluded && ForegroundApp.FillsWorkArea(_workArea));
+
+            switch (action)
+            {
+                case FrontAction.HideOutranked:
+                    StandAside(WindowsApi.GetForegroundWindow());
+                    _autoHide?.Yield(true);
+                    break;
+
+                case FrontAction.Hide:
+                    StepBack();
+                    _autoHide?.Yield(true);
+                    break;
+
+                case FrontAction.Show:
+                    StepBack();
+                    _autoHide?.Yield(false);
+                    break;
+            }
+
+            marked = excluded != _excludedInFront;
+            _excludedInFront = excluded;
         }
-        else
+
+        if (!CheckSight() && marked)
         {
-            StepBack();
+            SyncHandle();
         }
+
+        KeepHandleOnTop(overOthers: foregroundChanged);
+        KeepHiddenInPlace();
+    }
+
+    /// <summary>
+    /// Keeps the handle at the top of the topmost band, over the dock's own windows as well as
+    /// everything else — see <see cref="HandleWindow.KeepOnTop"/>.
+    /// </summary>
+    /// <remarks>
+    /// Asked by every look at what is in front, and straight after the dock puts itself at the
+    /// top of the band — a raise or a hold — since that lands it over the handle, and the
+    /// bar's shadow, which the dock draws in its own window, falls across the handle's strip.
+    /// The band changing with <em>Always on top</em> is covered by the look that every re-apply
+    /// of the settings ends with.
+    /// </remarks>
+    private void KeepHandleOnTop(bool overOthers = false)
+    {
+        if (_handle is not { } handle)
+        {
+            return;
+        }
+
+        ReadOnlySpan<nint> dock = [_chrome?.Hwnd ?? 0, _backdrop?.Hwnd ?? 0];
+        handle.KeepOnTop(overOthers, dock);
     }
 
     /// <summary>
     /// Takes the dock, and the sheet behind it, out of the topmost band and puts them under
-    /// <paramref name="game"/>.
+    /// <paramref name="game"/>, a program on the Exclusions page filling the dock's display in
+    /// front.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Out of the band through <see cref="ApplyAlwaysOnTop"/>, which is what decides the band,
-    /// so everything that re-applies the settings keeps it that way; a lift's hold is let go as
-    /// well. Then under the game, if the dock is not already: leaving the band puts a window at
-    /// the top of the ordinary one, over the game. The sheet goes first, as in
-    /// <see cref="Lower"/>, so no frame shows the blur over the game without the dock.
+    /// so everything that re-applies the settings keeps it that way; a hold is let go as well,
+    /// every time — no lift gets the dock over a listed program, but one held up when the
+    /// program came to the front would otherwise stay over it. Then under the game, if the
+    /// dock is not already: leaving the band puts a window at the top of the ordinary one, over
+    /// the game. The sheet goes first, as in <see cref="Lower"/>, so no frame shows the blur
+    /// over the game without the dock.
+    /// </para>
+    /// <para>
+    /// Only for the list's programs since the dock began to hide for anything else that fills
+    /// the display; it hides for these as well, and being under the game is what keeps its
+    /// slide away out of sight.
+    /// </para>
     /// </remarks>
     private void StandAside(nint game)
     {
@@ -1658,10 +1821,11 @@ public sealed partial class DockWindow : Window
             return;
         }
 
+        LetDown();
+
         if (_asideFor == 0)
         {
             _asideFor = game;
-            LetDown();
             ApplyAlwaysOnTop(_applied.AlwaysOnTop);
         }
 
@@ -1732,17 +1896,21 @@ public sealed partial class DockWindow : Window
     // ---- the handle -----------------------------------------------------------
 
     /// <summary>
-    /// Shows the handle while it has a hidden dock to mark, and puts it under where that dock
-    /// will come up.
+    /// Shows the handle while it has a dock out of sight to mark, and puts it under where that
+    /// dock will come up.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Called wherever the sheet behind the bar is synced — the bar changing shape, the window
-    /// moving, a settings change — and whenever auto-hide moves the dock between shown and
-    /// hidden. Most of those are nothing to the handle, so it is cheap when there is no handle
-    /// to show and does nothing when there is one already in place: <see cref="HandleWindow"/>
-    /// checks before it moves, fades or recolours anything, as every window here must, since
-    /// this runs on every frame of the dock's slide and of the dialog's demonstration wave.
+    /// moving, a settings change — whenever auto-hide moves the dock between shown and hidden,
+    /// and whenever the dock goes out of sight or comes back into it, or a program on the
+    /// Exclusions page comes to the front or leaves it. Whether the dock can be seen is not
+    /// asked here but read from what <see cref="CheckSight"/> last found, since this runs far
+    /// too often for a walk of the windows. Most of those are nothing to the handle, so it is
+    /// cheap when there is no handle to show and does nothing when there is one already in
+    /// place: <see cref="HandleWindow"/> checks before it moves, fades or recolours anything, as
+    /// every window here must, since this runs on every frame of the dock's slide and of the
+    /// dialog's demonstration wave.
     /// </para>
     /// <para>
     /// The settings in force, not the stored ones, so the dialog previews it like everything
@@ -1756,26 +1924,9 @@ public sealed partial class DockWindow : Window
             return;
         }
 
-        var marking = MarksHiddenDock();
-
-        // What is in front is looked at only while there is a handle to put aside for it.
-        if (marking != _handleWatch.IsEnabled)
-        {
-            if (marking)
-            {
-                // Now rather than on the first tick, so a dock that hides while a game fills the
-                // screen does not put a handle over the game for a quarter of a second first.
-                _fullscreenInFront = IsHandleOutranked();
-                _handleWatch.Start();
-            }
-            else
-            {
-                _handleWatch.Stop();
-                _fullscreenInFront = false;
-            }
-        }
-
-        if (!marking || _fullscreenInFront)
+        // Anything that fills the display but a program on the Exclusions page keeps it — the
+        // dock has hidden for that, and the edge brings it back up over it.
+        if (!MarksDock())
         {
             _handle?.Hide();
             return;
@@ -1800,8 +1951,6 @@ public sealed partial class DockWindow : Window
             _applied.HandleMatchesDock,
             _applied.HandleWidth);
 
-        _handleTarget = DockHandle.Target(bounds, _workArea.Bottom, _handleScale);
-
         _handle ??= new HandleWindow();
         _handle.SetLook(fallback: BarPalette.Parse(EffectiveBarColor(_applied)));
         _handle.Place(bounds);
@@ -1809,55 +1958,98 @@ public sealed partial class DockWindow : Window
     }
 
     /// <summary>
-    /// True when there is a dock for the handle to mark: it is asked for, auto-hide is what has
-    /// the dock away, and the dock is going or gone — or the settings dialog is open, which
-    /// shows it under the dock so its width can be seen while it is set.
+    /// True when there is a dock for the handle to mark: it is asked for, and the dock is out of
+    /// sight — hidden as auto-hide hides it, or on screen under the windows in front — or the
+    /// settings dialog is open; and no program on the Exclusions page is in front. The rule is
+    /// <see cref="DockFront.Marks"/>'s.
     /// </summary>
     /// <remarks>
-    /// Auto-hide, and not the tray's <em>Hide dock</em> with auto-hide off. That dock was put
-    /// away on purpose and only the tray brings it back, so a mark offering it back would be
-    /// offering something the pointer cannot do.
+    /// Whether auto-hide is on or not, since 2026-09-30. It used to mark only a dock that
+    /// auto-hide had put away, and the setting greyed out without it — but a dock hides for a
+    /// maximized or fullscreen window in front whatever the setting, and one that does not
+    /// float is out of sight under any window over it. Hidden counts when the dock hides itself
+    /// and was not put away from the tray. It only marks: the edge is what brings the dock up.
     /// </remarks>
-    private bool MarksHiddenDock() =>
-        _applied is { ShowHandle: true, AutoHide: true }
-        && _autoHide is { } autoHide
-        && (_previewing || autoHide.Visibility is DockVisibility.Hiding or DockVisibility.Hidden);
+    private bool MarksDock() =>
+        _autoHide is { } autoHide
+        && DockFront.Marks(
+            _applied.ShowHandle,
+            _excludedInFront,
+            _previewing,
+            hides: autoHide.Hides && !autoHide.IsPutAway,
+            autoHide.Visibility,
+            _outOfSight);
 
     /// <summary>
-    /// True when the pointer is resting on the handle — the handle as it is up, not while it
-    /// fades out under a dock already on its way back.
+    /// Asks again whether the dock can be seen, and brings the handle up to date if that has
+    /// changed.
     /// </summary>
-    private bool IsPointerOnHandle() =>
-        _handle is { IsShown: true }
-        && !_handleTarget.IsEmpty
-        && NativeMethods.GetCursorPos(out var cursor)
-        && _handleTarget.Contains(cursor.X, cursor.Y);
-
-    /// <summary>
-    /// True when the handle has to step aside: something in front has taken the whole display,
-    /// or a program on the Exclusions page is in front and fills it.
-    /// </summary>
+    /// <returns>True when it changed, and the handle has been brought up to date.</returns>
     /// <remarks>
-    /// Both, because they are asked differently. The first is about any program, and has to
-    /// tell a fullscreen one from an ordinary maximized window. The second is the edge's own
-    /// stand-down, asked the edge's way: a listed program filling the display counts however it
-    /// got there, so wherever the edge stands down for it, the handle is not drawn over it
-    /// either. With the list empty it costs nothing.
+    /// <para>
+    /// Asked a few times a second by <see cref="CheckFront"/>, and straight after anything the
+    /// dock does to its own place in the z-order — a lift, a hold, a lowering — so the handle
+    /// goes as the dock comes up and returns as it goes back under, rather than up to a quarter
+    /// of a second later. Only of a dock that is shown, settled and wanting a handle: a dock on
+    /// its way somewhere is marked, or not, by auto-hide's own state, and a walk of the windows
+    /// above the dock is not paid for a handle that is turned off.
+    /// </para>
+    /// <para>
+    /// Out of sight means none of the bar can be seen, not some of it — see
+    /// <see cref="WindowChrome.IsHiddenAt"/>. A dock half under a window is plain to see, and
+    /// the pointer brings it up by going to the half that shows.
+    /// </para>
     /// </remarks>
-    private bool IsHandleOutranked() =>
-        ForegroundApp.IsFullscreen(_display) || IsFullscreenAppInFront();
-
-    /// <summary>Puts the handle aside while something fills the display, and back when it goes.</summary>
-    private void OnHandleWatch(object? sender, EventArgs e)
+    private bool CheckSight()
     {
-        var fullscreen = IsHandleOutranked();
-        if (fullscreen == _fullscreenInFront)
+        var outOfSight = !_closed
+            && _applied.ShowHandle
+            && _autoHide is { Visibility: DockVisibility.Shown }
+            && IsBarOutOfSight();
+
+        if (outOfSight == _outOfSight)
         {
-            return;
+            return false;
         }
 
-        _fullscreenInFront = fullscreen;
+        _outOfSight = outOfSight;
         SyncHandle();
+        return true;
+    }
+
+    /// <summary>How many points along the bar are looked at to decide whether it can be seen.</summary>
+    private const int SightPoints = 5;
+
+    /// <summary>
+    /// True when nothing of the bar at rest can be seen, for the windows of other programs lying
+    /// over it.
+    /// </summary>
+    /// <remarks>
+    /// Points along its middle, spread evenly and kept off its ends: the ends are rounded, and
+    /// a window stopping just short of one would otherwise leave a sliver of dock that the point
+    /// under it calls covered.
+    /// </remarks>
+    private bool IsBarOutOfSight()
+    {
+        if (_chrome is not { } chrome)
+        {
+            return false;
+        }
+
+        var bar = RestingBarOnScreen();
+        if (bar.IsEmpty)
+        {
+            return false;
+        }
+
+        Span<Point> points = stackalloc Point[SightPoints];
+        var y = bar.Top + (bar.Height / 2);
+        for (var i = 0; i < SightPoints; i++)
+        {
+            points[i] = new Point(bar.Left + (bar.Width * (i + 0.5) / SightPoints), y);
+        }
+
+        return chrome.IsHiddenAt(points);
     }
 
     /// <summary>Toggles the dock between shown and hidden, from the tray menu.</summary>
@@ -2036,7 +2228,27 @@ public sealed partial class DockWindow : Window
             settings.EdgeAlignment));
         var top = (int)Math.Round(screen.WorkArea.Bottom - height - margin);
 
-        Place(left, IsDockShown ? top : CurrentTop(), width, height);
+        // Where it hides: the whole window below where its bottom is when shown, and a little
+        // more, worked out here in the same physical pixels and the same scale as the shown
+        // place. It used to be left to auto-hide, as the shown top plus the window's height in
+        // WPF's units — and WPF's idea of the height lags a change of scale like its idea of
+        // the scale does. After a wake on 2026-09-30 the dock had been counted on the 4K display
+        // for a moment, and hid at 1266 + 142 ÷ 1.5 + 4 = 1364 instead of 1412: the top of the
+        // bar left showing over the taskbar, for as long as it stayed hidden.
+        var hidden = top + height + (int)Math.Round(HiddenGap * scale);
+        _hiddenPlace = (left, hidden, width, height);
+
+        // A hidden dock is put where it hides as surely as a shown one where it shows, rather
+        // than left where it happens to be — which is what kept that wrong place. One on its
+        // way out is left to its slide.
+        var y = _autoHide?.Visibility switch
+        {
+            DockVisibility.Hidden => hidden,
+            DockVisibility.Hiding => CurrentTop(),
+            _ => top
+        };
+
+        Place(left, y, width, height);
 
         // At either end that leaves the window reaching past the side of the screen by the
         // slack beside the bar, which is transparent — but a label is not, and it is kept
@@ -2046,18 +2258,58 @@ public sealed partial class DockWindow : Window
             (screen.WorkArea.Right - left) / scale);
 
         // Auto-hide works in the window's own units, which are the target display's once it
-        // has arrived there.
+        // has arrived there — all but across, where the edge answers under the bar, which is
+        // read off the screen in physical pixels, and within the display in the same.
         //
         // The reveal edge is the display's bottom, not the work area's — the work area
         // stops at the top of the taskbar, and anchoring there made the whole taskbar
-        // count as "at the edge". Its sides are the display's too: a dock moved to one end
-        // reaches past the side of the screen with the slack around it, and that slack must
-        // not reach onto the display next door.
-        _autoHide?.AnchorTo(
-            top / scale,
-            screen.Bounds.Bottom / scale,
-            screen.Bounds.Left / scale,
-            screen.Bounds.Right / scale);
+        // count as "at the edge". Its sides are the display's too: a bar wider than its
+        // screen must not reach onto the display next door.
+        _autoHide?.AnchorTo(top / scale, hidden / scale, screen.Bounds.Bottom / scale, screen.Bounds);
+    }
+
+    /// <summary>
+    /// How far below where its bottom is when shown the window's top goes when it hides, in
+    /// DIPs — so nothing of it, shadow included, is left on the screen.
+    /// </summary>
+    private const double HiddenGap = 4;
+
+    /// <summary>
+    /// Where the window goes when hidden, in physical pixels, as it was last worked out — see
+    /// <see cref="KeepHiddenInPlace"/>.
+    /// </summary>
+    private (int X, int Y, int Width, int Height)? _hiddenPlace;
+
+    /// <summary>
+    /// Puts a hidden dock back where it hides, if anything has moved it since.
+    /// </summary>
+    /// <remarks>
+    /// Asked by every look at what is in front, a few times a second, and it costs one
+    /// <c>GetWindowRect</c> while the dock is hidden and nothing otherwise. The re-placing that
+    /// every change of display and scale runs puts a hidden dock right; this is for a move that
+    /// comes after the last of them, or without one — Windows moving windows about as the
+    /// displays come back from sleep, say. A dock left partly on the screen while it counts as
+    /// hidden is the worst of both: seen, and in the way, while nothing about it expects the
+    /// pointer. Within a pixel, since the slide away lands through WPF's units.
+    /// </remarks>
+    private void KeepHiddenInPlace()
+    {
+        if (_autoHide is not { Visibility: DockVisibility.Hidden }
+            || _hiddenPlace is not { } place
+            || _chrome is not { } chrome
+            || !NativeMethods.GetWindowRect(chrome.Hwnd, out var actual))
+        {
+            return;
+        }
+
+        if (Math.Abs(actual.Left - place.X) <= 1 && Math.Abs(actual.Top - place.Y) <= 1
+            && Math.Abs(actual.Right - actual.Left - place.Width) <= 1
+            && Math.Abs(actual.Bottom - actual.Top - place.Height) <= 1)
+        {
+            return;
+        }
+
+        Place(place.X, place.Y, place.Width, place.Height);
     }
 
     /// <summary>
@@ -2065,7 +2317,7 @@ public sealed partial class DockWindow : Window
     /// </summary>
     private Size _heldSize;
 
-    /// <summary>Where the window is now, for leaving a hidden dock where auto-hide put it.</summary>
+    /// <summary>Where the window is now, for leaving a dock on its way out to its slide.</summary>
     private int CurrentTop() =>
         _chrome is { } chrome && NativeMethods.GetWindowRect(chrome.Hwnd, out var actual)
             ? actual.Top

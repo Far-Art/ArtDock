@@ -147,15 +147,28 @@ public sealed class WindowChrome
             NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
 
     /// <summary>
-    /// True when a window of another program lies over the dock somewhere, in the dock's own
-    /// band — one that <see cref="BringToTop"/> would lift it above.
+    /// True when a window of another program lies over the dock somewhere — one that a lift
+    /// would have to get it above.
     /// </summary>
+    /// <param name="bar">The bar at rest, in physical screen pixels.</param>
     /// <remarks>
+    /// <para>
     /// Asked before lifting, so a dock with nothing over it is left where it is. Re-asserting
     /// a z-order that is already right still re-composes the window, and the pointer resting
     /// on an uncovered dock would otherwise do that once per visit for nothing.
+    /// </para>
+    /// <para>
+    /// Two tests in one walk. A window in the dock's own band counts wherever it lies over the
+    /// dock's window, which reaches up into the room the wave grows into. A window of the other
+    /// band — one that floats over a dock that does not — counts only where it lies over the
+    /// bar: the dock's window reaches down behind the taskbar, to give the bar's shadow
+    /// somewhere to fall, and the taskbar floats, so counted there it would have every dock
+    /// that does not float covered for good. What that second test is for is a window that
+    /// floats lying over the bar of a dock that does not, which the edge has to be able to lift
+    /// the dock over.
+    /// </para>
     /// </remarks>
-    public bool IsCovered()
+    public bool IsCovered(Rect bar)
     {
         if (!NativeMethods.GetWindowRect(_hwnd, out var dock))
         {
@@ -165,13 +178,113 @@ public sealed class WindowChrome
         var band = IsTopmostWindow(_hwnd);
         var ownProcess = (uint)Environment.ProcessId;
 
-        // Other-band windows passed over, not stopped at — see WindowAbove for why.
         for (var window = Above(_hwnd); window != 0; window = Above(window))
         {
-            if (IsTopmostWindow(window) != band
-                || !NativeMethods.GetWindowRect(window, out var rect)
-                || rect.Left >= dock.Right || rect.Right <= dock.Left
-                || rect.Top >= dock.Bottom || rect.Bottom <= dock.Top
+            if (!NativeMethods.GetWindowRect(window, out var rect) || !TakesThePointer(window))
+            {
+                continue;
+            }
+
+            var over = IsTopmostWindow(window) == band
+                ? rect.Left < dock.Right && rect.Right > dock.Left
+                  && rect.Top < dock.Bottom && rect.Bottom > dock.Top
+                : !bar.IsEmpty
+                  && rect.Left < bar.Right && rect.Right > bar.Left
+                  && rect.Top < bar.Bottom && rect.Bottom > bar.Top;
+
+            if (!over)
+            {
+                continue;
+            }
+
+            WindowsApi.GetWindowThreadProcessId(window, out var process);
+            if (process != ownProcess)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when every one of <paramref name="points"/>, in physical screen pixels, lies under
+    /// a window of another program over the dock — so nothing of the dock there can be seen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What decides whether the dock is out of sight, for the handle that marks it then. Every
+    /// point rather than any: a dock partly covered can still be seen, and has no need of a
+    /// mark. Points rather than the bar's whole rectangle because two windows side by side —
+    /// snapped halves — can hide a bar that neither covers alone.
+    /// </para>
+    /// <para>
+    /// Any band, since a window that floats hides the dock as well as one that does not. One
+    /// walk for all the points, stopped as soon as the last is found covered — a dock that is
+    /// buried is usually buried by the first window above it.
+    /// </para>
+    /// </remarks>
+    public bool IsHiddenAt(ReadOnlySpan<Point> points)
+    {
+        if (points.IsEmpty)
+        {
+            return false;
+        }
+
+        Span<bool> hidden = stackalloc bool[points.Length];
+        var left = points.Length;
+        var ownProcess = (uint)Environment.ProcessId;
+
+        for (var window = Above(_hwnd); window != 0 && left > 0; window = Above(window))
+        {
+            if (!NativeMethods.GetWindowRect(window, out var rect) || !TakesThePointer(window))
+            {
+                continue;
+            }
+
+            WindowsApi.GetWindowThreadProcessId(window, out var process);
+            if (process == ownProcess)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < points.Length; i++)
+            {
+                if (!hidden[i]
+                    && points[i].X >= rect.Left && points[i].X < rect.Right
+                    && points[i].Y >= rect.Top && points[i].Y < rect.Bottom)
+                {
+                    hidden[i] = true;
+                    left--;
+                }
+            }
+        }
+
+        return left == 0;
+    }
+
+    /// <summary>
+    /// True when a window of another program lies over <paramref name="hwnd"/> — one that can
+    /// be seen and takes the pointer, in any band.
+    /// </summary>
+    /// <remarks>
+    /// For the handle, which floats and has to stay in view: whatever is over a window that
+    /// floats floats as well, and has come to the front since.
+    /// </remarks>
+    public static bool IsUnderAnother(nint hwnd)
+    {
+        if (!NativeMethods.GetWindowRect(hwnd, out var own))
+        {
+            return false;
+        }
+
+        var ownProcess = (uint)Environment.ProcessId;
+
+        for (var window = Above(hwnd); window != 0; window = Above(window))
+        {
+            if (!NativeMethods.GetWindowRect(window, out var rect)
+                || rect.Left >= own.Right || rect.Right <= own.Left
+                || rect.Top >= own.Bottom || rect.Bottom <= own.Top
                 || !TakesThePointer(window))
             {
                 continue;
@@ -179,6 +292,29 @@ public sealed class WindowChrome
 
             WindowsApi.GetWindowThreadProcessId(window, out var process);
             if (process != ownProcess)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// True when any of <paramref name="windows"/> is above <paramref name="hwnd"/> in the
+    /// z-order, wherever either is on the screen. Zeros are ignored.
+    /// </summary>
+    /// <remarks>
+    /// For the handle and the dock's own windows, which are this process's and so passed over
+    /// by <see cref="IsUnderAnother"/>. No test of where they lie: only the order matters, and
+    /// on the fallback path the sheet has a shadow of DWM's, which reaches past the window's
+    /// rectangle.
+    /// </remarks>
+    public static bool IsUnderAny(nint hwnd, ReadOnlySpan<nint> windows)
+    {
+        for (var window = Above(hwnd); window != 0; window = Above(window))
+        {
+            if (windows.Contains(window))
             {
                 return true;
             }
@@ -229,7 +365,7 @@ public sealed class WindowChrome
 
     private static nint Above(nint window) => NativeMethods.GetWindow(window, NativeMethods.GW_HWNDPREV);
 
-    private static bool IsTopmostWindow(nint window) =>
+    public static bool IsTopmostWindow(nint window) =>
         ((uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_EXSTYLE) & NativeMethods.WS_EX_TOPMOST) != 0;
 
     /// <summary>

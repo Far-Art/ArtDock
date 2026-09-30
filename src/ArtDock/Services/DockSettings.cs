@@ -364,9 +364,19 @@ public sealed class DockSettings
     /// Whether the dock floats above other windows.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// On by default, which is what a dock is for. Turned off it behaves like an ordinary
-    /// window and can be covered — worth having for anyone who wants it out of the way of a
-    /// full-screen window without giving up the dock altogether.
+    /// window and can be covered — worth having for anyone who wants it out of the way of
+    /// every window, not only a maximized or fullscreen one, without giving up the dock
+    /// altogether.
+    /// </para>
+    /// <para>
+    /// Not over a window that fills the dock's display, either way: while a window in front is
+    /// maximized there or fullscreen — a game, a video, a browser maximized with the taskbar
+    /// showing — the dock hides as <see cref="AutoHide"/> would, and comes back up over it
+    /// only when the pointer reaches the bottom edge; and not at all over one of
+    /// <see cref="NoRevealApps"/>.
+    /// </para>
     /// </remarks>
     public bool AlwaysOnTop { get; set; } = true;
 
@@ -385,21 +395,23 @@ public sealed class DockSettings
     public int RevealDelayMs { get; set; } = 300;
 
     /// <summary>
-    /// Whether a slim handle marks where the dock is while auto-hide has it tucked away.
+    /// Whether a slim handle marks where the dock is while it cannot be seen — slid away by
+    /// auto-hide, or under the windows in front.
     /// </summary>
     /// <remarks>
     /// <para>
     /// The phone's home indicator, on a desktop: a short bar just above the taskbar, under
-    /// where the dock will come up. A hidden dock otherwise leaves no trace that it is there at
-    /// all, and the handle is a target as well as a mark — resting the pointer on it for the
-    /// reveal delay brings the dock back, as holding it against the edge does. Only auto-hide
-    /// leaves a dock for it to mark; one hidden from the tray was put away on purpose, and is
-    /// left without one.
+    /// where the dock will come up. A dock out of sight otherwise leaves no trace that it is
+    /// there at all. A mark and nothing more: resting the pointer on it brought the dock up
+    /// until 2026-09-30, and was taken away on request, so the edge is the one way up. It
+    /// floats over everything but the programs of <see cref="NoRevealApps"/>, which the dock
+    /// does not come up over. One hidden from the tray was put away on purpose, and is left
+    /// without one.
     /// </para>
     /// <para>
-    /// On by default. It only ever appears once auto-hide is on, which is itself a choice, and
-    /// a dock that hides without a trace is the harder one to get used to. A settings file
-    /// written before this existed has no such property, so it comes up on as well.
+    /// On by default. Until 2026-09-30 it appeared only with auto-hide on, and the name is from
+    /// then. A settings file written before this existed has no such property, so it comes up
+    /// on as well.
     /// </para>
     /// </remarks>
     public bool ShowHandle { get; set; } = true;
@@ -418,8 +430,8 @@ public sealed class DockSettings
 
     /// <summary>
     /// The programs the dock stays down for: while one of them is in front and fills the
-    /// dock's display, holding the pointer against the edge neither brings a hidden dock
-    /// back nor lifts a covered one.
+    /// dock's display, the dock is under it, holding the pointer against the edge neither
+    /// brings a hidden dock back nor lifts a covered one, and no handle is shown over it.
     /// </summary>
     /// <remarks>
     /// Full paths to their executables, so the settings dialog can say which is which, but

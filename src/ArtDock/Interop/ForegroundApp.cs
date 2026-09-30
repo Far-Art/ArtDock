@@ -67,43 +67,80 @@ internal sealed class ForegroundApp
         return _path;
     }
 
-    /// <summary>A title bar: <c>WS_BORDER | WS_DLGFRAME</c>.</summary>
-    private const uint WS_CAPTION = 0x00C0_0000;
-
     /// <summary>
-    /// True when the window in front has taken the whole of <paramref name="display"/> for
-    /// itself — a game, a video, a presentation — whichever program it belongs to.
+    /// True when the window in front covers all of <paramref name="workArea"/> — maximized on
+    /// that display, or fullscreen there — whichever program it belongs to.
     /// </summary>
-    /// <param name="display">The display's bounds in physical pixels.</param>
+    /// <param name="workArea">The work area of the dock's display, in physical pixels.</param>
     /// <remarks>
     /// <para>
-    /// What the handle an auto-hidden dock leaves behind steps aside for. Any program, not only
-    /// the ones on the Exclusions page — those it steps aside for as well, by the list's own
-    /// test (<c>DockWindow.IsFullscreenAppInFront</c>). A topmost window over a fullscreen game
-    /// is also what stops the game's frames going straight to the display.
+    /// What the dock hides for, whatever <em>Always on top</em> says, until the pointer brings
+    /// it back. Any program, not only the ones on the Exclusions page — those it hides for as
+    /// well, by the list's own test (<c>DockWindow.IsFullscreenAppInFront</c>), and stays away.
+    /// Asked on 2026-09-30 for fullscreen windows, and the same day for maximized ones: the
+    /// dock floats above the taskbar, inside the work area, so a window maximized with the
+    /// taskbar showing lies right over it, and <em>Always on top</em> had the dock drawn over
+    /// the bottom of that window.
     /// </para>
     /// <para>
-    /// Not a maximized window with a title bar, which fills the display where the taskbar hides
-    /// itself and is an ordinary window there — see <see cref="FullscreenApps.IsFullscreen"/>,
-    /// and for why "maximized" alone is the wrong question. Geometry and window state only, with
-    /// no program looked up, so it is cheap enough to ask a few times a second.
+    /// The work area rather than the display: a maximized window stops at the taskbar, and a
+    /// fullscreen one covers more than the work area, so one question answers for both. That
+    /// retired the one this used to ask — whether a window filling the display was fullscreen
+    /// or only maximized, which took a window's style and state to tell, and was easy to get
+    /// wrong: a game's borderless fullscreen is a maximized popup with no title bar, so "not
+    /// maximized" never meant fullscreen — since both now get the same answer. Geometry first,
+    /// and only then the desktop ruled out, which settles it for nearly every window without
+    /// reading its class: it is asked four times a second for as long as the dock runs.
     /// </para>
     /// </remarks>
-    public static bool IsFullscreen(Rect display)
+    public static bool FillsWorkArea(Rect workArea)
     {
         var window = WindowsApi.GetForegroundWindow();
-        if (window == 0 || !NativeMethods.GetWindowRect(window, out var bounds) || IsDesktop(window))
+        if (window == 0 || !NativeMethods.GetWindowRect(window, out var bounds))
         {
             return false;
         }
 
-        var style = (uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_STYLE);
+        var rect = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+        return FullscreenApps.Fills(rect, workArea) && !IsDesktop(window);
+    }
 
-        return FullscreenApps.IsFullscreen(
-            new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top),
-            display,
-            maximized: WindowsApi.IsZoomed(window),
-            captioned: (style & WS_CAPTION) == WS_CAPTION);
+    /// <summary>
+    /// True while the window in front is one of the shell's passing surfaces — the taskbar,
+    /// the task switcher, Task View, Start, search, the notification centre, the lock screen —
+    /// which come to the front over whatever the user is working in, and go.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the dock holds still for: while one is in front, the dock does neither of the things
+    /// the window in front would otherwise have it do. Since the dock began to hide for a window
+    /// filling its display, on 2026-09-30, each change of what is in front can slide it away or
+    /// back, and these are not the user leaving the window they were in. Read off this machine
+    /// the same day: Alt+Tab's switcher is a window of Explorer's, class
+    /// <c>XamlExplorerHostIslandWindow</c>, titled <i>Task Switching</i>, and exactly the main
+    /// display's work area — taken for a maximized window it would have slid the dock away for
+    /// every Alt+Tab, and taken for nothing it would have slid a dock hidden for a maximized
+    /// window up for every Alt+Tab over one. A click on the taskbar is the same question.
+    /// </para>
+    /// <para>
+    /// By class, which is all these have in common. Start, search, the notification centre and
+    /// the lock screen are top-level <c>Windows.UI.Core.CoreWindow</c>s of their hosts; Windows
+    /// 10's switcher and Task View are <c>MultitaskingViewFrame</c>; <c>ForegroundStaging</c> is
+    /// Explorer's own, passed through while the foreground moves. A Store app's window is not a
+    /// <c>CoreWindow</c> at the top level — its frame, <c>ApplicationFrameWindow</c>, is — and a
+    /// File Explorer window is <c>CabinetWClass</c>, so no program's window is caught. The
+    /// desktop is not one of these: clicking the wallpaper is leaving the window in front, and
+    /// brings the dock back (<see cref="IsDesktop"/>).
+    /// </para>
+    /// </remarks>
+    public static bool IsPassingShellInFront()
+    {
+        var window = WindowsApi.GetForegroundWindow();
+        return window != 0
+            && WindowsApi.GetWindowClass(window) is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd"
+                or "XamlExplorerHostIslandWindow" or "MultitaskingViewFrame" or "ForegroundStaging"
+                or "Windows.UI.Core.CoreWindow" or "TopLevelWindowForOverflowXamlIsland"
+                or "NotifyIconOverflowWindow";
     }
 
     /// <summary>

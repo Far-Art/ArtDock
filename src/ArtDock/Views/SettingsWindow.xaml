@@ -584,11 +584,11 @@
                             </Grid>
                         </Border>
 
-                        <!-- Greyed with auto-hide off: only auto-hide leaves a dock for the handle
-                             to mark. Its width greys with the handle, and the slider with the
-                             match, the way the taskbar colour greys the manual colour. It has no
-                             choice of look: it always inverts what is behind it. -->
-                        <Border x:Name="HandleCard" Style="{StaticResource Card}">
+                        <!-- Never greyed out: with auto-hide off it marks a dock that is under
+                             other windows. Its width greys with the handle, and the slider with
+                             the match, the way the taskbar colour greys the manual colour. It has
+                             no choice of look: it always inverts what is behind it. -->
+                        <Border Style="{StaticResource Card}">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>

@@ -7,7 +7,7 @@ using ArtDock.Services;
 namespace ArtDock.Tests;
 
 /// <summary>
-/// Covers where the handle an auto-hidden dock leaves behind goes.
+/// Covers where the handle that marks a dock out of sight goes, and how it looks.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,9 +20,10 @@ namespace ArtDock.Tests;
 /// <para>
 /// What matters: it is centred on the dock wherever the dock sits along its edge; as wide as
 /// the bar when it matches the dock, and a width in DIPs — so wider in pixels at 150% — when it
-/// does not; just above the taskbar and never on it; in whole pixels; and the place the pointer
-/// counts as on it reaches down to the taskbar and no further, because below the taskbar is the
-/// reveal edge, which is a way back of its own.
+/// does not; just above the taskbar and never on it; and in whole pixels. Nothing here is about
+/// the pointer: the handle is a mark only, and the edge below the taskbar is what brings the
+/// dock up. Where the pointer counted as on it was tested here until 2026-09-30, when resting
+/// on it stopped bringing the dock.
 /// </para>
 /// </remarks>
 public class DockHandleTests
@@ -141,34 +142,6 @@ public class DockHandleTests
         var handle = DockHandle.Place(1000, 1560, MainWorkBottom, 1, matchDock: false, double.NaN);
 
         Assert.Equal(DockHandle.DefaultWidth, handle.Width);
-    }
-
-    [Fact]
-    public void The_pointer_counts_as_on_it_a_little_above_and_down_to_the_taskbar_and_no_further()
-    {
-        var handle = DockHandle.Place(1000, 1560, MainWorkBottom, 1, matchDock: false, width: 140);
-        var target = DockHandle.Target(handle, MainWorkBottom, 1);
-
-        Assert.Equal(handle.Left, target.Left);
-        Assert.Equal(handle.Right, target.Right);
-        Assert.Equal(handle.Top - DockHandle.Reach, target.Top);
-        Assert.Equal(MainWorkBottom, target.Bottom);
-    }
-
-    [Fact]
-    public void The_reach_above_it_scales_with_the_display()
-    {
-        var handle = DockHandle.Place(-2400, -1560, WideWorkBottom, 1.5, matchDock: true, width: 140);
-        var target = DockHandle.Target(handle, WideWorkBottom, 1.5);
-
-        Assert.Equal(handle.Top - 9, target.Top);
-        Assert.Equal(WideWorkBottom, target.Bottom);
-    }
-
-    [Fact]
-    public void No_handle_is_nowhere_to_point()
-    {
-        Assert.True(DockHandle.Target(Rect.Empty, MainWorkBottom, 1).IsEmpty);
     }
 
     // ---- the inverted look ------------------------------------------------------
