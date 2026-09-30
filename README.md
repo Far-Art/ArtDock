@@ -428,7 +428,7 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        libraries, installed apps, the dock's handle, what
                        the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
-                       install folder
+                       install folder, the shell's images' transparency
 LICENSE                MIT
 docs/step-2-transparency.md
 docs/packs.md          the language-pack and icon-set formats
@@ -937,7 +937,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and twenty-two tests cover the cosine falloff (peak, range boundary,
+Five hundred and twenty-four tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1040,6 +1040,11 @@ over blue and check which comes back on top: a solid colour reads the same eithe
 which is how the first build shipped every picture upside down with all the others passing.
 The shell hands a thumbnail over with its rows the other way round from an icon's, and a
 header that says otherwise.
+
+Two more hold the shell's transparency to what it is: an icon and a thumbnail of grey at half
+alpha, written for the test, must come back as that grey at half alpha. The shell's pixels are
+straight rather than premultiplied, and read as premultiplied they came back white — which drew
+the Recycle Bin's glass as a white box and put a white fringe round the Settings gear.
 
 Nine cover the pins that act rather than open. The one that matters guards the other
 direction: an ordinary target — an `.exe`, a `shell:` place, an AUMID, a web address, the

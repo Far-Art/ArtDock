@@ -183,6 +183,17 @@ public static class ShellIcons
     /// directly: top-down every time, and the header positive every time. So the caller says
     /// which it asked for, because nothing in the bitmap will.
     /// </para>
+    /// <para>
+    /// Both come back with <b>straight</b> alpha, not premultiplied, and the bitmap does not say
+    /// that either. Measured: the Recycle Bin, the Settings gear, This PC, Downloads, Task
+    /// Manager and Explorer all have partly clear pixels brighter than their alpha, which no
+    /// premultiplied pixel can be, and so do the thumbnails of PNGs with transparency; a grey
+    /// at half alpha comes back as 128 in every channel, where premultiplied it would be 64.
+    /// Read as premultiplied, the colour of every partly clear pixel is added at full
+    /// strength. Opaque and fully clear pixels read the same either way, which is why most
+    /// icons looked right — while the Recycle Bin's glass came out as a white box, and the
+    /// gear's antialiased edge as a white fringe. <c>ShellImageAlphaTests</c> holds it.
+    /// </para>
     /// </remarks>
     private static ImageSource? ToImageSource(nint hbitmap, bool topDown)
     {
@@ -214,7 +225,7 @@ public static class ShellIcons
             height,
             96,
             96,
-            PixelFormats.Pbgra32,
+            PixelFormats.Bgra32,
             palette: null,
             pixels,
             stride);
