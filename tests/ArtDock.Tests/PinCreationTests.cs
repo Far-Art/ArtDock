@@ -82,6 +82,58 @@ public class PinCreationTests : IDisposable
     }
 
     [Fact]
+    public void TheDefaultName_OfAFileOrFolder_IsTheOneItWasPinnedUnder()
+    {
+        // What the item editor's Reset puts back, so it has to be the name the pin started
+        // with, however the pin was made.
+        var document = File("Cover art.psd");
+        var folder = Path.Combine(_root, "Screenshots");
+        Directory.CreateDirectory(folder);
+        var gone = Path.Combine(_root, "gone.psd");
+        var explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+
+        Assert.Equal("Cover art", PinnedAppsService.DefaultLabel(document, null));
+        Assert.Equal("Screenshots", PinnedAppsService.DefaultLabel(folder, null));
+        Assert.Equal(PinnedAppsService.CreateChosenPin(gone).Label, PinnedAppsService.DefaultLabel(gone, null));
+        Assert.Equal(PinnedAppsService.CreatePin(explorer)!.Label, PinnedAppsService.DefaultLabel(explorer, null));
+    }
+
+    [Theory]
+    [InlineData("start")]
+    [InlineData("thispc")]
+    [InlineData("userfolder")]
+    [InlineData("downloads")]
+    [InlineData("recyclebin")]
+    [InlineData("settings")]
+    public void TheDefaultName_OfAPreset_IsTheOneTheAddMenuGivesIt(string key)
+    {
+        // There is no file to name these from, so the menu's own name is the only right one —
+        // the shell's name for This PC or the Recycle Bin is not it in every language.
+        var pin = DockPresets.Create(key)!;
+
+        Assert.Equal(pin.Label, PinnedAppsService.DefaultLabel(pin.TargetPath, pin.Aumid));
+    }
+
+    [Theory]
+    [InlineData("https://www.example.com/some/page", "example.com")]
+    [InlineData("http://example.org", "example.org")]
+    public void TheDefaultName_OfAWebAddress_IsItsSite(string target, string expected)
+    {
+        Assert.Equal(expected, PinnedAppsService.DefaultLabel(target, null));
+    }
+
+    [Theory]
+    [InlineData("ms-settings:display")]
+    [InlineData("artdock:showdesktop")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void WhatHasNoNameOfItsOwn_HasNoDefault(string? target)
+    {
+        // Reset is greyed for these rather than offering the address back as a name.
+        Assert.Null(PinnedAppsService.DefaultLabel(target, null));
+    }
+
+    [Fact]
     public void ADocument_NeverShowsARunningDot()
     {
         // What opens a document is its editor, whose window belongs to whatever pin starts

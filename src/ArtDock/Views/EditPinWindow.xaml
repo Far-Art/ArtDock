@@ -70,9 +70,19 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Name}" />
                         <TextBox x:Name="NameBox" Grid.Column="1" VerticalAlignment="Center" />
+
+                        <!-- Puts back the name the item would be given if it were pinned now,
+                             which its tooltip shows. Greyed while that is the name already. -->
+                        <Button
+                            x:Name="ResetNameButton"
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            AutomationProperties.Name="{DynamicResource EditItem.ResetName.Name}"
+                            Content="{DynamicResource EditItem.ResetName}" />
                     </Grid>
                 </Border>
 

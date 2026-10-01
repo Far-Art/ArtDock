@@ -74,6 +74,13 @@ public sealed partial class EditPinWindow : Window
     /// </summary>
     private (string? Target, bool IsFolder)? _folderCheck;
 
+    /// <summary>
+    /// The name <em>Reset</em> puts back, and for which target it was asked — a file's version
+    /// resource or a trip to the shell, so asked once per target rather than on every keystroke
+    /// in the name box.
+    /// </summary>
+    private (string? Target, string? Name)? _defaultName;
+
     public EditPinWindow(DockItem item, IconSet? iconSet = null)
     {
         InitializeComponent();
@@ -116,16 +123,26 @@ public sealed partial class EditPinWindow : Window
 
         // The dock holds this item's label open while the dialog is up, so a name being
         // typed should appear there as it is typed rather than only after saving.
-        NameBox.TextChanged += (_, _) => RaisePreview();
+        NameBox.TextChanged += (_, _) =>
+        {
+            RaisePreview();
+            ShowDefaultName();
+        };
 
+        ResetNameButton.Click += (_, _) => ResetName();
         BrowseButton.Click += (_, _) => ChooseImage();
         BrowseTargetButton.Click += (_, _) => ChooseTarget();
 
         // The icon follows what the item opens, so a changed target re-reads it — the
         // preview would otherwise keep showing the old app's glyph. On lost focus rather
         // than on every keystroke: resolving an icon is a COM round trip to the shell, and
-        // every half-typed path would cost one.
-        TargetBox.LostFocus += (_, _) => RefreshIcon();
+        // every half-typed path would cost one. The default name follows it for the same
+        // reason, and at the same cost.
+        TargetBox.LostFocus += (_, _) =>
+        {
+            RefreshIcon();
+            ShowDefaultName();
+        };
         ResetIconButton.Click += (_, _) => UseOwnIcon();
         CustomizeButton.Checked += (_, _) => Customize();
         CustomizeButton.Unchecked += (_, _) => CustomizePanel.Visibility = Visibility.Collapsed;
@@ -134,6 +151,7 @@ public sealed partial class EditPinWindow : Window
         SaveButton.Click += (_, _) => { DialogResult = true; };
 
         RefreshIcon();
+        ShowDefaultName();
 
         Loaded += (_, _) =>
         {
@@ -549,7 +567,55 @@ public sealed partial class EditPinWindow : Window
         {
             TargetBox.Text = dialog.FileName;
             RefreshIcon();
+            ShowDefaultName();
         }
+    }
+
+    /// <summary>
+    /// The name the item would be given if what it opens, as the dialog has it now, were pinned
+    /// afresh — see <see cref="PinnedAppsService.DefaultLabel"/>. Null when there is none.
+    /// </summary>
+    private string? DefaultName()
+    {
+        var target = Trimmed(TargetBox.Text);
+        if (_defaultName is { } known && string.Equals(known.Target, target, StringComparison.Ordinal))
+        {
+            return known.Name;
+        }
+
+        var name = PinnedAppsService.DefaultLabel(EditedTargetPath, EditedAumid);
+        _defaultName = (target, name);
+        return name;
+    }
+
+    /// <summary>
+    /// Offers <em>Reset</em> only when it would change the name, and says on it what it would
+    /// change it to.
+    /// </summary>
+    private void ShowDefaultName()
+    {
+        var name = DefaultName();
+        ResetNameButton.IsEnabled = name is not null
+            && !string.Equals(name, NameBox.Text.Trim(), StringComparison.Ordinal);
+        ResetNameButton.ToolTip = name is null ? null : Localizer.Format("EditItem.ResetName.Tip", name);
+    }
+
+    /// <summary>
+    /// Puts the default name in the box, where it is shown on the dock as typing would be, and
+    /// saved — or not — with everything else.
+    /// </summary>
+    private void ResetName()
+    {
+        if (DefaultName() is not { } name)
+        {
+            return;
+        }
+
+        NameBox.Text = name;
+
+        // The button greys as the name changes, and would leave the keyboard nowhere.
+        NameBox.Focus();
+        NameBox.CaretIndex = name.Length;
     }
 
     private void ChooseImage()

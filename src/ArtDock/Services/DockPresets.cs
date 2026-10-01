@@ -262,7 +262,7 @@ public static class DockPresets
             return new PinnedAppSetting
             {
                 Id = Guid.NewGuid().ToString("N"),
-                Label = place.Path == UserFolderTarget ? UserFolderLabel(place.Label) : place.Label,
+                Label = PlaceLabel(place),
                 TargetPath = place.Path
             };
         }
@@ -293,6 +293,39 @@ public static class DockPresets
         return PinnedAppsService.CreatePin(
             Environment.ExpandEnvironmentVariables(target.Path), target.Label);
     }
+
+    /// <summary>
+    /// What this menu calls a pin with this target or AUMID, in the dock's language as it is
+    /// now — or null for a pin the menu does not make.
+    /// </summary>
+    /// <remarks>
+    /// For the places, the commands and the Store apps, which have no file to be named from.
+    /// The apps that do have one are left out: <see cref="Create"/> names them from the file,
+    /// as any other pin is named.
+    /// </remarks>
+    public static string? PresetLabel(string? target, string? aumid)
+    {
+        if (aumid is { Length: > 0 })
+        {
+            var app = Array.Find(
+                StoreApps, entry => entry.Aumid.Equals(aumid.Trim(), StringComparison.OrdinalIgnoreCase));
+            return app.Key is null ? null : app.Label;
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return null;
+        }
+
+        var place = Array.Find(
+            [.. Places, .. Commands],
+            entry => entry.Path.Equals(target.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        return place.Key is null ? null : PlaceLabel(place);
+    }
+
+    private static string PlaceLabel((string Key, string Path, string Label) place) =>
+        place.Path == UserFolderTarget ? UserFolderLabel(place.Label) : place.Label;
 
     /// <summary>
     /// The presets a place dragged out of Explorer stands for, by the parsing name the drag

@@ -199,7 +199,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   **It asks first**, naming the item and showing its icon, while the dock holds that icon
   magnified with its label up; *Cancel* is the default, so Enter keeps it. The settings
   dialog's *Remove* does not ask, because nothing there is kept until Save. Editing covers its name,
-  its icon and what it opens. **A pinned picture is drawn as itself**: its Windows thumbnail,
+  its icon and what it opens. *Reset*, beside the name, puts back the one the item would be given
+  if what it opens were pinned now: a file's or a folder's own name, a program's description, the
+  Add menu's name for one of its entries, Explorer's for another place or a Store app, and a web
+  address's site. Its tooltip says which, and it is greyed while that is the name already, or
+  where there is none to go back to — an `ms-settings:` address, say. **A pinned picture is drawn as itself**: its Windows thumbnail,
   fitted to keep its shape, unless the editor's *Use the file's icon instead of a thumbnail* is
   ticked; an image chosen for the item wins over both. **A folder can be drawn by the dock
   instead of with Windows' folder icon**, in the manner of Windows 11's own folders:
@@ -231,7 +235,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   where that is someone else's folder or nobody's; the preset pins `shell:Profile`, which is
   whoever is signed in. It is named as Explorer names it, which is the account's full name
   rather than the folder's (*Artur Farmanov*, not *artur*). The name is read when the pin is
-  made, like every label, so an imported file keeps the exporter's until it is renamed.
+  made, like every label, so an imported file keeps the exporter's until it is renamed — or
+  until the editor's *Reset* reads it again.
   Downloads is pinned as `shell:Downloads` for the same reason, which also follows the folder
   if it has been moved out of the user folder.
   **Settings** is among the machine's own apps, and is pinned as the Store app it is, by its
@@ -1002,7 +1007,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and eighty-seven tests cover the cosine falloff (peak, range boundary,
+Six hundred tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1026,7 +1031,11 @@ those sliders flickering — that an arriving drop preview grows in *under* the 
 than instead of it, and that two spellings of the same path are one pin, which is what stops
 a second copy of an app being dropped onto the dock. The last group covers what may be
 pinned at all — a document and a folder by their own names, nothing where there is no file,
-and a pin that is not an executable never claiming to be running. And one pair guards the
+and a pin that is not an executable never claiming to be running. Thirteen more hold the item
+editor's *Reset* to the names pins are made with: a document, a folder, a program and a target
+that is not there as pinning names them, the Add menu's places, *Start* and *Settings* as the
+menu names them, a web address by its site, and no name at all for an address that has none of its own.
+And one pair guards the
 room the window keeps for a drop preview — that it is there before the drop needs it, and
 that a reorder does not ask for a different amount — because a window that resizes to fit a
 preview flinches every time one comes and goes.

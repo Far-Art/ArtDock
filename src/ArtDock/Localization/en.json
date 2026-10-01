@@ -230,6 +230,9 @@
 
     "EditItem.Title": "Edit dock item",
     "EditItem.Name": "Name",
+    "EditItem.ResetName": "Reset",
+    "EditItem.ResetName.Name": "Reset the name",
+    "EditItem.ResetName.Tip": "Back to “{0}”",
     "EditItem.Icon": "Icon",
     "EditItem.ChooseImage": "Choose image…",
     "EditItem.UseOwnIcon": "Use the app's own icon",

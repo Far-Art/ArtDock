@@ -153,6 +153,69 @@ public sealed class PinnedAppsService
             TargetPath = path
         };
 
+    /// <summary>
+    /// What a pin opening <paramref name="target"/>, or the Store app
+    /// <paramref name="aumid"/>, would be called if it were pinned now — which is what the item
+    /// editor's <em>Reset</em> puts back. Null when there is nothing to name it from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked of what the pin opens rather than kept from when it was made, so it follows a
+    /// target that has since been changed, and is in the dock's language as it is now. Each
+    /// kind of pin is named as the way it is made names it: a preset as the Add menu does, a
+    /// place or a Store app as Explorer shows it, and a file or folder as
+    /// <see cref="CreatePin"/> does — or, when it is not there, as
+    /// <see cref="CreateChosenPin"/> does.
+    /// </para>
+    /// <para>
+    /// A web address, which only the editor makes, is named for its site. Any other address —
+    /// <c>ms-settings:</c>, a command this build does not know — has no name of its own to go
+    /// back to, and turning it into one would be a guess.
+    /// </para>
+    /// </remarks>
+    public static string? DefaultLabel(string? target, string? aumid)
+    {
+        if (DockPresets.PresetLabel(target, aumid) is { } preset)
+        {
+            return preset;
+        }
+
+        if (aumid is { Length: > 0 })
+        {
+            return ShellNames.DisplayName($@"shell:AppsFolder\{aumid.Trim()}");
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return null;
+        }
+
+        var path = target.Trim();
+        if (path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+        {
+            return ShellNames.DisplayName(path);
+        }
+
+        var isDirectory = Directory.Exists(path);
+        if (isDirectory || File.Exists(path))
+        {
+            return LabelFor(path, isDirectory, fallbackLabel: null);
+        }
+
+        if (Uri.TryCreate(path, UriKind.Absolute, out var address) && !address.IsFile)
+        {
+            if (address.Scheme is not ("http" or "https") || address.Host.Length == 0)
+            {
+                return null;
+            }
+
+            var site = address.Host;
+            return site.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? site[4..] : site;
+        }
+
+        return Path.GetFileNameWithoutExtension(path) is { Length: > 0 } name ? name : null;
+    }
+
     /// <summary>Projects a stored pin onto the model the dock draws from.</summary>
     public static DockItem ToDockItem(PinnedAppSetting app) => new()
     {
