@@ -101,7 +101,6 @@ public sealed partial class EditPinWindow : Window
         _folderText = FolderArt.ParseText(item.FolderText);
         _tone = FolderArt.ParseTone(item.FolderSymbolTone);
 
-        BuildFontControls();
         BuildFolderControls();
 
         // A folder already customized opens with its customization out, which is what it is
@@ -116,10 +115,6 @@ public sealed partial class EditPinWindow : Window
         // The window takes the height of what it shows, which for a folder is a good deal more
         // than for anything else — but never more than the screen, where it scrolls instead.
         MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 40);
-
-        FontFamilyBox.SelectionChanged += (_, _) => RaisePreview();
-        FontStyleBox.SelectionChanged += (_, _) => RaisePreview();
-        FontSizeSlider.ValueChanged += (_, _) => RaisePreview();
 
         // The dock holds this item's label open while the dialog is up, so a name being
         // typed should appear there as it is typed rather than only after saving.
@@ -169,7 +164,7 @@ public sealed partial class EditPinWindow : Window
     /// <summary>The item being edited.</summary>
     public DockItem Item { get; }
 
-    /// <summary>Raised whenever the label styling changes, so the dock can show it live.</summary>
+    /// <summary>Raised as the name is typed, so the dock can show it live.</summary>
     public event EventHandler? PreviewChanged;
 
     private void RaisePreview() => PreviewChanged?.Invoke(this, EventArgs.Empty);
@@ -255,77 +250,6 @@ public sealed partial class EditPinWindow : Window
 
     private static string? Trimmed(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    /// <summary>Chosen typeface, or null to use the dock's default.</summary>
-    public string? EditedFontFamily =>
-        FontFamilyBox.SelectedIndex <= 0 ? null : FontFamilyBox.SelectedItem as string;
-
-    /// <summary>Chosen size, or null when it matches the dock's default.</summary>
-    public double? EditedFontSize =>
-        Math.Abs(FontSizeSlider.Value - DefaultFontSize) < 0.01 ? null : FontSizeSlider.Value;
-
-    /// <summary>
-    /// Chosen emphasis. Always explicit — there is no "leave it" entry.
-    /// </summary>
-    /// <remarks>
-    /// The family dropdown does have one, because a typeface the user never chose should
-    /// keep following the dock if the dock's default ever changes. Emphasis is different:
-    /// the dock's default is <c>Bold</c>, so an entry meaning "no override" would have to be
-    /// labelled Bold to be truthful, and would then sit next to the Bold entry doing the
-    /// same thing.
-    /// </remarks>
-    public string? EditedFontStyle => StyleKeys[Math.Max(0, FontStyleBox.SelectedIndex)];
-
-    /// <summary>Matches the dock's own default label size.</summary>
-    private const double DefaultFontSize = DockBar.DefaultTooltipSize;
-
-    /// <summary>Stored values behind the style dropdown, in the order it lists them.</summary>
-    private static readonly string[] StyleKeys = ["Regular", "Bold", "Italic", "BoldItalic"];
-
-    /// <summary>
-    /// Fills the font controls. The first entry in each dropdown means "leave it to the
-    /// dock", so an item that was never customised keeps following the default if that
-    /// default later changes.
-    /// </summary>
-    private void BuildFontControls()
-    {
-        FontFamilyBox.Items.Add(Localizer.Get("EditItem.DockDefault"));
-        foreach (var family in Fonts.SystemFontFamilies
-                     .Select(f => f.Source)
-                     .Distinct()
-                     .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase))
-        {
-            FontFamilyBox.Items.Add(family);
-        }
-
-        FontFamilyBox.SelectedIndex = 0;
-        if (Item.FontFamily is { Length: > 0 } chosen)
-        {
-            var index = FontFamilyBox.Items.IndexOf(chosen);
-            FontFamilyBox.SelectedIndex = index >= 0 ? index : 0;
-        }
-
-        foreach (var label in new[]
-                 {
-                     Localizer.Get("EditItem.Style.Regular"),
-                     Localizer.Get("EditItem.Style.Bold"),
-                     Localizer.Get("EditItem.Style.Italic"),
-                     Localizer.Get("EditItem.Style.BoldItalic")
-                 })
-        {
-            FontStyleBox.Items.Add(label);
-        }
-
-        // An item that has never been styled is drawn in the dock's default, so that is what
-        // the dropdown has to show — otherwise the dialog would name a weight the label in
-        // front of it is not using.
-        var stored = Array.IndexOf(StyleKeys, Item.FontStyle ?? string.Empty);
-        FontStyleBox.SelectedIndex = stored >= 0
-            ? stored
-            : Array.IndexOf(StyleKeys, DockBar.DefaultTooltipStyle);
-
-        FontSizeSlider.Value = Math.Clamp(Item.FontSize ?? DefaultFontSize, 8, 28);
-    }
 
     /// <summary>
     /// Fills the folder's controls, which Customize opens: the wheel, the swatches and the hex

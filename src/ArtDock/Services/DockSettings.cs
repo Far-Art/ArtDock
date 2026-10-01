@@ -74,16 +74,24 @@ public sealed class PinnedAppSetting
     /// </summary>
     public string? FolderSymbolTone { get; set; }
 
-    /// <summary>Typeface for this item's label. Null uses the dock's default.</summary>
+    /// <summary>
+    /// The label's typeface, as files written before the lettering was the dock's carry it.
+    /// </summary>
+    /// <remarks>
+    /// Read and never written. Every pin held the same lettering by then — the item editor
+    /// wrote its choice to all of them — so <see cref="DockSettings.AdoptPinLettering"/> takes
+    /// it from the first pin that has one into <see cref="DockSettings.LabelFontFamily"/> and
+    /// its two companions as the file is read, and empties these. Nothing else reads them.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FontFamily { get; set; }
 
-    /// <summary>Label size in points. Null uses the dock's default.</summary>
+    /// <summary>The label's size, read from older files as <see cref="FontFamily"/> is.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? FontSize { get; set; }
 
-    /// <summary>
-    /// Label emphasis: <c>Regular</c>, <c>Bold</c>, <c>Italic</c> or <c>BoldItalic</c>.
-    /// Null uses the dock's default.
-    /// </summary>
+    /// <summary>The label's emphasis, read from older files as <see cref="FontFamily"/> is.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FontStyle { get; set; }
 
     /// <summary>A divider rather than an application; launches nothing.</summary>
@@ -328,6 +336,36 @@ public sealed class DockSettings
     /// An icon chosen for one item (<see cref="PinnedAppSetting.IconPath"/>) wins over the set.
     /// </remarks>
     public string? IconSet { get; set; }
+
+    /// <summary>
+    /// The typeface of the label over a hovered icon, or null for the dock's own,
+    /// <c>Segoe UI</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dock's rather than each item's, with <see cref="LabelFontSize"/> and
+    /// <see cref="LabelFontStyle"/>: one dock, one lettering. Until 2026-10-01 these were
+    /// stored on every pin and chosen in the item editor, which wrote its choice to all of them
+    /// — so a dock with no pins had nowhere to keep it, and a pin added from the dock itself
+    /// came in with the default lettering beside the others. A file from then is read across
+    /// by <see cref="AdoptPinLettering"/>.
+    /// </para>
+    /// <para>
+    /// Null rather than the name written in, so a typeface nobody chose keeps following the
+    /// dock's own if that ever changes. A typeface that is not installed falls back the way
+    /// WPF falls back for any missing font.
+    /// </para>
+    /// </remarks>
+    public string? LabelFontFamily { get; set; }
+
+    /// <summary>The labels' size in points, or null for the dock's own, 14.</summary>
+    public double? LabelFontSize { get; set; }
+
+    /// <summary>
+    /// The labels' emphasis — <c>Regular</c>, <c>Bold</c>, <c>Italic</c> or <c>BoldItalic</c>
+    /// — or null for the dock's own, which is bold.
+    /// </summary>
+    public string? LabelFontStyle { get; set; }
 
     /// <summary>
     /// Whether the dock sweeps its own wave while the settings dialog is open.
@@ -615,6 +653,49 @@ public sealed class DockSettings
         return changed;
     }
 
+    /// <summary>
+    /// Takes the labels' lettering from the pins of a file written before it was the dock's,
+    /// and empties it from every pin. Returns true when it changed anything.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// From the first pin that carries any of the three, and all three from that one, since
+    /// the item editor wrote them together. Not simply the first pin: one added from the dock
+    /// after the lettering was chosen came in without any, and taking it would have put the
+    /// labels back to the default.
+    /// </para>
+    /// <para>
+    /// Only into a file that has no lettering of its own. One that has both was written by
+    /// hand, and what it says at the dock's level is the newer word.
+    /// </para>
+    /// </remarks>
+    public bool AdoptPinLettering()
+    {
+        var source = PinnedApps.Find(pin =>
+            pin.FontFamily is not null || pin.FontSize is not null || pin.FontStyle is not null);
+
+        if (source is null)
+        {
+            return false;
+        }
+
+        if (LabelFontFamily is null && LabelFontSize is null && LabelFontStyle is null)
+        {
+            LabelFontFamily = string.IsNullOrWhiteSpace(source.FontFamily) ? null : source.FontFamily;
+            LabelFontSize = source.FontSize;
+            LabelFontStyle = string.IsNullOrWhiteSpace(source.FontStyle) ? null : source.FontStyle;
+        }
+
+        foreach (var pin in PinnedApps)
+        {
+            pin.FontFamily = null;
+            pin.FontSize = null;
+            pin.FontStyle = null;
+        }
+
+        return true;
+    }
+
     /// <summary>Projects the tuning values into the geometry the dock actually uses.</summary>
     [JsonIgnore]
     public DockMetrics Metrics
@@ -658,6 +739,9 @@ public sealed class DockSettings
         BlurBackground = BlurBackground,
         IconShadows = IconShadows,
         IconSet = IconSet,
+        LabelFontFamily = LabelFontFamily,
+        LabelFontSize = LabelFontSize,
+        LabelFontStyle = LabelFontStyle,
         PreviewSweep = PreviewSweep,
         Edge = Edge,
         OffsetAlongEdge = OffsetAlongEdge,
@@ -691,9 +775,9 @@ public sealed class DockSettings
             FolderSymbol = app.FolderSymbol,
             FolderText = app.FolderText,
             FolderSymbolTone = app.FolderSymbolTone,
-            FontFamily = app.FontFamily,
-            FontSize = app.FontSize,
-            FontStyle = app.FontStyle,
+
+            // Not the pin's lettering, which is only ever read from an older file and is moved
+            // to the dock's as it is read — see AdoptPinLettering.
             IsSeparator = app.IsSeparator
         })]
     };

@@ -14,7 +14,7 @@ namespace ArtDock.Views;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Bound to the row's pin and to the icon set chosen on the Appearance page, so that choosing
+/// Bound to the row's pin and to the icon set chosen on the Icons page, so that choosing
 /// another set redraws the rows as it redraws the dock, without the list being rebuilt.
 /// </para>
 /// <para>

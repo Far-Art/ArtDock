@@ -230,9 +230,6 @@ public sealed class PinnedAppsService
         FolderText = app.FolderText,
         FolderSymbolTone = app.FolderSymbolTone,
         LinkTarget = ResolveLinkTarget(app.TargetPath),
-        FontFamily = app.FontFamily,
-        FontSize = app.FontSize,
-        FontStyle = app.FontStyle,
         IsSeparator = app.IsSeparator
     };
 

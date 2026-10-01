@@ -379,9 +379,9 @@ public sealed partial class DockWindow : Window
     /// Applies only the settings that change how the dock looks, not what is in it.
     /// </summary>
     /// <remarks>
-    /// This is the path a slider drag takes, so it must stay cheap: it touches geometry and
-    /// colour and nothing else. Rebuilding the items here — which is what used to happen —
-    /// meant re-reading every icon from the shell on each tick.
+    /// This is the path a slider drag takes, so it must stay cheap: it touches geometry, colour
+    /// and the labels' lettering and nothing else. Rebuilding the items here — which is what
+    /// used to happen — meant re-reading every icon from the shell on each tick.
     /// </remarks>
     public void ApplyAppearance(DockSettings settings)
     {
@@ -397,6 +397,10 @@ public sealed partial class DockWindow : Window
             _dock.RowAlignment = settings.EdgeAlignment;
             _dock.SetBarAppearance(EffectiveBarColor(settings), settings.BarOpacity);
             _dock.IconShadows = settings.IconShadows;
+
+            // Before the window is sized: a label in a bigger lettering needs more room above
+            // the bar, which is the room SizeToDock gives it.
+            _dock.SetLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
             ApplyBackdrop(settings.BlurBackground);
 
             if (_previewing)
@@ -672,9 +676,6 @@ public sealed partial class DockWindow : Window
                 pin.FolderSymbol,
                 pin.FolderText,
                 pin.FolderSymbolTone,
-                pin.FontFamily,
-                pin.FontSize?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                pin.FontStyle,
                 pin.IsSeparator ? "sep" : null)));
 
     /// <summary>
@@ -1203,8 +1204,8 @@ public sealed partial class DockWindow : Window
     /// <remarks>
     /// For the settings dialog's copy of the item editor. Editing from the dock's own menu
     /// has always done this — see <see cref="ShowEditDialog"/> — and the held label is the
-    /// point of the exercise: the font controls describe a label, so there has to be one on
-    /// screen for them to describe. Opened from the settings window they had nothing.
+    /// point of the exercise: the name box describes a label, so there has to be one on
+    /// screen for it to describe. Opened from the settings window it had nothing.
     /// </remarks>
     public void HoldItemLabel(DockItem? item)
     {
@@ -1219,10 +1220,8 @@ public sealed partial class DockWindow : Window
         _dock.FocusItem(item);
     }
 
-    /// <summary>Shows an edit in progress on the held label.</summary>
-    public void PreviewItemLabel(
-        string? label, string? fontFamily, double? fontSize, string? fontStyle) =>
-        _dock.PreviewLabelStyle(label, fontFamily, fontSize, fontStyle);
+    /// <summary>Shows a name being typed on the held label.</summary>
+    public void PreviewItemLabel(string? label) => _dock.PreviewLabel(label);
 
     /// <summary>
     /// Where an addition made from an item's menu belongs: immediately after that item, so
@@ -1284,18 +1283,17 @@ public sealed partial class DockWindow : Window
 
         var editor = new EditPinWindow(item, _iconSet);
 
-        // Style changes land on the dock as they are made, so the preview is the real
-        // thing rather than a swatch in a dialog — and on the item being edited, which is
-        // the one whose label the user is actually looking at.
-        editor.PreviewChanged += (_, _) => _dock.PreviewLabelStyle(
-            editor.EditedLabel, editor.EditedFontFamily, editor.EditedFontSize, editor.EditedFontStyle);
+        // A name lands on the dock as it is typed, so the preview is the real thing rather
+        // than a box in a dialog — and on the item being edited, which is the one whose label
+        // the user is actually looking at.
+        editor.PreviewChanged += (_, _) => _dock.PreviewLabel(editor.EditedLabel);
 
         // The dialog is modal, so this blocks until it closes; the hold and the focus both
         // have to be released either way, including if it throws.
         bool saved;
         HoldRevealed(true);
         var claim = _dock.FocusItem(item);
-        _dock.PreviewLabelStyle(item.Label, item.FontFamily, item.FontSize, item.FontStyle);
+        _dock.PreviewLabel(item.Label);
         try
         {
             saved = editor.ShowDialog() == true;
@@ -1318,7 +1316,8 @@ public sealed partial class DockWindow : Window
             return;
         }
 
-        // The name, the icon and what it opens belong to this item.
+        // The name, the icon and what it opens belong to this item. The lettering of its label
+        // is the dock's, and is set on the settings dialog's Icons page.
         pin.Label = editor.EditedLabel;
         pin.IconPath = editor.EditedIconPath;
         pin.UseIconNotThumbnail = editor.EditedUseIconNotThumbnail;
@@ -1328,16 +1327,6 @@ public sealed partial class DockWindow : Window
         pin.FolderSymbolTone = editor.EditedFolderSymbolTone;
         pin.TargetPath = editor.EditedTargetPath;
         pin.Aumid = editor.EditedAumid;
-
-        // The lettering does not. A dock whose labels are set in different faces reads as a
-        // dock that was assembled rather than designed, and the per-item choice was work the
-        // user had to redo for every icon to get the one result they wanted.
-        foreach (var target in settings.PinnedApps)
-        {
-            target.FontFamily = editor.EditedFontFamily;
-            target.FontSize = editor.EditedFontSize;
-            target.FontStyle = editor.EditedFontStyle;
-        }
 
         _settings.Save(settings);
     }

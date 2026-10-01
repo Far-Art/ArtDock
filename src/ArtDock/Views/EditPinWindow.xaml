@@ -2,13 +2,11 @@
     x:Class="ArtDock.Views.EditPinWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:loc="clr-namespace:ArtDock.Localization"
     Title="{DynamicResource EditItem.Title}"
     FlowDirection="{DynamicResource Language.FlowDirection}"
     Language="{DynamicResource Language.Tag}"
     Icon="/Assets/ArtDock.ico"
     Width="600"
-    MinHeight="680"
     SizeToContent="Height"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
@@ -47,11 +45,6 @@
 
         <Style x:Key="RowLabel" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
             <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-
-        <Style x:Key="GroupHeader" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="2,14,0,6" />
         </Style>
     </Window.Resources>
 
@@ -286,52 +279,9 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Style="{StaticResource GroupHeader}" Text="{DynamicResource EditItem.Label}" />
-
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="130" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Font}" />
-                            <ComboBox
-                                x:Name="FontFamilyBox"
-                                Grid.Column="1"
-                                Margin="0,0,8,0"
-                                MaxDropDownHeight="260" />
-                            <ComboBox x:Name="FontStyleBox" Grid.Column="2" />
-                        </Grid>
-
-                        <Grid Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="62" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource EditItem.Size}" />
-                            <Slider
-                                x:Name="FontSizeSlider"
-                                Grid.Column="1"
-                                Margin="0,0,12,0"
-                                VerticalAlignment="Center"
-                                Maximum="28"
-                                Minimum="8"
-                                TickFrequency="1"
-                                IsSnapToTickEnabled="True" />
-                            <TextBlock
-                                Grid.Column="2"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                loc:Localized.Key="EditItem.Size.Value"
-                                loc:Localized.Value="{Binding ElementName=FontSizeSlider, Path=Value}" />
-                        </Grid>
-                    </StackPanel>
-                </Border>
-
+                <!-- The label's lettering is not here: it is the whole dock's, and is set on
+                     the settings dialog's Icons page. The hint says where, for anyone who
+                     comes looking for it in the place it used to be. -->
                 <TextBlock
                     Margin="2,12,0,0"
                     Style="{StaticResource Hint}"

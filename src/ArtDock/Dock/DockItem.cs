@@ -63,17 +63,6 @@ public sealed class DockItem
     /// </summary>
     public string? LinkTarget { get; set; }
 
-    /// <summary>Typeface for this item's label. Null uses the dock's default.</summary>
-    public string? FontFamily { get; init; }
-
-    /// <summary>Label size in points. Null uses the dock's default.</summary>
-    public double? FontSize { get; init; }
-
-    /// <summary>
-    /// Label emphasis: <c>Regular</c>, <c>Bold</c>, <c>Italic</c> or <c>BoldItalic</c>.
-    /// </summary>
-    public string? FontStyle { get; init; }
-
     /// <summary>
     /// A spacer rather than an application: draws a divider and launches nothing.
     /// </summary>

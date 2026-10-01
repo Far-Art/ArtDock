@@ -20,7 +20,7 @@ place, so everything here applies to both.
 ```
 
 The *Open folder* buttons beside the *Language* picker (System page) and the *Icon set*
-picker (Appearance page) open these folders, creating them if they are not there yet. The
+picker (Icons page) open these folders, creating them if they are not there yet. The
 pickers read the folders again whenever the settings window comes back to the front, so a
 pack copied in while the window is open appears as soon as you switch back to it.
 

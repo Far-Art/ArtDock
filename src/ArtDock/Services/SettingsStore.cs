@@ -70,8 +70,10 @@ public sealed class SettingsStore
                 if (loaded is not null)
                 {
                     // Not written back: the ids only have to be unique while the dock runs,
-                    // and the next save stores them.
+                    // and the next save stores them — as it stores the lettering where it now
+                    // lives, which until then is read from the pins again at each start.
                     loaded.RepairPinIds();
+                    loaded.AdoptPinLettering();
                     _current = loaded;
                     LoadedFromDisk = true;
                 }
@@ -199,6 +201,7 @@ public sealed class SettingsStore
         }
 
         loaded.RepairPinIds();
+        loaded.AdoptPinLettering();
         return loaded;
     }
 

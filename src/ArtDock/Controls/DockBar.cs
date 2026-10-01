@@ -413,13 +413,23 @@ public sealed class DockBar : Canvas
     private const double SweepPeriodMs = 4200;
 
     /// <summary>
-    /// Candidate styling for the focused item's label, or null to use the item's own.
+    /// A name being typed for the focused item, shown on its label in place of its own; null
+    /// for its own.
     /// </summary>
     /// <remarks>
-    /// Set while the edit dialog is open so the styling is judged on the dock itself, at the
-    /// size and against the background it will actually be used at.
+    /// Set while the edit dialog is open so the name is judged on the dock itself, at the size
+    /// and against the background it will actually be shown at.
     /// </remarks>
-    private DockItem? _labelStyle;
+    private string? _labelPreview;
+
+    /// <summary>The labels' typeface, or null for <see cref="DefaultTooltipFont"/>.</summary>
+    private string? _labelFamily;
+
+    /// <summary>The labels' size in points, or null for <see cref="DefaultTooltipSize"/>.</summary>
+    private double? _labelSize;
+
+    /// <summary>The labels' emphasis, or null for <see cref="DefaultTooltipStyle"/>.</summary>
+    private string? _labelEmphasis;
 
     /// <summary>
     /// The sizes last actually painted, so a frame that would change nothing can be skipped.
@@ -1361,7 +1371,7 @@ public sealed class DockBar : Canvas
     /// </summary>
     public void ClearFocus()
     {
-        _labelStyle = null;
+        _labelPreview = null;
 
         if (_previewing && PreviewIndex() >= 0)
         {
@@ -1382,8 +1392,8 @@ public sealed class DockBar : Canvas
             EndGesture();
         }
 
-        // A previewed font may have been taller than anything actually pinned; dropping it
-        // gives the window its headroom back.
+        // A previewed name may have been in a script whose fallback font is taller than
+        // anything actually pinned; dropping it gives the window its headroom back.
         if (RefreshTooltipReserve())
         {
             RaisePreferredSizeChanged();
@@ -1393,36 +1403,66 @@ public sealed class DockBar : Canvas
     }
 
     /// <summary>
-    /// Renames and restyles the focused item's label, for previewing an edit in progress.
-    /// Does nothing if nothing is focused.
+    /// Renames the focused item's label, for previewing an edit in progress. Does nothing if
+    /// nothing is focused; blank shows the item's own name.
     /// </summary>
     /// <remarks>
-    /// The name is previewed alongside the font because the label on the dock is the whole
-    /// of what the editor is describing: typing a new name and seeing the old one still
-    /// sitting there reads as the preview having stopped working.
+    /// The label on the dock is what the editor's name box describes: typing a new name and
+    /// seeing the old one still sitting there reads as the preview having stopped working.
     /// </remarks>
-    public void PreviewLabelStyle(
-        string? label, string? fontFamily, double? fontSize, string? fontStyle)
+    public void PreviewLabel(string? label)
     {
         if (_focusIndex < 0 || _focusIndex >= _items.Count)
         {
             return;
         }
 
-        var source = _items[_focusIndex].Item;
-        _labelStyle = new DockItem
-        {
-            Id = source.Id,
-            Label = string.IsNullOrWhiteSpace(label) ? source.Label : label,
-            FontFamily = fontFamily,
-            FontSize = fontSize,
-            FontStyle = fontStyle
-        };
-
+        _labelPreview = string.IsNullOrWhiteSpace(label) ? null : label;
         _focusShowsLabel = true;
 
-        // A bigger label needs more room above the bar, and the preview is the whole point
-        // of this call — showing it clipped would defeat it.
+        // A name in another script can fall back to a taller font, and the preview is the
+        // whole point of this call — showing it clipped would defeat it.
+        if (RefreshTooltipReserve())
+        {
+            RaisePreferredSizeChanged();
+        }
+
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Sets the lettering of every label on the dock, and of the drop notice, which is drawn
+    /// as one. Null for any of the three is the dock's own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dock's rather than each item's — see <see cref="Services.DockSettings.LabelFontFamily"/>.
+    /// </para>
+    /// <para>
+    /// Cheap enough for every tick of the settings dialog's size slider: it lays the labels out
+    /// again and nothing else. And a no-op when nothing has changed, which is every tick of
+    /// every other slider.
+    /// </para>
+    /// </remarks>
+    public void SetLabelFont(string? family, double? size, string? style)
+    {
+        family = string.IsNullOrWhiteSpace(family) ? null : family;
+        style = string.IsNullOrWhiteSpace(style) ? null : style;
+
+        if (family == _labelFamily && size == _labelSize && style == _labelEmphasis)
+        {
+            return;
+        }
+
+        _labelFamily = family;
+        _labelSize = size;
+        _labelEmphasis = style;
+
+        // Every label laid out so far was laid out in the old lettering.
+        _tooltipLayouts.Clear();
+        _dropNoticeLayout = null;
+
+        // A bigger label needs more room above the bar, and a smaller one gives it back.
         if (RefreshTooltipReserve())
         {
             RaisePreferredSizeChanged();
@@ -1448,7 +1488,7 @@ public sealed class DockBar : Canvas
 
         _focusIndex = index;
         _focusShowsLabel = showLabel;
-        _labelStyle = null;
+        _labelPreview = null;
         PinFocusPointer(ease: moved);
         InvalidateVisual();
     }
@@ -1590,8 +1630,8 @@ public sealed class DockBar : Canvas
     /// <summary>True while a drop preview is on the dock.</summary>
     public bool IsShowingGhosts => _ghostItems.Count > 0;
 
-    /// <summary>What the dock is currently refusing to accept, and why. Null when nothing.</summary>
-    private DockItem? _dropNotice;
+    /// <summary>Why the dock is currently refusing a drop. Null when it is refusing nothing.</summary>
+    private string? _dropNotice;
 
     /// <summary>
     /// The notice's laid-out text, kept for the length of the refusal.
@@ -1612,38 +1652,20 @@ public sealed class DockBar : Canvas
     /// <remarks>
     /// A refused drop shows no preview by definition, so without this the dock answers a
     /// deliberate gesture with nothing at all — the cursor changes, in the source
-    /// application, and that is the whole of it. The message is drawn in the dock's own
-    /// label styling and at the top of the reserve those labels are measured for, so it
-    /// needs no more room than the tallest of them already has.
+    /// application, and that is the whole of it. The message is drawn in the labels'
+    /// lettering rather than like a system message — they are the only text this dock draws —
+    /// and at the top of the reserve those labels are measured for, so it needs no more room
+    /// than the tallest of them already has.
     /// </remarks>
     public void ShowDropNotice(string? message)
     {
-        if (string.Equals(_dropNotice?.Label, message, StringComparison.Ordinal))
+        if (string.Equals(_dropNotice, message, StringComparison.Ordinal))
         {
             return;
         }
 
         _dropNoticeLayout = null;
-
-        if (message is null)
-        {
-            _dropNotice = null;
-            InvalidateVisual();
-            return;
-        }
-
-        // Styled like the labels rather than like a system message: they are the only text
-        // this dock draws, and the reserve above the bar is measured from them.
-        var style = _labelStyle ?? _items.Find(visual => !visual.IsGhost)?.Item;
-        _dropNotice = new DockItem
-        {
-            Id = "drop-notice",
-            Label = message,
-            FontFamily = style?.FontFamily,
-            FontSize = style?.FontSize,
-            FontStyle = style?.FontStyle
-        };
-
+        _dropNotice = message;
         InvalidateVisual();
     }
 
@@ -2929,8 +2951,8 @@ public sealed class DockBar : Canvas
         return true;
     }
 
-    /// <summary>Lays the notice out, once per message and per scale.</summary>
-    private FormattedText NoticeLayout(DockItem notice)
+    /// <summary>Lays the notice out, once per message, per scale and per lettering.</summary>
+    private FormattedText NoticeLayout(string notice)
     {
         var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         if (_dropNoticeLayout is { } cached && Math.Abs(_dropNoticeDpi - pixelsPerDip) < 0.0001)
@@ -2939,11 +2961,11 @@ public sealed class DockBar : Canvas
         }
 
         var layout = new FormattedText(
-            notice.Label,
+            notice,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            TypefaceFor(notice),
-            Math.Clamp(notice.FontSize ?? DefaultTooltipSize, 6, 48),
+            LabelTypeface(),
+            LabelEmSize,
             TooltipText,
             pixelsPerDip)
         {
@@ -2969,7 +2991,7 @@ public sealed class DockBar : Canvas
         {
             if (_focusShowsLabel && _focusIndex < _items.Count)
             {
-                DrawTooltipFor(drawingContext, _focusIndex, _labelStyle ?? _items[_focusIndex].Item);
+                DrawTooltipFor(drawingContext, _focusIndex, _labelPreview);
             }
 
             return;
@@ -2987,20 +3009,28 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        DrawTooltipFor(drawingContext, labelled, _items[labelled].Item);
+        DrawTooltipFor(drawingContext, labelled);
     }
 
-    /// <summary>Draws one item's label bubble above it.</summary>
-    private void DrawTooltipFor(DrawingContext drawingContext, int index, DockItem item)
+    /// <summary>
+    /// Draws one item's label bubble above it, with <paramref name="label"/> in place of its own
+    /// name when one is given.
+    /// </summary>
+    private void DrawTooltipFor(DrawingContext drawingContext, int index, string? label = null)
     {
-        if (index < 0 || index >= _sizes.Length
-            || item.IsSeparator
-            || string.IsNullOrWhiteSpace(item.Label))
+        if (index < 0 || index >= _sizes.Length || index >= _items.Count
+            || _items[index].Item.IsSeparator)
         {
             return;
         }
 
-        var text = GetTooltipLayout(item);
+        label ??= _items[index].Item.Label;
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            return;
+        }
+
+        var text = GetTooltipLayout(label);
 
         var iconTop = BarBottom - Metrics.PaddingY - _sizes[index];
         var centreX = _iconsLeft + _offsets[index] + (_sizes[index] / 2) + SlotShift(index);
@@ -3023,8 +3053,8 @@ public sealed class DockBar : Canvas
     }
 
     /// <summary>
-    /// Re-measures how much headroom the labels in the dock need, including whatever
-    /// styling is currently being previewed.
+    /// Re-measures how much headroom the labels in the dock need, including whatever name is
+    /// currently being previewed.
     /// </summary>
     /// <returns>True when the reserve changed, which means the window has to grow or shrink.</returns>
     private bool RefreshTooltipReserve()
@@ -3041,12 +3071,12 @@ public sealed class DockBar : Canvas
                 continue;
             }
 
-            tallest = Math.Max(tallest, GetTooltipLayout(visual.Item).Height);
+            tallest = Math.Max(tallest, GetTooltipLayout(visual.Item.Label).Height);
         }
 
-        if (_labelStyle is { Label.Length: > 0 } style)
+        if (_labelPreview is { Length: > 0 } preview)
         {
-            tallest = Math.Max(tallest, GetTooltipLayout(style).Height);
+            tallest = Math.Max(tallest, GetTooltipLayout(preview).Height);
         }
 
         // The bubble, the gap under it, and a couple of pixels so it is not flush against
@@ -3063,19 +3093,19 @@ public sealed class DockBar : Canvas
         return true;
     }
 
-    /// <summary>Default typeface for labels, when an item does not override it.</summary>
+    /// <summary>The labels' typeface, when the settings do not choose one.</summary>
     /// <remarks>
-    /// Internal rather than private so the item editor can preview a label the same way the
-    /// dock draws one. Two copies of these numbers would drift, and the editor's whole job
-    /// is to show what the dock is about to do.
+    /// Internal rather than private so the settings dialog's Icons page can say what the
+    /// dock's own lettering is. Two copies of these numbers would drift, and the page has to
+    /// show what the dock is about to do.
     /// </remarks>
     internal const string DefaultTooltipFont = "Segoe UI";
 
-    /// <summary>Default label size, when an item does not override it.</summary>
+    /// <summary>The labels' size, when the settings do not choose one.</summary>
     internal const double DefaultTooltipSize = 14;
 
     /// <summary>
-    /// Default emphasis, when an item does not override it.
+    /// The labels' emphasis, when the settings do not choose one.
     /// </summary>
     /// <remarks>
     /// Bold, because a label is read against whatever happens to be behind the dock — a
@@ -3086,42 +3116,35 @@ public sealed class DockBar : Canvas
     internal const string DefaultTooltipStyle = "Bold";
 
     /// <summary>
-    /// Lays the tooltip label out, reusing the previous result while nothing about it has
-    /// changed.
+    /// Lays a label out, reusing the previous result while nothing about it has changed.
     /// </summary>
     /// <remarks>
-    /// The cache key covers the font as well as the text and DPI: two items can share a
-    /// label and still need different layouts.
+    /// Keyed by the text and the scale. Not by the lettering, which is one for the whole dock:
+    /// a change of it empties the cache instead — see <see cref="SetLabelFont"/>.
     /// </remarks>
-    private FormattedText GetTooltipLayout(DockItem item)
+    private FormattedText GetTooltipLayout(string label)
     {
         var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var signature = string.Join(
-            '',
-            item.Label,
-            item.FontFamily,
-            item.FontSize?.ToString(CultureInfo.InvariantCulture),
-            item.FontStyle,
-            pixelsPerDip.ToString(CultureInfo.InvariantCulture));
+        var signature = label + '\u001f' + pixelsPerDip.ToString(CultureInfo.InvariantCulture);
 
         if (_tooltipLayouts.TryGetValue(signature, out var cached))
         {
             return cached;
         }
 
-        // Previewing a font size walks through a new signature per slider tick, so the
-        // cache is emptied rather than allowed to accumulate one layout per value tried.
+        // Typing a name into the item editor walks through a new label per keystroke, so the
+        // cache is emptied rather than allowed to accumulate one layout per name tried.
         if (_tooltipLayouts.Count > 64)
         {
             _tooltipLayouts.Clear();
         }
 
         var layout = new FormattedText(
-            item.Label,
+            label,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
-            TypefaceFor(item),
-            Math.Clamp(item.FontSize ?? DefaultTooltipSize, 6, 48),
+            LabelTypeface(),
+            LabelEmSize,
             TooltipText,
             pixelsPerDip);
 
@@ -3129,16 +3152,17 @@ public sealed class DockBar : Canvas
         return layout;
     }
 
-    /// <summary>Builds an item's typeface, falling back to the dock's default.</summary>
-    private static Typeface TypefaceFor(DockItem item)
-    {
-        var family = string.IsNullOrWhiteSpace(item.FontFamily)
-            ? new FontFamily(DefaultTooltipFont)
-            : new FontFamily(item.FontFamily);
+    /// <summary>The labels' size as drawn, kept within what the bubble can hold.</summary>
+    private double LabelEmSize => Math.Clamp(_labelSize ?? DefaultTooltipSize, 6, 48);
 
-        // An item that has never been styled takes the dock's default rather than the
-        // typeface's own, which is what makes the default something other than regular.
-        var style = string.IsNullOrWhiteSpace(item.FontStyle) ? DefaultTooltipStyle : item.FontStyle;
+    /// <summary>The labels' typeface, from the lettering the settings chose and the dock's own.</summary>
+    private Typeface LabelTypeface()
+    {
+        var family = new FontFamily(_labelFamily ?? DefaultTooltipFont);
+
+        // A dock whose lettering was never chosen takes the dock's own emphasis rather than the
+        // typeface's, which is what makes the default something other than regular.
+        var style = _labelEmphasis ?? DefaultTooltipStyle;
 
         var italic = style is "Italic" or "BoldItalic";
         var bold = style is "Bold" or "BoldItalic";

@@ -138,17 +138,18 @@ public sealed partial class SettingsWindow : Window
     /// </remarks>
     public event EventHandler<DockItem?>? ItemBeingEdited;
 
-    /// <summary>Raised as the item editor's name and font controls change.</summary>
-    public event EventHandler<(string? Label, string? FontFamily, double? FontSize, string? FontStyle)>?
-        ItemLabelPreviewed;
+    /// <summary>Raised with the name as it is typed into the item editor.</summary>
+    public event EventHandler<string?>? ItemLabelPreviewed;
 
     /// <summary>
-    /// Raised with the id of the item the dock should hold up for the Items page — the selected
-    /// row, while that page is open — and with null when there is none.
+    /// Raised with the id of the item the dock should hold up — the row selected on the Items
+    /// page while that page is open, and an item with a label while the Icons page is — and
+    /// with null when there is none.
     /// </summary>
     /// <remarks>
-    /// Only while the page is open. The other pages have a demonstration of their own, and the
-    /// Size page's sweep would otherwise stand still on whatever row was selected last.
+    /// Only while one of those pages is open. The other pages have a demonstration of their
+    /// own, and the Size page's sweep would otherwise stand still on whatever row was selected
+    /// last.
     /// </remarks>
     public event EventHandler<string?>? ItemSelected;
 
@@ -165,12 +166,30 @@ public sealed partial class SettingsWindow : Window
     /// <summary>True once the user has pressed Save.</summary>
     public bool Saved { get; private set; }
 
-    /// <summary>The page that is open, so it can be returned to next time.</summary>
-    public int SelectedPage => Tabs.SelectedIndex;
+    /// <summary>
+    /// The pages, in the order they were numbered — the number <see cref="DockSettings.SettingsPage"/>
+    /// stores is a page's place in this list.
+    /// </summary>
+    /// <remarks>
+    /// Not the order the dialog shows them in. A page is numbered when it is added, at the end
+    /// of this list, so a page put anywhere else in the dialog moves no other page's number —
+    /// where numbering by position would reopen the dialog a page off for everyone whose file
+    /// names one. Icons came last, and stands below Behaviour.
+    /// </remarks>
+    private readonly TabItem[] _pages;
+
+    /// <summary>The page that is open, by its number, so it can be returned to next time.</summary>
+    public int SelectedPage => Math.Max(0, Array.IndexOf(_pages, Tabs.SelectedItem));
 
     public SettingsWindow(SettingsStore store)
     {
         InitializeComponent();
+
+        _pages =
+        [
+            SizePage, AppearancePage, BehaviourPage, ItemsPage, ExclusionsPage, PositionPage,
+            SystemPage, AboutPage, IconsPage
+        ];
 
         _store = store;
         _bottomMargin = store.Current.BottomMargin;
@@ -218,6 +237,10 @@ public sealed partial class SettingsWindow : Window
             // dance Windows requires to hand focus to a process that is not in front. The
             // same call the item editor has always made, for the same reason.
             AppLauncher.Activate(new WindowInteropHelper(this).Handle);
+
+            // A dialog that opens on the Icons page holds its item up from the start. Not from
+            // the constructor, which runs before anything is listening.
+            AnnounceSelectedItem();
         };
     }
 
@@ -236,6 +259,7 @@ public sealed partial class SettingsWindow : Window
         BlurCheck.IsChecked = settings.BlurBackground;
         IconShadowsCheck.IsChecked = settings.IconShadows;
         BuildIconSetList(settings.IconSet);
+        LoadLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
 
         _savedColors.Clear();
         _savedColors.AddRange(settings.CustomColors.Select(hex => BarPalette.ToHex(BarPalette.Parse(hex))));
@@ -259,7 +283,7 @@ public sealed partial class SettingsWindow : Window
         EdgeOffsetSlider.Value = settings.OffsetAlongEdge;
         ShowEdgeOffset();
         SelectScreen(settings.ScreenDeviceName, settings.ScreenDevicePath);
-        Tabs.SelectedIndex = Math.Clamp(settings.SettingsPage, 0, Tabs.Items.Count - 1);
+        Tabs.SelectedItem = _pages[Math.Clamp(settings.SettingsPage, 0, _pages.Length - 1)];
         ThemeBox.SelectedIndex = AppTheme.IndexOf(settings.Theme);
         BuildLanguageList(settings.Language);
 
@@ -286,8 +310,8 @@ public sealed partial class SettingsWindow : Window
         foreach (var slider in new[]
                  {
                      BaseSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
-                     OpacitySlider, RoundnessSlider, HideDelaySlider, RevealDelaySlider,
-                     HandleWidthSlider
+                     OpacitySlider, RoundnessSlider, LabelSizeSlider, HideDelaySlider,
+                     RevealDelaySlider, HandleWidthSlider
                  })
         {
             slider.ValueChanged += (_, _) => Preview();
@@ -341,6 +365,11 @@ public sealed partial class SettingsWindow : Window
         };
         LanguageFolderButton.Click += (_, _) => OpenPackFolder(PackKind.Language);
         IconSetFolderButton.Click += (_, _) => OpenPackFolder(PackKind.IconSet);
+
+        // Both previewed, as the size slider is, on the label the Icons page holds up. Their
+        // refills in a new language choose nothing, and pass while the pages are loading.
+        LabelFontBox.SelectionChanged += (_, _) => Preview();
+        LabelStyleBox.SelectionChanged += (_, _) => Preview();
         ReduceMotionCheck.Checked += (_, _) => Preview();
         ReduceMotionCheck.Unchecked += (_, _) => Preview();
 
@@ -436,6 +465,7 @@ public sealed partial class SettingsWindow : Window
         ResetSizeButton.Click += (_, _) => ResetSizePage();
         ResetPositionButton.Click += (_, _) => ResetPositionPage();
         ResetAppearanceButton.Click += (_, _) => ResetAppearancePage();
+        ResetIconsButton.Click += (_, _) => ResetIconsPage();
         ClearItemsButton.Click += (_, _) => ClearItems();
         ResetBehaviourButton.Click += (_, _) => ResetBehaviourPage();
         ResetSystemButton.Click += (_, _) => ResetSystemPage();
@@ -496,8 +526,11 @@ public sealed partial class SettingsWindow : Window
             BlurBackground = BlurCheck.IsChecked == true,
             IconShadows = IconShadowsCheck.IsChecked == true,
             IconSet = SelectedIconSet,
+            LabelFontFamily = SelectedLabelFont,
+            LabelFontSize = SelectedLabelSize,
+            LabelFontStyle = SelectedLabelStyle,
             PreviewSweep = SweepCheck.IsChecked == true,
-            SettingsPage = Tabs.SelectedIndex,
+            SettingsPage = SelectedPage,
             Edge = _edge,
 
             // To the slider's own step. It snaps to hundredths by adding them up from -1, and
@@ -862,11 +895,7 @@ public sealed partial class SettingsWindow : Window
 
         // The dock shows the label being edited, exactly as it does when the same editor is
         // opened from the dock's own menu.
-        editor.PreviewChanged += (_, _) => ItemLabelPreviewed?.Invoke(this, (
-            editor.EditedLabel,
-            editor.EditedFontFamily,
-            editor.EditedFontSize,
-            editor.EditedFontStyle));
+        editor.PreviewChanged += (_, _) => ItemLabelPreviewed?.Invoke(this, editor.EditedLabel);
 
         bool saved;
         ItemBeingEdited?.Invoke(this, edited);
@@ -887,76 +916,30 @@ public sealed partial class SettingsWindow : Window
 
         // Replaced rather than mutated. The pins in this list are the very objects the
         // store is holding, so editing one in place would survive Cancel — and a replace
-        // is also what tells the list box to redraw the row.
-        _pinned[index] = Restyle(
-            selected,
-            label: editor.EditedLabel,
-            iconPath: editor.EditedIconPath,
-            useIconNotThumbnail: editor.EditedUseIconNotThumbnail,
-            folderColor: editor.EditedFolderColor,
-            folderSymbol: editor.EditedFolderSymbol,
-            folderText: editor.EditedFolderText,
-            folderSymbolTone: editor.EditedFolderSymbolTone,
-            targetPath: editor.EditedTargetPath,
-            aumid: editor.EditedAumid,
-            editor);
-
-        // The lettering is the dock's rather than the item's, so it goes to every row. Only
-        // the edited item's own name, icon and target came from the dialog; the rest keep
-        // theirs and take the new styling.
-        for (var i = 0; i < _pinned.Count; i++)
-        {
-            if (i != index)
-            {
-                _pinned[i] = Restyle(
-                    _pinned[i],
-                    _pinned[i].Label,
-                    _pinned[i].IconPath,
-                    _pinned[i].UseIconNotThumbnail,
-                    _pinned[i].FolderColor,
-                    _pinned[i].FolderSymbol,
-                    _pinned[i].FolderText,
-                    _pinned[i].FolderSymbolTone,
-                    _pinned[i].TargetPath,
-                    _pinned[i].Aumid,
-                    editor);
-            }
-        }
-
+        // is also what tells the list box to redraw the row. Only this item: the editor has
+        // nothing that belongs to any other, now that the labels' lettering is the Icons
+        // page's.
+        _pinned[index] = Edited(selected, editor);
         PinnedList.SelectedIndex = index;
 
         _pinsEdited = true;
         Preview();
     }
 
-    /// <summary>A copy of a pin carrying the dialog's label styling.</summary>
-    private static PinnedAppSetting Restyle(
-        PinnedAppSetting source,
-        string label,
-        string? iconPath,
-        bool useIconNotThumbnail,
-        string? folderColor,
-        string? folderSymbol,
-        string? folderText,
-        string? folderSymbolTone,
-        string? targetPath,
-        string? aumid,
-        EditPinWindow editor) =>
+    /// <summary>A copy of a pin carrying what the item editor has for it.</summary>
+    private static PinnedAppSetting Edited(PinnedAppSetting source, EditPinWindow editor) =>
         new()
         {
             Id = source.Id,
-            Label = label,
-            TargetPath = targetPath,
-            Aumid = aumid,
-            IconPath = iconPath,
-            UseIconNotThumbnail = useIconNotThumbnail,
-            FolderColor = folderColor,
-            FolderSymbol = folderSymbol,
-            FolderText = folderText,
-            FolderSymbolTone = folderSymbolTone,
-            FontFamily = editor.EditedFontFamily,
-            FontSize = editor.EditedFontSize,
-            FontStyle = editor.EditedFontStyle,
+            Label = editor.EditedLabel,
+            TargetPath = editor.EditedTargetPath,
+            Aumid = editor.EditedAumid,
+            IconPath = editor.EditedIconPath,
+            UseIconNotThumbnail = editor.EditedUseIconNotThumbnail,
+            FolderColor = editor.EditedFolderColor,
+            FolderSymbol = editor.EditedFolderSymbol,
+            FolderText = editor.EditedFolderText,
+            FolderSymbolTone = editor.EditedFolderSymbolTone,
             IsSeparator = source.IsSeparator
         };
 
@@ -991,8 +974,8 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Tells the dock which item to hold up: the selected row while the Items page is open, and
-    /// none otherwise.
+    /// Tells the dock which item to hold up: the selected row while the Items page is open, an
+    /// item with a label while the Icons page is, and none otherwise.
     /// </summary>
     /// <remarks>
     /// By id, and announced as soon as the row is selected — which can be before the dock has
@@ -1003,7 +986,9 @@ public sealed partial class SettingsWindow : Window
     {
         var id = Tabs.SelectedItem == ItemsPage && PinnedList.SelectedItem is PinnedAppSetting pin
             ? pin.Id
-            : null;
+            : Tabs.SelectedItem == IconsPage
+                ? LabelledPin()?.Id
+                : null;
 
         if (id == _selectedItemId)
         {
@@ -1012,6 +997,40 @@ public sealed partial class SettingsWindow : Window
 
         _selectedItemId = id;
         ItemSelected?.Invoke(this, id);
+    }
+
+    /// <summary>
+    /// The item the Icons page holds up on the dock: the row selected on the Items page, or the
+    /// one nearest the middle — where the dock holds its wave with nothing selected — so long
+    /// as it has a label to show.
+    /// </summary>
+    /// <remarks>
+    /// Held as a selected row is, which labels it as a hovered icon is labelled: the page's
+    /// lettering has nothing to be judged on otherwise, the pointer being on the dialog. Never
+    /// a separator, which has no label, and so would show nothing.
+    /// </remarks>
+    private PinnedAppSetting? LabelledPin()
+    {
+        if (PinnedList.SelectedItem is PinnedAppSetting selected && HasLabel(selected))
+        {
+            return selected;
+        }
+
+        var middle = _pinned.Count / 2;
+        for (var distance = 0; distance <= middle; distance++)
+        {
+            foreach (var index in (ReadOnlySpan<int>)[middle - distance, middle + distance])
+            {
+                if (index >= 0 && index < _pinned.Count && HasLabel(_pinned[index]))
+                {
+                    return _pinned[index];
+                }
+            }
+        }
+
+        return null;
+
+        static bool HasLabel(PinnedAppSetting pin) => !pin.IsSeparator && !string.IsNullOrWhiteSpace(pin.Label);
     }
 
     /// <summary>
@@ -1621,7 +1640,7 @@ public sealed partial class SettingsWindow : Window
             PinnedApps = DockPresets.CreateDefaults(),
             CustomColors = [.. _savedColors],
             NoRevealApps = [.. NoRevealPaths],
-            SettingsPage = Tabs.SelectedIndex
+            SettingsPage = SelectedPage
         };
         LoadFrom(defaults);
 
@@ -1671,10 +1690,25 @@ public sealed partial class SettingsWindow : Window
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(defaults.BarColor));
         TaskbarColorCheck.IsChecked = defaults.UseTaskbarColor;
         BlurCheck.IsChecked = defaults.BlurBackground;
-        IconShadowsCheck.IsChecked = defaults.IconShadows;
-        BuildIconSetList(defaults.IconSet);
         UpdateColorControls();
         RefreshColorPreview();
+        _loading = false;
+
+        Preview();
+    }
+
+    /// <remarks>
+    /// The icon set goes back to the apps' own icons, which is what a fresh dock draws. A set
+    /// the user installed stays installed, and is one choice away in the list.
+    /// </remarks>
+    private void ResetIconsPage()
+    {
+        var defaults = new DockSettings();
+
+        _loading = true;
+        BuildIconSetList(defaults.IconSet);
+        IconShadowsCheck.IsChecked = defaults.IconShadows;
+        LoadLabelFont(defaults.LabelFontFamily, defaults.LabelFontSize, defaults.LabelFontStyle);
         _loading = false;
 
         Preview();
@@ -2117,7 +2151,7 @@ public sealed partial class SettingsWindow : Window
         // The page the user is looking at is theirs rather than the file's — the same
         // reasoning as the whole-application reset. Everything else comes across, pinned
         // items included, which is most of the point of moving a dock to another machine.
-        imported.SettingsPage = Tabs.SelectedIndex;
+        imported.SettingsPage = SelectedPage;
         _bottomMargin = imported.BottomMargin;
         _edge = imported.Edge;
 
@@ -2349,6 +2383,90 @@ public sealed partial class SettingsWindow : Window
         ThemeBox.SelectedIndex = selected;
     }
 
+    // ---- the labels' lettering -----------------------------------------------
+
+    /// <summary>What each typeface entry stands for: a family's name, or null for the dock's own.</summary>
+    private readonly List<string?> _labelFontIds = [];
+
+    /// <summary>What each emphasis entry stands for, in the order the list shows them.</summary>
+    private readonly List<string?> _labelStyleIds = [];
+
+    /// <summary>The typefaces installed, by name, read once — there are hundreds of them.</summary>
+    private List<string>? _installedFonts;
+
+    private List<string> InstalledFonts => _installedFonts ??=
+    [
+        .. Fonts.SystemFontFamilies
+            .Select(family => family.Source)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.CurrentCultureIgnoreCase)
+    ];
+
+    /// <summary>The chosen typeface, or null for the dock's own.</summary>
+    private string? SelectedLabelFont => SelectedId(LabelFontBox, _labelFontIds);
+
+    /// <summary>The chosen size, or null when it is the dock's own.</summary>
+    private double? SelectedLabelSize =>
+        Math.Abs(LabelSizeSlider.Value - DockBar.DefaultTooltipSize) < 0.01 ? null : LabelSizeSlider.Value;
+
+    /// <summary>
+    /// The chosen emphasis. Always one of the four — the list has no entry for the dock's own.
+    /// </summary>
+    /// <remarks>
+    /// The typeface list does have one, because a typeface the user never chose should keep
+    /// following the dock if the dock's own ever changes. Emphasis is different: the dock's own
+    /// is bold, so an entry meaning "no choice" would have to be labelled Bold to be truthful,
+    /// and would then sit next to the Bold entry doing the same thing.
+    /// </remarks>
+    private string? SelectedLabelStyle => SelectedId(LabelStyleBox, _labelStyleIds);
+
+    /// <summary>Puts the lettering's three controls to the values given; null for the dock's own.</summary>
+    private void LoadLabelFont(string? family, double? size, string? style)
+    {
+        BuildLabelFontLists(family, style);
+        LabelSizeSlider.Value = Math.Clamp(
+            size ?? DockBar.DefaultTooltipSize, LabelSizeSlider.Minimum, LabelSizeSlider.Maximum);
+    }
+
+    /// <summary>
+    /// Fills the typeface and emphasis lists in the current language, with the given choices
+    /// selected.
+    /// </summary>
+    /// <remarks>
+    /// The first typeface is the dock's own, and says which that is. A typeface that is not
+    /// installed here — in a file brought from another machine — stays in the list, marked as
+    /// missing, and stays selected, as an icon set does; the dock falls back from it as WPF
+    /// falls back for any missing font. An emphasis nobody chose shows as the dock's own, which
+    /// is what the labels in front of the dialog are using.
+    /// </remarks>
+    private void BuildLabelFontLists(string? family, string? style)
+    {
+        var fonts = new List<(string? Id, string Label)>
+        {
+            (null, Localizer.Format("Settings.Icons.LabelFont.Default", DockBar.DefaultTooltipFont))
+        };
+
+        fonts.AddRange(InstalledFonts.Select(name => ((string?)name, name)));
+
+        if (family is { Length: > 0 } && !InstalledFonts.Contains(family, StringComparer.OrdinalIgnoreCase))
+        {
+            fonts.Add((family, Localizer.Format("Settings.Icons.LabelFont.Missing", family)));
+        }
+
+        FillPicker(LabelFontBox, _labelFontIds, fonts, family);
+
+        FillPicker(
+            LabelStyleBox,
+            _labelStyleIds,
+            [
+                ("Regular", Localizer.Get("Settings.Icons.LabelStyle.Regular")),
+                ("Bold", Localizer.Get("Settings.Icons.LabelStyle.Bold")),
+                ("Italic", Localizer.Get("Settings.Icons.LabelStyle.Italic")),
+                ("BoldItalic", Localizer.Get("Settings.Icons.LabelStyle.BoldItalic"))
+            ],
+            style ?? DockBar.DefaultTooltipStyle);
+    }
+
     // ---- language and icon set -----------------------------------------------
 
     /// <summary>What each language entry stands for: a tag, or null for following Windows.</summary>
@@ -2400,14 +2518,14 @@ public sealed partial class SettingsWindow : Window
         var library = IconSetLibrary.Installed;
         var entries = new List<(string? Id, string Label)>
         {
-            (null, Localizer.Get("Settings.Appearance.IconSet.None"))
+            (null, Localizer.Get("Settings.Icons.IconSet.None"))
         };
 
         entries.AddRange(library.Sets.Select(set => ((string?)set.Id, set.Name)));
 
         if (chosen is { Length: > 0 } && library.Find(chosen) is null)
         {
-            entries.Add((chosen, Localizer.Format("Settings.Appearance.IconSet.Missing", chosen)));
+            entries.Add((chosen, Localizer.Format("Settings.Icons.IconSet.Missing", chosen)));
         }
 
         FillPicker(IconSetBox, _iconSetIds, entries, chosen);
@@ -2511,6 +2629,7 @@ public sealed partial class SettingsWindow : Window
             FillScreenBox();
             BuildLanguageList(SelectedLanguage);
             BuildIconSetList(SelectedIconSet);
+            BuildLabelFontLists(SelectedLabelFont, SelectedLabelStyle);
 
             _relabelling = false;
             _loading = wasLoading;
@@ -2566,6 +2685,9 @@ public sealed partial class SettingsWindow : Window
                 _loading = false;
 
                 UpdateItemButtons();
+
+                // The Icons page holds the item nearest the middle, which a reorder can change.
+                AnnounceSelectedItem();
                 return;
             }
 
@@ -2583,6 +2705,7 @@ public sealed partial class SettingsWindow : Window
 
             _loading = false;
             UpdateItemButtons();
+            AnnounceSelectedItem();
         });
     }
 

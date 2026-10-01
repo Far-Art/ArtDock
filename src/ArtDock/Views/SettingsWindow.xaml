@@ -246,7 +246,7 @@
         <TabControl x:Name="Tabs">
 
             <!-- ==================== SIZE AND MOTION ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.Size}">
+            <TabItem x:Name="SizePage" Header="{DynamicResource Settings.Page.Size}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Size.Title}" />
@@ -381,7 +381,7 @@
             </TabItem>
 
             <!-- ==================== THE BAR ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.Appearance}">
+            <TabItem x:Name="AppearancePage" Header="{DynamicResource Settings.Page.Appearance}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Appearance.Title}" />
@@ -531,62 +531,6 @@
                             </Grid>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource Settings.Appearance.IconShadows}" />
-                                    <TextBlock
-                                        Style="{StaticResource CardHint}"
-                                        Text="{DynamicResource Settings.Appearance.IconShadows.Hint}" />
-                                </StackPanel>
-                                <CheckBox
-                                    x:Name="IconShadowsCheck"
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-
-                        <!-- The icon set is part of how the dock looks, so it lives here and
-                             is reset with this page. The list is read again whenever this
-                             window comes back to the front, so a set copied in with Open
-                             folder shows up without reopening anything. -->
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{DynamicResource Settings.Appearance.IconSet}" />
-                                        <TextBlock
-                                            Style="{StaticResource CardHint}"
-                                            Text="{DynamicResource Settings.Appearance.IconSet.Hint}" />
-                                    </StackPanel>
-                                    <StackPanel
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        Orientation="Horizontal">
-                                        <ComboBox x:Name="IconSetBox" MinWidth="200" />
-                                        <Button
-                                            x:Name="IconSetFolderButton"
-                                            Margin="8,0,0,0"
-                                            Content="{DynamicResource Common.OpenFolder}" />
-                                    </StackPanel>
-                                </Grid>
-                                <TextBlock
-                                    x:Name="IconSetProblems"
-                                    Margin="0,8,0,0"
-                                    Style="{StaticResource CardHint}"
-                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
-                                    Visibility="Collapsed" />
-                            </StackPanel>
-                        </Border>
-
                         <Button
                             x:Name="ResetAppearanceButton"
                             Style="{StaticResource PageReset}"
@@ -596,7 +540,7 @@
             </TabItem>
 
             <!-- ==================== BEHAVIOUR ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.Behaviour}">
+            <TabItem x:Name="BehaviourPage" Header="{DynamicResource Settings.Page.Behaviour}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Behaviour.Title}" />
@@ -772,6 +716,137 @@
                 </ScrollViewer>
             </TabItem>
 
+            <!-- ==================== ICONS ==================== -->
+            <!-- How the icons themselves look, and the labels over them, where Appearance is the
+                 bar they stand on. Just before Items, whose rows are drawn from the icon set chosen
+                 here. The icon set and the shadow came here from Appearance, and the labels'
+                 lettering from the item editor, where it was chosen for one item and written to
+                 all of them. Named so the code can tell when it is open: the dock holds
+                 an icon up with its label showing while it is, since the lettering is meant to be
+                 judged where it is used. -->
+            <TabItem x:Name="IconsPage" Header="{DynamicResource Settings.Page.Icons}">
+                <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Icons.Title}" />
+
+                        <!-- The list is read again whenever this window comes back to the front,
+                             so a set copied in with Open folder shows up without reopening
+                             anything. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Icons.IconSet}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Icons.IconSet.Hint}" />
+                                    </StackPanel>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                        <ComboBox x:Name="IconSetBox" MinWidth="200" />
+                                        <Button
+                                            x:Name="IconSetFolderButton"
+                                            Margin="8,0,0,0"
+                                            Content="{DynamicResource Common.OpenFolder}" />
+                                    </StackPanel>
+                                </Grid>
+                                <TextBlock
+                                    x:Name="IconSetProblems"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource CardHint}"
+                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Icons.Shadows}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Icons.Shadows.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="IconShadowsCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- The labels' lettering, one card for the face and the size together:
+                             they describe the same bubble. The two lists are a fixed width,
+                             because a list as wide as its widest entry would jump once the
+                             typefaces had been opened — some of their names are long. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Icons.LabelFont}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Icons.LabelFont.Hint}" />
+                                    </StackPanel>
+                                    <StackPanel
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                        <ComboBox
+                                            x:Name="LabelFontBox"
+                                            Width="200"
+                                            MaxDropDownHeight="260" />
+                                        <ComboBox
+                                            x:Name="LabelStyleBox"
+                                            Width="130"
+                                            Margin="8,0,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Icons.LabelSize}" />
+                                    <Slider
+                                        x:Name="LabelSizeSlider"
+                                        Grid.Column="1"
+                                        Style="{StaticResource RowSlider}"
+                                        Maximum="28"
+                                        Minimum="8"
+                                        TickFrequency="1" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource RowValue}"
+                                        loc:Localized.Key="Settings.Icons.LabelSize.Value"
+                                        loc:Localized.Value="{Binding ElementName=LabelSizeSlider, Path=Value}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetIconsButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Icons.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ==================== ITEMS ==================== -->
             <!-- Named so the code can tell when it is open: the row selected here is held up on
                  the dock, but only while this page is the one being looked at. -->
@@ -837,7 +912,7 @@
                                             </Path.Style>
                                         </Path>
                                         <!-- Every row shows the icon the dock draws its item
-                                             with — from the set chosen on the Appearance page,
+                                             with — from the set chosen on the Icons page,
                                              and a folder in its own colour and symbol if it has
                                              been customized — so an item is found here as it is
                                              on the dock, by its icon before its name. Shrunk
@@ -1010,7 +1085,7 @@
                  rather than Fullscreen, which read as a setting for going fullscreen. No page
                  reset — the list is the user's own, like the pinned items, and Remove is how
                  an entry goes. -->
-            <TabItem Header="{DynamicResource Settings.Page.Exclusions}">
+            <TabItem x:Name="ExclusionsPage" Header="{DynamicResource Settings.Page.Exclusions}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1126,7 +1201,7 @@
             </TabItem>
 
             <!-- ==================== POSITION ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.Position}">
+            <TabItem x:Name="PositionPage" Header="{DynamicResource Settings.Page.Position}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Position.Title}" />
@@ -1198,7 +1273,7 @@
             </TabItem>
 
             <!-- ==================== SYSTEM ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.System}">
+            <TabItem x:Name="SystemPage" Header="{DynamicResource Settings.Page.System}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.System.Title}" />
@@ -1336,12 +1411,13 @@
             <!-- ==================== ABOUT ==================== -->
             <!-- Last, because it is the one page with nothing on it to set, and so no page reset
                  — only the whole-application one, which is about every page rather than this.
-                 It is also last in SettingsPage's numbering, which is stored: a page added
-                 anywhere but the end would reopen the dialog one page off for everyone. The
-                 build configuration is called out deliberately: the dock that runs here is the
+                 Where a page stands here is not its number in SettingsPage, which is stored and
+                 kept in the code-behind's list of pages: a page can be put anywhere here
+                 without reopening the dialog one page off for everyone. The build
+                 configuration is called out deliberately: the dock that runs here is the
                  Release one, and "this fix did not work" has more than once turned out to be a
                  Debug binary. -->
-            <TabItem Header="{DynamicResource Settings.Page.About}">
+            <TabItem x:Name="AboutPage" Header="{DynamicResource Settings.Page.About}">
                 <ScrollViewer Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.About.Title}" />

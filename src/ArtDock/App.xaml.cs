@@ -217,8 +217,7 @@ public partial class App : Application
         // row and the icon it describes are seen to be the same thing.
         _settingsWindow.ItemSelected += (_, id) => _dockWindow?.PreviewItem(id);
 
-        _settingsWindow.ItemLabelPreviewed += (_, edit) => _dockWindow?.PreviewItemLabel(
-            edit.Label, edit.FontFamily, edit.FontSize, edit.FontStyle);
+        _settingsWindow.ItemLabelPreviewed += (_, label) => _dockWindow?.PreviewItemLabel(label);
 
         _settingsWindow.ExitRequested += (_, _) => Quit();
 

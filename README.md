@@ -135,13 +135,13 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
 - **Casts a faint shadow under each icon**, falling a little below it so the icons stand off
-  the bar — *Shadow under the icons* on the Appearance page, on unless turned off. Only the
+  the bar — *Shadow under the icons* on the Icons page, on unless turned off. Only the
   shadow is added: each icon is drawn over it exactly as it is drawn without one, and none of
   the shadow lies under the icon itself.
 - **Pulses an icon twice** when a click actually launches something (not when it just
   raises a window that was already open).
 - **The Items page is a picture of the dock**: every row shows its item's icon as the dock
-  draws it — from the icon set chosen on the Appearance page, and a customized folder in its
+  draws it — from the icon set chosen on the Icons page, and a customized folder in its
   own colour — and a folder is marked at the row's far end with Windows' folder outline, since
   a folder drawn in a colour or by an icon set does not always look like one. The mark is on
   exactly the items the editor offers *Customize* for: a folder on disk, `shell:Downloads`
@@ -149,7 +149,10 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   dock**, magnified and labelled as if the pointer were on it, and the wave travels from one
   item to the next as the selection moves down the list; the item stays held as the list is
   reordered, and one just added is held as soon as it is on the dock. Only while the Items page
-  is open — the other pages go back to the middle icon, or to the sweep. The pointer outranks
+  is open — the other pages go back to the middle icon, or to the sweep, but for the Icons page,
+  which holds an item up with its label showing so the labels' lettering can be judged where it
+  is used: the row selected on the Items page, or the item nearest the middle, and never a
+  separator, which has no label to show. The pointer outranks
   it, as it outranks the sweep: on the dock it takes the wave and the label, and the selection
   has them back when it leaves. A sweep turned on stands aside for a selected item and picks
   up from it when the selection goes. **A click on nothing in particular puts the selection
@@ -222,11 +225,15 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   apart there. The folder's shape comes from an SVG built into the program, sized
   and placed as all of Windows' folder icons are, so it sits level with them on the dock; it is
   drawn from the pin's settings each time the dock reads its pins and never kept as a picture,
-  so a reinstall or an imported settings file brings it back exactly. The label's font, style
-  and size belong to the dock rather than the item, so they apply to every label at once. Labels
-  are 14 pt and bold by default, because a label is read against whatever happens to be behind
-  the dock. The item being edited holds its label open on the bar so the styling can be judged
-  where it is actually used.
+  so a reinstall or an imported settings file brings it back exactly. The item being edited
+  holds its label open on the bar, so its name can be judged where it is actually used.
+- **The labels' lettering is the dock's**: their font, emphasis and size are set once, on the
+  settings dialog's Icons page, for every label at once — and for the drop notices, which are
+  drawn as labels are. Labels are 14 pt and bold by default, because a label is read against
+  whatever happens to be behind the dock. A font that is not installed — in a settings file
+  brought from another machine — stays chosen, marked as not installed, and the labels fall back
+  as WPF does for any missing font. Until 2026-10-01 the lettering was chosen in the item editor
+  and written to every pin; a settings file from then gives it to the dock as it is read.
 - **The Add menu offers places and actions, not only apps**: alongside *Browse…* and a few
   of the machine's own applications, **This PC**, the **User folder**, **Downloads**, the
   **Recycle Bin** and **Start**. They are there because nothing else can supply them, or not as well. This
@@ -389,8 +396,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   tinting the taskbar with), corner roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
   displays — and where along its edge, always-on-top, hide/reveal delays, the excluded apps
-  the edge stands down for, pinned apps, the icon set, the language, run-at-login. The dialog
-  is paged — Size, Appearance, Behaviour, Items, Exclusions, Position, System, About — and
+  the edge stands down for, pinned apps, the icon set, the icons' shadow, the labels' font,
+  emphasis and size, the language, run-at-login. The dialog is paged — Size, Appearance (the
+  bar), Behaviour, Icons, Items, Exclusions, Position, System, About — and
   each page of settings has its own reset; the two pages that hold lists of the user's own,
   Items and Exclusions, have none. About holds no settings, and so no page reset — it has the
   whole-application one instead, which puts the pinned items back to the set a new dock
@@ -411,7 +419,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Icon sets**: a folder of PNGs with a `pack.json` saying which image is drawn for what —
   an executable by name, a path, a Store app, a place such as the Recycle Bin (full and empty
   separately), a document type, any folder — installed in
-  `%LOCALAPPDATA%\ArtDock\Packs\IconSets`, and chosen on the Appearance page. The most
+  `%LOCALAPPDATA%\ArtDock\Packs\IconSets`, and chosen on the Icons page. The most
   specific match wins; an item the set has nothing for keeps its own icon; and an icon chosen
   for one item in its own settings still beats the set, as does a folder given a colour. The format is in
   [docs/packs.md](docs/packs.md). No set ships.
@@ -648,7 +656,8 @@ there the point is to keep hold of one particular icon while you reach the dialo
 The row selected on the Items page belongs to the demonstration, not to that kind of hold. With
 the sweep off, the dialog holds the middle icon up; a selected row takes its place, the pointer
 outranks it in the same way, and with the sweep on the sweep stands down for it as for the
-pointer. A parked wave sent to another icon travels there with the same easing as a change of
+pointer. The item the Icons page holds up while it is open is held the same way, by the same
+route — it is announced to the dock as a selection is. A parked wave sent to another icon travels there with the same easing as a change of
 hands, so it glides along the dock as the selection moves down the list. A menu or the item
 editor holding an icon over it hands the dock back to it when it lets go — to the demonstration
 as it then stands. Before that, an icon's menu opened on the dock while the dialog was up left
@@ -1034,7 +1043,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and twenty-four tests cover the cosine falloff (peak, range boundary,
+Six hundred and twenty-seven tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1092,7 +1101,11 @@ happily and yields a full set of defaults, so without the check an import of the
 would look like it had worked and would in fact have reset everything. Two more hold that every
 pin comes in with an id of its own — a file written by hand can give two pins the same one, or
 none, and the dock's menu finds the pin to remove or edit by it — and that pins which already
-have their own keep them.
+have their own keep them. Three hold the labels' lettering where it now lives: that a file from
+when every pin carried it gives it to the dock, from the first pin that has any — a pin added
+from the dock had none, and taking the first pin's would have put the labels back to the
+default — that what a file says at the dock's level outranks what a pin still carries, and that
+a file written now carries it on the dock and nothing on the pins.
 
 Five more cover the Add menu's shell places — that *This PC*, the *User folder*, *Downloads*
 and the *Recycle Bin* are offered at all, and that `DockPresets.Create` builds a pin for each despite
