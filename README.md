@@ -219,8 +219,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   characters of text, toned (a deeper shade of the folder's colour, as Windows' own carry
   theirs), white or black. A symbol's lines are as heavy as those on Windows' own folders, and a
   white symbol, or white text, casts the same soft shadow their white symbols cast. *Use the
-  app's own icon* puts Windows' folder back; choosing an image, drawing the folder and the
-  item's own icon each undo the others. A folder already customized opens with all of that out,
+  default icon* puts Windows' folder back; choosing an image, drawing the folder and the
+  default icon each undo the others. A folder already customized opens with all of that out,
   and the settings dialog's Items page shows it as the dock draws it, so the folders can be told
   apart there. The folder's shape comes from an SVG built into the program, sized
   and placed as all of Windows' folder icons are, so it sits level with them on the dock; it is
