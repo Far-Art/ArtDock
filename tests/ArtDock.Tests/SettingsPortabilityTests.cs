@@ -249,6 +249,45 @@ public class SettingsPortabilityTests : IDisposable
     }
 
     [Fact]
+    public void PinsWithNoIdOrTheSameOne_EachComeInWithTheirOwn()
+    {
+        // A file written by hand. The menu's Remove and Edit find their pin by id, so two
+        // pins that share one — the two with none share "" — would be removed together and
+        // edited as the first.
+        var path = Write("hand.json", """
+            { "PinnedApps": [
+                { "Label": "No id" },
+                { "Id": "", "Label": "Blank" },
+                { "Id": "same", "Label": "First" },
+                { "Id": "same", "Label": "Second" },
+                { "Label": "Also no id" }
+            ] }
+            """);
+
+        var pins = SettingsStore.Import(path).PinnedApps;
+
+        Assert.All(pins, pin => Assert.False(string.IsNullOrWhiteSpace(pin.Id)));
+        Assert.Equal(pins.Count, pins.Select(pin => pin.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("same", pins[2].Id);
+    }
+
+    [Fact]
+    public void PinsWithIdsOfTheirOwn_KeepThem()
+    {
+        var settings = new DockSettings
+        {
+            PinnedApps =
+            [
+                new PinnedAppSetting { Id = "a", Label = "Editor" },
+                new PinnedAppSetting { Id = "b", IsSeparator = true }
+            ]
+        };
+
+        Assert.False(settings.RepairPinIds());
+        Assert.Equal(["a", "b"], settings.PinnedApps.Select(pin => pin.Id));
+    }
+
+    [Fact]
     public void AnUnrecognisedProperty_IsIgnoredRatherThanRefused()
     {
         // Adding a setting must not need a version bump, which means a file written by a

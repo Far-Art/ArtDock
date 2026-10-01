@@ -1002,7 +1002,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and eighty-five tests cover the cosine falloff (peak, range boundary,
+Five hundred and eighty-seven tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1053,7 +1053,10 @@ field existed reads as format 1 rather than as unknown, and that the importer re
 should — a newer format, a root that is not an object, something that is not JSON, and, the
 one that matters most, a JSON file that is *not* ArtDock settings. That last case parses
 happily and yields a full set of defaults, so without the check an import of the wrong file
-would look like it had worked and would in fact have reset everything.
+would look like it had worked and would in fact have reset everything. Two more hold that every
+pin comes in with an id of its own — a file written by hand can give two pins the same one, or
+none, and the dock's menu finds the pin to remove or edit by it — and that pins which already
+have their own keep them.
 
 Five more cover the Add menu's shell places — that *This PC*, the *User folder*, *Downloads*
 and the *Recycle Bin* are offered at all, and that `DockPresets.Create` builds a pin for each despite

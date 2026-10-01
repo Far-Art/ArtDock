@@ -6,6 +6,16 @@ namespace ArtDock.Services;
 /// <summary>One pinned application, as stored on disk.</summary>
 public sealed class PinnedAppSetting
 {
+    /// <summary>What tells this pin from every other, for as long as it is on the dock.</summary>
+    /// <remarks>
+    /// Neither of the obvious stand-ins will do. The position changes with every reorder, which
+    /// is exactly when the dock's icons have to keep their elements — and their slide — across
+    /// a rebuild, and the settings dialog has to put its rows in the dock's new order without
+    /// losing an unsaved rename. The target is not there for a separator or a Store app, and
+    /// the edit dialog can set one pin's to another's. So the menu's <em>Remove</em> and
+    /// <em>Edit</em> find their pin by this, and it must be unique: see
+    /// <see cref="DockSettings.RepairPinIds"/>.
+    /// </remarks>
     public string Id { get; set; } = string.Empty;
 
     public string Label { get; set; } = string.Empty;
@@ -566,6 +576,34 @@ public sealed class DockSettings
     public bool LockItemContents { get; set; }
 
     public List<PinnedAppSetting> PinnedApps { get; set; } = [];
+
+    /// <summary>
+    /// Gives a new id to every pin whose id is blank or repeats an earlier pin's. Returns true
+    /// when it changed any.
+    /// </summary>
+    /// <remarks>
+    /// Everything the dock creates gets an id of its own, so this is for a file written
+    /// somewhere else: by hand, or by an older build. A pin with no <c>Id</c> in the file reads
+    /// as an empty one, and pins that share an id are one pin to everything that finds them by
+    /// it — <em>Remove from dock</em> would take every one of them off, and <em>Edit</em>
+    /// change the first. The first of a repeated id keeps it.
+    /// </remarks>
+    public bool RepairPinIds()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var changed = false;
+        foreach (var pin in PinnedApps)
+        {
+            if (string.IsNullOrWhiteSpace(pin.Id) || !seen.Add(pin.Id))
+            {
+                pin.Id = Guid.NewGuid().ToString("N");
+                seen.Add(pin.Id);
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
 
     /// <summary>Projects the tuning values into the geometry the dock actually uses.</summary>
     [JsonIgnore]

@@ -69,6 +69,9 @@ public sealed class SettingsStore
                 var loaded = JsonSerializer.Deserialize(json, DockSettingsContext.Default.DockSettings);
                 if (loaded is not null)
                 {
+                    // Not written back: the ids only have to be unique while the dock runs,
+                    // and the next save stores them.
+                    loaded.RepairPinIds();
                     _current = loaded;
                     LoadedFromDisk = true;
                 }
@@ -195,6 +198,7 @@ public sealed class SettingsStore
                 "Settings.Import.Newer", loaded.Version, DockSettings.CurrentVersion));
         }
 
+        loaded.RepairPinIds();
         return loaded;
     }
 
