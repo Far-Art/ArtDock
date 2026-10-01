@@ -970,18 +970,17 @@ folder was skipped and why.
 
 ## Planned work
 
-What is left: the left and right edges; the settings dialog being
-unreachable by screen reader; downloadable language packs and icon sets, whose contracts
-are written and whose implementation is not; and, for the dock's own updates, the first
-release to publish them from, and a signature of the project's own on the feed. Then the smaller
-things: sharpening the acrylic backdrop, the memory the dock could still give up — mostly the GPU
-renderer's, and a trade against CPU — and the Exclusions page's blind spot for Store apps.
+What is left: downloadable language packs and icon sets, whose contracts are written and whose
+implementation is not; and, for the dock's own updates, the first release to publish them from,
+and a signature of the project's own on the feed. Then the
+smaller things: sharpening the acrylic backdrop, and the Exclusions page's blind spot for Store
+apps.
 
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
-dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date; and
-subdocks, groups of items that open as a second dock above the one they are on. The blur
-keeping up with the bar was on this list, and is done.
+dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date;
+subdocks, groups of items that open as a second dock above the one they are on; and built-in
+translations beyond English. The blur keeping up with the bar was on this list, and is done.
 
 ## Known gaps
 
@@ -1002,8 +1001,8 @@ keeping up with the bar was on this list, and is done.
 - **The bottom edge only.** The Position page has no choice of edge: the dock's geometry is
   written across the screen rather than down it, so a side dock is a change to the whole
   layout rather than a setting. Left and right used to be offered greyed out and were taken
-  off the page until they work. Choosing the *display* does work, on a mixed-DPI desktop as
-  well.
+  off the page, and side edges are not planned. Choosing the *display* does work, on a
+  mixed-DPI desktop as well.
 - **A display chosen before the dock learned to recognise monitors is still found by name.**
   The dock now remembers the monitor itself, but a settings file written earlier holds only
   Windows' name for the display (`\\.\DISPLAY2`), and Windows can hand those names out
@@ -1056,7 +1055,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and sixty-six tests cover the cosine falloff (peak, range boundary,
+Six hundred and sixty-nine tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1445,6 +1444,13 @@ installation, and leaves another copy's alone. The last three are the watch the 
 keeps while it is open: it hears an entry written and a switch in Windows, and hears the second
 of two in a row — a registration is good for one change, so that one is heard only if the
 watch made it again — and hears nothing once it is stopped.
+
+Three hold the settings dialog open to a screen reader, reading its XAML, since the dialog
+cannot be built in the test host. The template that draws the page list names its content
+`PART_SelectedContentHost`, the one name UI Automation finds a page's contents by — unnamed, a
+screen reader reached the page names and not one setting; every slider, drop-down, text box,
+checkbox and list has a name, its label's, where 39 of 64 had none; and both lists name their
+rows, which were read as the type of the object each holds.
 
 ## Licence
 

@@ -179,7 +179,12 @@
 
                             <StackPanel IsItemsHost="True" Margin="0,4,0,0" />
 
+                            <!-- Named as the theme's own template names it, and not for looks:
+                                 UI Automation finds a page's contents through the TabControl's
+                                 PART_SelectedContentHost. Unnamed, a screen reader could reach the
+                                 page names and not one setting on any page. -->
                             <ContentPresenter
+                                x:Name="PART_SelectedContentHost"
                                 Grid.Column="1"
                                 Margin="20,0,0,0"
                                 ContentSource="SelectedContent" />
@@ -261,6 +266,7 @@
                                 <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Size.IconSize}" />
                                 <Slider
                                     x:Name="BaseSizeSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.IconSize}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="96"
@@ -284,6 +290,7 @@
                                 <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Size.Magnification}" />
                                 <Slider
                                     x:Name="MaxScaleSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.Magnification}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="2.5"
@@ -312,6 +319,8 @@
                                 </StackPanel>
                                 <Slider
                                     x:Name="InfluenceSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.Influence}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Size.Influence.Hint}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="6"
@@ -340,6 +349,8 @@
                                 </StackPanel>
                                 <Slider
                                     x:Name="GapSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.Gap}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Size.Gap.Hint}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="0.6"
@@ -367,6 +378,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="SweepCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.Sweep}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Size.Sweep.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -396,6 +409,7 @@
                                 <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Opacity}" />
                                 <Slider
                                     x:Name="OpacitySlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Appearance.Opacity}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="1"
@@ -419,6 +433,7 @@
                                 <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Roundness}" />
                                 <Slider
                                     x:Name="RoundnessSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Appearance.Roundness}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="1"
@@ -443,6 +458,7 @@
                                     <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Colour}" />
                                     <TextBox
                                         x:Name="BarColorBox"
+                                        AutomationProperties.Name="{DynamicResource Settings.Appearance.Colour}"
                                         Grid.Column="1"
                                         Margin="12,0,12,0"
                                         VerticalAlignment="Center" />
@@ -473,6 +489,8 @@
                                     </StackPanel>
                                     <CheckBox
                                         x:Name="TaskbarColorCheck"
+                                        AutomationProperties.Name="{DynamicResource Settings.Appearance.MatchTaskbar}"
+                                        AutomationProperties.HelpText="{DynamicResource Settings.Appearance.MatchTaskbar.Hint}"
                                         Grid.Column="1"
                                         VerticalAlignment="Center" />
                                 </Grid>
@@ -526,6 +544,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="BlurCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Appearance.Blur}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Appearance.Blur.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -559,6 +579,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="AlwaysOnTopCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.AlwaysOnTop}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.AlwaysOnTop.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -578,6 +600,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="AutoHideCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.AutoHide}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.AutoHide.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -602,6 +626,8 @@
                                     </StackPanel>
                                     <CheckBox
                                         x:Name="HandleCheck"
+                                        AutomationProperties.Name="{DynamicResource Settings.Behaviour.Handle}"
+                                        AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.Handle.Hint}"
                                         Grid.Column="1"
                                         VerticalAlignment="Center" />
                                 </Grid>
@@ -620,6 +646,8 @@
                                         </StackPanel>
                                         <CheckBox
                                             x:Name="HandleMatchDockCheck"
+                                            AutomationProperties.Name="{DynamicResource Settings.Behaviour.HandleMatchesDock}"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.HandleMatchesDock.Hint}"
                                             Grid.Column="1"
                                             VerticalAlignment="Center" />
                                     </Grid>
@@ -633,6 +661,7 @@
                                         <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Behaviour.HandleWidth}" />
                                         <Slider
                                             x:Name="HandleWidthSlider"
+                                            AutomationProperties.Name="{DynamicResource Settings.Behaviour.HandleWidth}"
                                             Grid.Column="1"
                                             Style="{StaticResource RowSlider}"
                                             Maximum="600"
@@ -665,6 +694,8 @@
                                 </StackPanel>
                                 <Slider
                                     x:Name="HideDelaySlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.HideDelay}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.HideDelay.Hint}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="3000"
@@ -695,6 +726,8 @@
                                 </StackPanel>
                                 <Slider
                                     x:Name="RevealDelaySlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.RevealDelay}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.RevealDelay.Hint}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="1000"
@@ -749,7 +782,7 @@
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal">
-                                        <ComboBox x:Name="IconSetBox" MinWidth="200" />
+                                        <ComboBox x:Name="IconSetBox" AutomationProperties.Name="{DynamicResource Settings.Icons.IconSet}" AutomationProperties.HelpText="{DynamicResource Settings.Icons.IconSet.Hint}" MinWidth="200" />
                                         <Button
                                             x:Name="IconSetFolderButton"
                                             Margin="8,0,0,0"
@@ -779,6 +812,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="IconShadowsCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Icons.Shadows}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Icons.Shadows.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -807,10 +842,13 @@
                                         Orientation="Horizontal">
                                         <ComboBox
                                             x:Name="LabelFontBox"
+                                            AutomationProperties.Name="{DynamicResource Settings.Icons.LabelFont}"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Icons.LabelFont.Hint}"
                                             Width="200"
                                             MaxDropDownHeight="260" />
                                         <ComboBox
                                             x:Name="LabelStyleBox"
+                                            AutomationProperties.Name="{DynamicResource Settings.Icons.LabelStyle}"
                                             Width="130"
                                             Margin="8,0,0,0" />
                                     </StackPanel>
@@ -825,6 +863,7 @@
                                     <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Icons.LabelSize}" />
                                     <Slider
                                         x:Name="LabelSizeSlider"
+                                        AutomationProperties.Name="{DynamicResource Settings.Icons.LabelSize}"
                                         Grid.Column="1"
                                         Style="{StaticResource RowSlider}"
                                         Maximum="28"
@@ -873,6 +912,7 @@
                              cannot be written inside one. Here, outside the template, it can. -->
                         <ListBox
                             x:Name="PinnedList"
+                            AutomationProperties.Name="{DynamicResource Settings.Items.Title}"
                             AllowDrop="True"
                             Background="Transparent"
                             BorderThickness="0"
@@ -883,6 +923,19 @@
                                     <controls:AnimatedRowPanel />
                                 </ItemsPanelTemplate>
                             </ListBox.ItemsPanel>
+                            <!-- What a screen reader calls a row. A row holds a pin, not a string,
+                                 and unnamed it was read as the pin's type,
+                                 ArtDock.Services.PinnedAppSetting. -->
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSeparator}" Value="True">
+                                            <Setter Property="AutomationProperties.Name" Value="{DynamicResource Preset.Separator}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Grid>
@@ -1117,10 +1170,20 @@
                                  of a game apart. -->
                             <ListBox
                                 x:Name="NoRevealList"
+                                AutomationProperties.Name="{DynamicResource Settings.Exclusions.Title}"
+                                AutomationProperties.HelpText="{DynamicResource Settings.Exclusions.Hint}"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 HorizontalContentAlignment="Stretch"
                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <!-- Read as the row shows it: the program's name, and where it is
+                                     as the help. Unnamed, a row was read as the record it holds. -->
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                        <Setter Property="AutomationProperties.HelpText" Value="{Binding Path}" />
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Margin="0,3,0,3">
@@ -1229,6 +1292,8 @@
                                      the screen, not the start and end of a line of text. -->
                                 <Slider
                                     x:Name="EdgeOffsetSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Position.AlongEdge}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Position.AlongEdge.Hint}"
                                     Grid.Column="1"
                                     FlowDirection="LeftToRight"
                                     Style="{StaticResource RowSlider}"
@@ -1258,6 +1323,8 @@
                                 </StackPanel>
                                 <ComboBox
                                     x:Name="ScreenBox"
+                                    AutomationProperties.Name="{DynamicResource Settings.Position.Display}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Position.Display.Hint}"
                                     Grid.Column="1"
                                     MinWidth="230"
                                     VerticalAlignment="Center" />
@@ -1292,6 +1359,8 @@
                                 </StackPanel>
                                 <ComboBox
                                     x:Name="ThemeBox"
+                                    AutomationProperties.Name="{DynamicResource Settings.System.Theme}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.System.Theme.Hint}"
                                     Grid.Column="1"
                                     MinWidth="180"
                                     VerticalAlignment="Center" />
@@ -1317,7 +1386,7 @@
                                         Grid.Column="1"
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal">
-                                        <ComboBox x:Name="LanguageBox" MinWidth="200" />
+                                        <ComboBox x:Name="LanguageBox" AutomationProperties.Name="{DynamicResource Settings.System.Language}" AutomationProperties.HelpText="{DynamicResource Settings.System.Language.Hint}" MinWidth="200" />
                                         <Button
                                             x:Name="LanguageFolderButton"
                                             Margin="8,0,0,0"
@@ -1342,6 +1411,7 @@
                                 <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.System.RunAtLogin}" />
                                 <CheckBox
                                     x:Name="RunAtLoginCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.System.RunAtLogin}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -1361,6 +1431,8 @@
                                 </StackPanel>
                                 <CheckBox
                                     x:Name="ReduceMotionCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.System.ReduceMotion}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.System.ReduceMotion.Hint}"
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
@@ -1486,7 +1558,8 @@
                                     x:Name="UpdateButton"
                                     Grid.Column="1"
                                     MinWidth="190"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Content="{DynamicResource Settings.About.Updates.Check}" />
                             </Grid>
                         </Border>
 

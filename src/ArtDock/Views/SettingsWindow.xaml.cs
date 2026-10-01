@@ -843,8 +843,15 @@ public sealed partial class SettingsWindow : Window
 
         swatch.Click += (_, _) => BarColorBox.Text = hex;
 
+        // A swatch shows nothing but its colour, so a screen reader has only this to say: the
+        // colour as the box beside it takes one, and for a saved colour how to remove it.
+        System.Windows.Automation.AutomationProperties.SetName(swatch, hex);
+
         if (saved)
         {
+            System.Windows.Automation.AutomationProperties.SetHelpText(
+                swatch, Localizer.Format("Settings.Appearance.SavedSwatch.Tip", hex));
+
             var remove = new MenuItem
             {
                 Header = Localizer.Get("Common.Remove"),

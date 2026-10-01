@@ -82,6 +82,7 @@
     "Settings.Icons.LabelFont.Hint": "The name shown over an icon while the pointer is on it, in one lettering for every item. While this page is open, the dock holds an icon up with its label showing.",
     "Settings.Icons.LabelFont.Default": "Default ({0})",
     "Settings.Icons.LabelFont.Missing": "{0} (not installed)",
+    "Settings.Icons.LabelStyle": "Label style",
     "Settings.Icons.LabelStyle.Regular": "Regular",
     "Settings.Icons.LabelStyle.Bold": "Bold",
     "Settings.Icons.LabelStyle.Italic": "Italic",
