@@ -63,6 +63,70 @@ public static class ShellIcons
         GetImage(path, pixelSize, SiigbfThumbnailOnly);
 
     /// <summary>
+    /// Loads an icon named the way the registry names one: a file and an index, as
+    /// <c>%SystemRoot%\System32\imageres.dll,-54</c>, where a negative index is a resource id.
+    /// </summary>
+    /// <remarks>
+    /// For an icon chosen by the dock rather than asked of a shell item — the Recycle Bin full
+    /// or empty, which the shell's own answer no longer reliably tells apart (see
+    /// <see cref="RecycleBin.IconLocation"/>). <c>SHDefExtractIcon</c>, which takes the frame
+    /// nearest the size and scales it, as the image factory does.
+    /// </remarks>
+    /// <returns>A frozen image, or <see langword="null"/> when the location names no icon.</returns>
+    public static ImageSource? LoadFromLocation(string location, int pixelSize = 256)
+    {
+        if (!TryParseLocation(location, out var file, out var index)
+            || SHDefExtractIcon(file, index, 0, out var icon, 0, (uint)pixelSize) != 0
+            || icon == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var image = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            image.Freeze();
+            return image;
+        }
+        catch (Exception e) when (e is COMException or ArgumentException or InvalidOperationException)
+        {
+            return null;
+        }
+        finally
+        {
+            DestroyIcon(icon);
+        }
+    }
+
+    /// <summary>
+    /// Splits <c>file,index</c> into its two halves, the file's environment variables expanded
+    /// and quotes taken off. No comma is index 0, as the shell reads it.
+    /// </summary>
+    public static bool TryParseLocation(string? location, out string file, out int index)
+    {
+        file = "";
+        index = 0;
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return false;
+        }
+
+        var comma = location.LastIndexOf(',');
+        if (comma >= 0 && !int.TryParse(
+                location.AsSpan(comma + 1).Trim(),
+                System.Globalization.NumberStyles.AllowLeadingSign,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out index))
+        {
+            return false;
+        }
+
+        file = Environment.ExpandEnvironmentVariables((comma >= 0 ? location[..comma] : location).Trim().Trim('"'));
+        return file.Length > 0;
+    }
+
+    /// <summary>
     /// True when Windows counts a type of file as a picture.
     /// </summary>
     /// <remarks>
@@ -274,4 +338,12 @@ public static class ShellIcons
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeleteObject(nint hObject);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, EntryPoint = "SHDefExtractIconW")]
+    private static extern int SHDefExtractIcon(
+        string iconFile, int index, uint flags, out nint large, nint small, uint size);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(nint icon);
 }

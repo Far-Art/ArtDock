@@ -109,6 +109,86 @@ public class RecycleBinIconTests
         Assert.Same(PinnedAppsService.LoadIcon(app), PinnedAppsService.LoadIcon(app));
     });
 
+    // ---- full or empty decided by the dock, since Windows' setting stopped following ----------
+
+    [Fact]
+    public void ABinEmptiedWithTheLocationUnmoved_IsAChange()
+    {
+        // The case a 2026-09-30 Windows update made: emptied in Explorer, the shell's icon
+        // location still saying full. The notification came; comparing locations alone threw
+        // it away.
+        const string full = @"C:\WINDOWS\System32\imageres.dll,-54";
+
+        Assert.True(Interop.RecycleBinWatch.HasChanged(full, full, wasEmpty: false, empty: true));
+        Assert.True(Interop.RecycleBinWatch.HasChanged(full, full, wasEmpty: true, empty: false));
+    }
+
+    [Fact]
+    public void SomeoneElsesImage_IsNoChange()
+    {
+        const string full = @"C:\WINDOWS\System32\imageres.dll,-54";
+
+        Assert.False(Interop.RecycleBinWatch.HasChanged(full, full, wasEmpty: false, empty: false));
+    }
+
+    [Fact]
+    public void AMovedLocation_OrAnUnanswered_IsAChange()
+    {
+        const string full = @"C:\WINDOWS\System32\imageres.dll,-54";
+        const string other = @"C:\Icons\bin.ico,0";
+
+        Assert.True(Interop.RecycleBinWatch.HasChanged(full, other, wasEmpty: false, empty: false));
+        Assert.True(Interop.RecycleBinWatch.HasChanged(full, null, wasEmpty: false, empty: false));
+        Assert.True(Interop.RecycleBinWatch.HasChanged(full, full, wasEmpty: false, empty: null));
+    }
+
+    [Theory]
+    [InlineData(@"C:\WINDOWS\System32\imageres.dll,-54", @"C:\WINDOWS\System32\imageres.dll", -54)]
+    [InlineData(@"""C:\Icons\my bin.ico"",3", @"C:\Icons\my bin.ico", 3)]
+    [InlineData(@"C:\Icons\bin.ico", @"C:\Icons\bin.ico", 0)]
+    public void AnIconLocation_IsSplitAsTheShellReadsIt(string location, string file, int index)
+    {
+        Assert.True(Interop.ShellIcons.TryParseLocation(location, out var parsedFile, out var parsedIndex));
+        Assert.Equal(file, parsedFile);
+        Assert.Equal(index, parsedIndex);
+    }
+
+    [Fact]
+    public void AnIconLocation_HasItsVariablesExpanded()
+    {
+        Assert.True(Interop.ShellIcons.TryParseLocation(@"%SystemRoot%\System32\imageres.dll,-55", out var file, out _));
+        Assert.Equal(Environment.ExpandEnvironmentVariables(@"%SystemRoot%\System32\imageres.dll"), file);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(@"C:\Icons\bin.ico,notanumber")]
+    public void ANonsenseLocation_IsRefused(string location) =>
+        Assert.False(Interop.ShellIcons.TryParseLocation(location, out _, out _));
+
+    [Fact]
+    public void TheBinFullAndEmpty_AreTwoDifferentPictures() => OnStaThread(() =>
+    {
+        // Read from this machine's own registry and imageres.dll: nothing written, nothing of
+        // the user's bin touched.
+        var full = Interop.ShellIcons.LoadFromLocation(Interop.RecycleBin.IconLocation(empty: false), 128);
+        var empty = Interop.ShellIcons.LoadFromLocation(Interop.RecycleBin.IconLocation(empty: true), 128);
+
+        Assert.NotNull(full);
+        Assert.NotNull(empty);
+        Assert.Equal(128, ((BitmapSource)full).PixelWidth);
+        Assert.NotEqual(Pixels((BitmapSource)full), Pixels((BitmapSource)empty));
+    });
+
+    private static string Pixels(BitmapSource image)
+    {
+        var converted = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        var stride = converted.PixelWidth * 4;
+        var pixels = new byte[stride * converted.PixelHeight];
+        converted.CopyPixels(pixels, stride, 0);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pixels));
+    }
+
     /// <summary>
     /// The half of "the icon does not update" that is WPF's rather than the shell's.
     /// </summary>

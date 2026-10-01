@@ -6,7 +6,8 @@ namespace ArtDock.Interop;
 /// The Recycle Bin, for the pin that points at it.
 /// </summary>
 /// <remarks>
-/// Only what the dock's menu needs: whether there is anything in there, and emptying it.
+/// What the dock's menu needs — whether there is anything in there, and emptying it — and
+/// which of Windows' two icons it should be drawn with.
 /// </remarks>
 public static class RecycleBin
 {
@@ -20,9 +21,9 @@ public static class RecycleBin
     /// is the Recycle Bin as a whole, so the count has to be too.
     /// </para>
     /// <para>
-    /// It costs about 70ms cold on a machine with eight volumes, which is why nothing else
-    /// asks: this runs once, on a right-click, on one item. Anything on the wave's path
-    /// could not afford it.
+    /// It costs about 70ms cold on a machine with eight volumes, so nothing on the wave's path
+    /// asks: a right-click on the bin, and the bin being drawn — when it is pinned, and when
+    /// the shell says its icon has changed (<see cref="RecycleBinWatch"/>).
     /// </para>
     /// <para>
     /// A failure answers false — offer the entry rather than grey it. An action that turns
@@ -30,7 +31,10 @@ public static class RecycleBin
     /// question we could not answer.
     /// </para>
     /// </remarks>
-    public static bool IsEmpty()
+    public static bool IsEmpty() => TryIsEmpty() == true;
+
+    /// <summary>Whether the Recycle Bin holds nothing, or null when the shell will not say.</summary>
+    public static bool? TryIsEmpty()
     {
         var info = new RecycleBinInfo { cbSize = (uint)Marshal.SizeOf<RecycleBinInfo>() };
 
@@ -38,8 +42,59 @@ public static class RecycleBin
         // with the padding after cbSize that x64 alignment inserts. Packed to 20 it is
         // refused with E_INVALIDARG, which is a plausible-looking "the bin is empty" if the
         // result is not checked. Measured both ways against the shell's own item count.
-        return SHQueryRecycleBin(null, ref info) == 0 && info.i64NumItems == 0;
+        return SHQueryRecycleBin(null, ref info) == 0 ? info.i64NumItems == 0 : null;
     }
+
+    /// <summary>
+    /// Where Windows says to draw the bin full, or empty, from: a file and an index, as
+    /// <c>imageres.dll,-54</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The <c>Full</c> and <c>Empty</c> values of the bin's <c>DefaultIcon</c> key — the user's,
+    /// which is where *Desktop icon settings* keeps a bin icon changed there, before the
+    /// machine's — and Windows' own two icons when neither says. Not the key's default value,
+    /// which is the one of the two in force: the shell used to switch it as the bin filled and
+    /// emptied, and on this machine's build it no longer reliably does. Measured on 2026-10-01,
+    /// build 26300: a bin emptied in Explorer left it saying full, and a file deleted in
+    /// Explorer had it set to empty with the file in the bin — while Explorer's own desktop
+    /// icon was right both times. The shell's notification still came every time.
+    /// </para>
+    /// <para>
+    /// So the dock counts the bin itself (<see cref="TryIsEmpty"/>) and takes the icon for what
+    /// it found from here, rather than asking the shell for the bin's icon, which reads the
+    /// default value.
+    /// </para>
+    /// </remarks>
+    public static string IconLocation(bool empty)
+    {
+        var name = empty ? "Empty" : "Full";
+
+        try
+        {
+            foreach (var (hive, path) in DefaultIconKeys)
+            {
+                using var key = hive.OpenSubKey(path);
+                if (key?.GetValue(name) is string { Length: > 0 } location)
+                {
+                    return location;
+                }
+            }
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException)
+        {
+            // Windows' own, below.
+        }
+
+        return empty ? @"%SystemRoot%\System32\imageres.dll,-55" : @"%SystemRoot%\System32\imageres.dll,-54";
+    }
+
+    private static readonly (Microsoft.Win32.RegistryKey Hive, string Path)[] DefaultIconKeys =
+    [
+        (Microsoft.Win32.Registry.CurrentUser,
+            @"Software\Microsoft\Windows\CurrentVersion\Explorer\CLSID\{645FF040-5081-101B-9F08-00AA002F954E}\DefaultIcon"),
+        (Microsoft.Win32.Registry.ClassesRoot, @"CLSID\{645FF040-5081-101B-9F08-00AA002F954E}\DefaultIcon")
+    ];
 
     /// <summary>
     /// Empties the Recycle Bin, asking first if that is what Windows would do.

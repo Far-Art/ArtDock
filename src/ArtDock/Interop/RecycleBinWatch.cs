@@ -33,10 +33,21 @@ namespace ArtDock.Interop;
 /// <para>
 /// The notification is not about the bin in particular. It names whatever image went
 /// stale, and anything on the machine may raise one, so it only counts as a change when
-/// the bin's icon location has moved — <c>imageres.dll,-54</c> full, <c>-55</c> empty on
-/// this build. Asking where the icon comes from is a registry read on the shell's side;
-/// extracting the icon again and repainting it, for a change that was someone else's, is
-/// COM work and a frame.
+/// the bin has gone from empty to not or back (<see cref="RecycleBin.TryIsEmpty"/>), or the
+/// icon location the shell gives for it has moved — <c>imageres.dll,-54</c> full,
+/// <c>-55</c> empty. Extracting the icon again and repainting it, for a change that was
+/// someone else's, is COM work and a frame; counting the bin is tens of milliseconds, and the
+/// notification is rare.
+/// </para>
+/// <para>
+/// <b>The count, and not the location alone, since 2026-10-01.</b> On build 26300 the flip
+/// described above stopped being reliable: an empty made in Explorer left the location
+/// saying full, and a delete made there set it to empty with the file in the bin. The
+/// notification itself still came, every time, with the count already right — measured
+/// with a listener beside the dock while the user deleted a file and emptied the bin. A
+/// watch that compared only the location heard it and threw it away. The location is still
+/// compared, so a bin icon changed in *Desktop icon settings* is picked up too. See
+/// <see cref="RecycleBin.IconLocation"/> for how the dock draws the bin now.
 /// </para>
 /// </remarks>
 public sealed class RecycleBinWatch : IDisposable
@@ -63,11 +74,15 @@ public sealed class RecycleBinWatch : IDisposable
     /// <summary>Where the bin's icon came from when last asked, or null if it could not be.</summary>
     private string? _iconLocation;
 
+    /// <summary>Whether the bin was empty when last asked, or null if the shell would not say.</summary>
+    private bool? _empty;
+
     private RecycleBinWatch(nint pidl, uint registration)
     {
         _pidl = pidl;
         _registration = registration;
         _iconLocation = IconLocation(pidl);
+        _empty = RecycleBin.TryIsEmpty();
     }
 
     /// <summary>
@@ -107,10 +122,6 @@ public sealed class RecycleBinWatch : IDisposable
     /// Takes one of the watch's messages, and answers whether the bin's icon is now a
     /// different one from last time.
     /// </summary>
-    /// <remarks>
-    /// A location that cannot be read counts as a change: an icon read again for nothing is
-    /// a smaller wrong than one left stale.
-    /// </remarks>
     public bool IconChanged(nint wParam, nint lParam)
     {
         // Locked and unlocked whatever it says. With new delivery the notification sits in
@@ -128,14 +139,27 @@ public sealed class RecycleBinWatch : IDisposable
         }
 
         var location = IconLocation(_pidl);
-        if (location is not null && location == _iconLocation)
+        var empty = RecycleBin.TryIsEmpty();
+        if (!HasChanged(_iconLocation, location, _empty, empty))
         {
             return false;
         }
 
         _iconLocation = location;
+        _empty = empty;
         return true;
     }
+
+    /// <summary>
+    /// Whether the bin is to be drawn again: it has gone from empty to not or back, or the
+    /// location the shell gives for its icon has moved.
+    /// </summary>
+    /// <remarks>
+    /// Either one that cannot be read counts as a change: an icon read again for nothing is a
+    /// smaller wrong than one left stale.
+    /// </remarks>
+    public static bool HasChanged(string? wasLocation, string? location, bool? wasEmpty, bool? empty) =>
+        location is null || location != wasLocation || empty is null || empty != wasEmpty;
 
     public void Dispose()
     {

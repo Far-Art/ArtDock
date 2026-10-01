@@ -352,7 +352,9 @@ public sealed class PinnedAppsService
         // with the application. Still behind the user's own choice, like every other icon.
         icon ??= DockCommands.IsCommand(item.ShellTarget)
             ? DockCommands.IconFor(item.ShellTarget)
-            : ShellIcons.Load(item.ShellTarget, IconPixelSize);
+            : DockPresets.IsRecycleBin(item.ShellTarget)
+                ? RecycleBinIcon()
+                : ShellIcons.Load(item.ShellTarget, IconPixelSize);
 
         // The Recycle Bin is drawn full or empty and changes between the two by itself, so it
         // is the one icon read afresh every time. A cached copy is wrong from the moment the
@@ -366,6 +368,16 @@ public sealed class PinnedAppsService
 
         return icon;
     }
+
+    /// <summary>
+    /// The Recycle Bin, full or empty as it is now: Windows' icon for what the bin holds,
+    /// rather than the shell's icon for the bin, which no longer reliably follows it — see
+    /// <see cref="RecycleBin.IconLocation"/>. The shell's is the fallback, for a location that
+    /// names no icon.
+    /// </summary>
+    private static ImageSource? RecycleBinIcon() =>
+        ShellIcons.LoadFromLocation(RecycleBin.IconLocation(RecycleBin.IsEmpty()), IconPixelSize)
+        ?? ShellIcons.Load(DockPresets.RecycleBinTarget, IconPixelSize);
 
     /// <summary>
     /// Whether a pin's target is a picture, and so has a thumbnail it could be drawn with.

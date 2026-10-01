@@ -265,10 +265,13 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the whole question to the shell rather than overriding it.
 - **The Recycle Bin's icon follows the bin**, full or empty, whoever changed it: a file
   deleted into it or restored from it anywhere on the machine, or the bin emptied. The dock
-  redraws from the same announcement Explorer's desktop redraws from, so the two change
-  together. After emptying from its own menu the dock also asks the shell to re-check the
-  bin, because a bin emptied without that check can stay drawn full everywhere, Explorer's
-  desktop included.
+  redraws on the same announcement Explorer's desktop redraws on, so the two change together,
+  and decides full or empty by counting the bin itself, drawing Windows' own full or empty
+  icon — including one changed in *Desktop icon settings*. The setting Windows used to switch
+  between the two cannot be relied on since an update at the end of September 2026: Explorer
+  left it saying full after an empty, and the dock, which read it, stayed full. After emptying
+  from its own menu the dock also asks the shell to re-check the bin, because a bin emptied
+  without that check can stay drawn full everywhere, Explorer's desktop included.
 - **Separators**: a divider that occupies a slot and launches nothing. It holds its resting
   size while its neighbours magnify around it — it is punctuation, not a target. Added from
   the same Add menu as everything else, and shown in the settings list as the rule it is
@@ -1048,7 +1051,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and fifty tests cover the cosine falloff (peak, range boundary,
+Six hundred and sixty tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1150,7 +1153,13 @@ actually drawn once the dock is told. The second is the half that belongs to WPF
 the shell — an element keeps what it drew, so a new icon handed to an item on screen changes
 nothing until the dock repaints it. The shell's side, the announcement that the icon has
 changed, is not unit-tested: the only ways to raise one are to change the bin or to
-broadcast a fake one to every window on the machine.
+broadcast a fake one to every window on the machine. Ten more cover what the dock does with
+the announcement since Windows stopped switching its setting reliably: a bin gone from full to
+empty, or back, is a change though the setting has not moved — the case that update made — and
+another program's image is not; an icon location is read as the shell reads it, variables
+expanded and quotes off, a missing index being 0 and nonsense refused; and the bin full and
+empty, read from this machine's own registry and `imageres.dll`, are two different pictures at
+the size asked.
 
 Twenty-one cover a pinned picture being drawn as itself, from real thumbnails of PNGs and JPEGs
 written for the test in solid colours, so the middle of what comes back tells the
