@@ -1051,7 +1051,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and sixty tests cover the cosine falloff (peak, range boundary,
+Six hundred and sixty-one tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1180,7 +1180,7 @@ alpha, written for the test, must come back as that grey at half alpha. The shel
 straight rather than premultiplied, and read as premultiplied they came back white — which drew
 the Recycle Bin's glass as a white box and put a white fringe round the Settings gear.
 
-Twenty-seven cover the folders the dock draws. The design is read from an SVG built into the
+Twenty-eight cover the folders the dock draws. The design is read from an SVG built into the
 program, which refuses anything it would not draw as a browser does, so the first test is
 where a refusal would be met rather than on somebody's dock. Then: that it fills, to the pixel,
 the box the shell's own folder icon fills at the size the dock asks for — drawn first a little
@@ -1190,7 +1190,8 @@ crosses — the folder is drawn at four times the size and averaged down, and sh
 again smaller it came out in steps, because `RenderTargetBitmap` reads 4 of every 16 pixels
 whatever scaling mode it is given; that a symbol lands in the place the design gives it and
 nowhere else, toned, white or black as asked; that its lines are as heavy as the lines on
-Windows' own folders, and of one paint all through; that a white symbol casts a shadow and a
+Windows' own folders, and of one paint all through; that the Downloads arrow stands as tall as
+Windows' own on its Downloads folder, 104 of the 256 units, where it once stood 14% the taller; that a white symbol casts a shadow and a
 toned or black one none; that text takes the symbol's place inside a box of its own, six
 letters across its width and one held to its height, and is cut to six characters without
 splitting one that takes two; that one look is drawn once and shared; that

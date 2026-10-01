@@ -75,7 +75,12 @@
       <feDropShadow dx="0" dy="1" stdDeviation="6" flood-color="#000" flood-opacity="0.24"/>
     </filter>
 
-    <rect id="symbol" x="70" y="78" width="116" height="116" fill="url(#symbol-toned)" stroke-width="2.75"/>
+    <!-- The symbol's em, 100.25, is the height of Windows' own Downloads arrow, 104, less the
+         outline: the arrow fills its em. It was 116, the person on Windows' User folder, which
+         stood the arrow 14% the taller beside Windows' Downloads. The outline, 3.75, makes the
+         font's lines - a sixteenth of the em, 6.27 - up to the 10 of Windows' own. Centred
+         where the 116 was, on 128, 136. -->
+    <rect id="symbol" x="77.875" y="85.875" width="100.25" height="100.25" fill="url(#symbol-toned)" stroke-width="3.75"/>
     <rect id="text" x="36" y="100" width="184" height="72" fill="url(#symbol-toned)" stroke-width="2" font-family="Segoe UI" font-weight="700"/>
   </defs>
 

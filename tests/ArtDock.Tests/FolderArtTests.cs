@@ -200,6 +200,24 @@ public class FolderArtTests : IDisposable
     });
 
     /// <summary>
+    /// The Downloads arrow stands as tall as Windows' own on its Downloads folder: 104 of the 256
+    /// units, 74 wide. It stood 118.75 when the symbol's em was 116, 14% the taller beside it.
+    /// </summary>
+    [Fact]
+    public void TheDownloadsArrow_StandsAsTallAsWindowsOwn() => OnStaThread(() =>
+    {
+        var plain = Pixels(Drawn(Blue));
+        var arrow = Changed(plain, Pixels(Drawn(Blue, "", tone: FolderSymbolTone.Black))).ToList();
+
+        var height = (arrow.Max(point => point.Y) - arrow.Min(point => point.Y) + 1) * 256.0 / FolderArt.PixelSize;
+        var width = (arrow.Max(point => point.X) - arrow.Min(point => point.X) + 1) * 256.0 / FolderArt.PixelSize;
+
+        // A pixel is two units, and an edge a pixel touches at all counts as covered.
+        Assert.InRange(height, 102, 108);
+        Assert.InRange(width, 70, 78);
+    });
+
+    /// <summary>
     /// A white symbol casts the shadow the white symbols on Windows' own folders cast: a soft dark
     /// ring round it, deepest at its edge and gone a few pixels out. A toned or black one casts
     /// none, as the toned person on Windows' User folder casts none \u2014 it changes only what it
