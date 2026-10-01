@@ -16,7 +16,7 @@
          the project. The description goes into the version resource's Comments, which
          Explorer does not show; the About page shows Settings.About.Tagline from en.json
          instead, so it can be translated. The two say the same thing — keep them in step. -->
-    <Version>0.9.3</Version>
+    <Version>0.9.4</Version>
     <Product>ArtDock</Product>
     <Description>A macOS-style application dock for Windows 11. Pin applications, files and folders for quick access.</Description>
 
