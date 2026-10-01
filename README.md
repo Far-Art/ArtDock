@@ -141,8 +141,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Pulses an icon twice** when a click actually launches something (not when it just
   raises a window that was already open).
 - **The Items page is a picture of the dock**: every row shows its item's icon as the dock
-  draws it — from the icon set chosen on the Icons page, and a customized folder in its
-  own colour — and a folder is marked at the row's far end with Windows' folder outline, since
+  draws it — from the icon set chosen on the Icons page, a customized folder in its own colour,
+  and the Recycle Bin full or empty as it is now, following it while the dialog is open — and a
+  folder is marked at the row's far end with Windows' folder outline, since
   a folder drawn in a colour or by an icon set does not always look like one. The mark is on
   exactly the items the editor offers *Customize* for: a folder on disk, `shell:Downloads`
   included, and not This PC or the Recycle Bin. **Selecting a row holds that item up on the

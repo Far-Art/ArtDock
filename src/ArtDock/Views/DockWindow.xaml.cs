@@ -219,6 +219,12 @@ public sealed partial class DockWindow : Window
     /// <summary>Raised when the user asks for the settings dialog from the dock's own menu.</summary>
     public event EventHandler? SettingsRequested;
 
+    /// <summary>
+    /// Raised when the Recycle Bin's icon has changed by itself — emptied, or given something —
+    /// after the dock has redrawn it, so the settings dialog's list can follow.
+    /// </summary>
+    public event EventHandler? RecycleBinIconChanged;
+
     /// <summary>True when the dock is on screen rather than hidden at the edge.</summary>
     public bool IsDockShown => _autoHide?.Visibility is not (DockVisibility.Hidden or DockVisibility.Hiding);
 
@@ -772,6 +778,10 @@ public sealed partial class DockWindow : Window
             item.Icon = PinnedAppsService.LoadIcon(item, _iconSet);
             _dock.RefreshIcon(item);
         }
+
+        // Whether or not the bin is on the dock: one being added in the settings dialog, not
+        // yet saved, has a row there all the same.
+        RecycleBinIconChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

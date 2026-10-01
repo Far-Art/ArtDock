@@ -79,6 +79,15 @@ public partial class App : Application
 
         _dockWindow = new DockWindow(_settings, _menus);
         _dockWindow.SettingsRequested += (_, _) => ShowSettings();
+
+        // The dialog has no watch on the bin of its own; the dock's tells its list as well.
+        _dockWindow.RecycleBinIconChanged += (_, _) =>
+        {
+            if (_settingsWindow is { IsLoaded: true })
+            {
+                _settingsWindow.RefreshRecycleBinRows();
+            }
+        };
         _dockWindow.Show();
 
         // Now that there is a dock to ask about, a later launch has somewhere to be sent — and

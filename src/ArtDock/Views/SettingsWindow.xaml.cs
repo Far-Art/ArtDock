@@ -1133,6 +1133,53 @@ public sealed partial class SettingsWindow : Window
     private static DependencyObject? PressParent(DependencyObject child) =>
         child is Visual ? VisualTreeHelper.GetParent(child) : LogicalTreeHelper.GetParent(child);
 
+    /// <summary>
+    /// Reads the Recycle Bin's row icon again, when the dock says the bin's icon has changed by
+    /// itself — emptied, or given something, wherever that was done.
+    /// </summary>
+    /// <remarks>
+    /// A row asks for its icon once, when it is made, so the bin's stayed full or empty as it
+    /// was when the dialog opened. Only that row's binding is run again: the list is not rebuilt,
+    /// so the selection and the scroll stay where they were. The bin's icon is the one
+    /// <see cref="PinnedAppsService.LoadIcon"/> never keeps, so asking again reads it afresh. A
+    /// row scrolled out of view has no container, and will ask when it is made again.
+    /// </remarks>
+    public void RefreshRecycleBinRows()
+    {
+        for (var index = 0; index < _pinned.Count; index++)
+        {
+            if (!DockPresets.IsRecycleBin(_pinned[index].TargetPath)
+                || RowContainer(index) is not { } row
+                || FindRowIcon(row) is not { } icon)
+            {
+                continue;
+            }
+
+            System.Windows.Data.BindingOperations
+                .GetMultiBindingExpression(icon, Image.SourceProperty)?.UpdateTarget();
+        }
+    }
+
+    /// <summary>The row template's icon, <c>ItemIcon</c>, somewhere under a row's container.</summary>
+    private static Image? FindRowIcon(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Image { Name: "ItemIcon" } icon)
+            {
+                return icon;
+            }
+
+            if (FindRowIcon(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
     // ---- the two locks -------------------------------------------------------
 
     /// <summary>Whether the order is fixed, as the checkbox has it right now.</summary>
