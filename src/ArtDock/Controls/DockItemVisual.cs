@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using ArtDock.Dock;
+using ArtDock.Services;
 
 namespace ArtDock.Controls;
 
@@ -245,6 +246,29 @@ public sealed class DockItemVisual : FrameworkElement
 
 
     /// <summary>
+    /// Whether the icon casts a shadow — see <see cref="IconShadow"/>.
+    /// </summary>
+    /// <remarks>
+    /// Drawn with the icon rather than by the bar, so the wave magnifies it with the icon and
+    /// nothing on another path can put it on screen a frame apart from it. A separator casts
+    /// none: it is a rule, not a thing standing on the bar.
+    /// </remarks>
+    public bool CastsShadow
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
     /// Launch-flash strength, 0 to 1. Driven by <see cref="DockBar"/> on the same tick
     /// as the wave.
     /// </summary>
@@ -315,9 +339,16 @@ public sealed class DockItemVisual : FrameworkElement
             // A little breathing room, so neighbouring glyphs do not crowd each other at
             // peak magnification where their boxes sit only a gap apart.
             var inset = RestingSize * 0.08;
-            drawingContext.DrawImage(
-                icon,
-                Fit(icon, new Rect(inset, inset, RestingSize - (inset * 2), RestingSize - (inset * 2))));
+            var drawn = Fit(icon, new Rect(inset, inset, RestingSize - (inset * 2), RestingSize - (inset * 2)));
+
+            // Under the icon, and inside the same opacity, so it fades with it. The icon goes
+            // over it exactly as it is drawn without one.
+            if (CastsShadow && IconShadow.For(icon) is { } shadow)
+            {
+                drawingContext.DrawImage(shadow.Image, shadow.Around(drawn));
+            }
+
+            drawingContext.DrawImage(icon, drawn);
         }
         else
         {

@@ -67,6 +67,8 @@
     "Settings.Appearance.SavedSwatch.Tip": "{0} — right-click to remove",
     "Settings.Appearance.Blur": "Blur what is behind the bar",
     "Settings.Appearance.Blur.Hint": "Puts a sheet of Windows acrylic behind the bar. Lower the opacity above to see it.",
+    "Settings.Appearance.IconShadows": "Shadow under the icons",
+    "Settings.Appearance.IconShadows.Hint": "A faint shadow falling a little below each icon, so the icons stand off the bar. The icons themselves are drawn exactly as before.",
     "Settings.Appearance.IconSet": "Icon set",
     "Settings.Appearance.IconSet.Hint": "Draws the dock's items with a set of icons instead of the apps' own. An icon chosen for one item in its settings still wins.",
     "Settings.Appearance.IconSet.None": "The apps' own icons",

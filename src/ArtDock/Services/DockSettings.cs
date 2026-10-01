@@ -307,6 +307,16 @@ public sealed class DockSettings
     public bool BlurBackground { get; set; } = true;
 
     /// <summary>
+    /// Whether each icon casts a faint shadow onto the bar, falling a little below it.
+    /// </summary>
+    /// <remarks>
+    /// On unless turned off, chosen once it had been seen on the dock. A settings file from
+    /// before the shadow existed has no such property and so reads as on: a dock already set up
+    /// gains the shadow with the update that brings it.
+    /// </remarks>
+    public bool IconShadows { get; set; } = true;
+
+    /// <summary>
     /// The icon set the dock's items are drawn from, by its id, or null for the apps' own
     /// icons.
     /// </summary>
@@ -646,6 +656,7 @@ public sealed class DockSettings
         CustomColors = [.. CustomColors],
         BarRoundness = BarRoundness,
         BlurBackground = BlurBackground,
+        IconShadows = IconShadows,
         IconSet = IconSet,
         PreviewSweep = PreviewSweep,
         Edge = Edge,

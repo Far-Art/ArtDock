@@ -531,6 +531,25 @@
                             </Grid>
                         </Border>
 
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Appearance.IconShadows}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Appearance.IconShadows.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="IconShadowsCheck"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
                         <!-- The icon set is part of how the dock looks, so it lives here and
                              is reset with this page. The list is read again whenever this
                              window comes back to the front, so a set copied in with Open

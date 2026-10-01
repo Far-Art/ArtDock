@@ -591,6 +591,32 @@ public sealed class DockBar : Canvas
         }
     } = true;
 
+    /// <summary>
+    /// Whether each icon casts a shadow of its own onto the bar — see
+    /// <see cref="Services.IconShadow"/>.
+    /// </summary>
+    /// <remarks>
+    /// A repaint of the icons and nothing else: the shadow fits the room around each icon at
+    /// rest and grows with it in the wave, so no metric changes and nothing is laid out again.
+    /// </remarks>
+    public bool IconShadows
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            foreach (var visual in _items)
+            {
+                visual.CastsShadow = value;
+            }
+        }
+    }
+
     /// <summary>The item under the cursor, or null if the cursor is not on one.</summary>
     public DockItem? HoveredItem =>
         _hoveredIndex >= 0 && _hoveredIndex < _items.Count ? _items[_hoveredIndex].Item : null;
@@ -822,7 +848,7 @@ public sealed class DockBar : Canvas
             }
             else
             {
-                visual = new DockItemVisual(item, Metrics.BaseSize, isGhost);
+                visual = new DockItemVisual(item, Metrics.BaseSize, isGhost) { CastsShadow = IconShadows };
                 visual.SnapToSlot(slot);
 
                 // A drop preview grows into the slot the row is opening for it, rather than

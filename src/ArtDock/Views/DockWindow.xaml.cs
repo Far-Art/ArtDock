@@ -396,6 +396,7 @@ public sealed partial class DockWindow : Window
             _dock.UpdateMetrics(settings.Metrics);
             _dock.RowAlignment = settings.EdgeAlignment;
             _dock.SetBarAppearance(EffectiveBarColor(settings), settings.BarOpacity);
+            _dock.IconShadows = settings.IconShadows;
             ApplyBackdrop(settings.BlurBackground);
 
             if (_previewing)

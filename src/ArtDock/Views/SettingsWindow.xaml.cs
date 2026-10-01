@@ -234,6 +234,7 @@ public sealed partial class SettingsWindow : Window
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(settings.BarColor));
         TaskbarColorCheck.IsChecked = settings.UseTaskbarColor;
         BlurCheck.IsChecked = settings.BlurBackground;
+        IconShadowsCheck.IsChecked = settings.IconShadows;
         BuildIconSetList(settings.IconSet);
 
         _savedColors.Clear();
@@ -312,6 +313,8 @@ public sealed partial class SettingsWindow : Window
         AutoHideCheck.Unchecked += (_, _) => Preview();
         BlurCheck.Checked += (_, _) => Preview();
         BlurCheck.Unchecked += (_, _) => Preview();
+        IconShadowsCheck.Checked += (_, _) => Preview();
+        IconShadowsCheck.Unchecked += (_, _) => Preview();
 
         ThemeBox.SelectionChanged += (_, _) =>
         {
@@ -491,6 +494,7 @@ public sealed partial class SettingsWindow : Window
             CustomColors = [.. _savedColors],
             BarRoundness = RoundnessSlider.Value,
             BlurBackground = BlurCheck.IsChecked == true,
+            IconShadows = IconShadowsCheck.IsChecked == true,
             IconSet = SelectedIconSet,
             PreviewSweep = SweepCheck.IsChecked == true,
             SettingsPage = Tabs.SelectedIndex,
@@ -1667,6 +1671,7 @@ public sealed partial class SettingsWindow : Window
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(defaults.BarColor));
         TaskbarColorCheck.IsChecked = defaults.UseTaskbarColor;
         BlurCheck.IsChecked = defaults.BlurBackground;
+        IconShadowsCheck.IsChecked = defaults.IconShadows;
         BuildIconSetList(defaults.IconSet);
         UpdateColorControls();
         RefreshColorPreview();

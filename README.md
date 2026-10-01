@@ -134,6 +134,10 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
+- **Casts a faint shadow under each icon**, falling a little below it so the icons stand off
+  the bar — *Shadow under the icons* on the Appearance page, on unless turned off. Only the
+  shadow is added: each icon is drawn over it exactly as it is drawn without one, and none of
+  the shadow lies under the icon itself.
 - **Pulses an icon twice** when a click actually launches something (not when it just
   raises a window that was already open).
 - **The Items page is a picture of the dock**: every row shows its item's icon as the dock
@@ -462,7 +466,8 @@ src/ArtDock/
                ShellIdList (what Explorer drags besides paths)
   Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,
                FolderArt (the folders the dock draws, from Assets/folder.svg),
-               RunningAppsService, DockPresets, DockCommands, DroppedItems, TrayIcon, Screens,
+               IconShadow (the shadow an icon casts onto the bar), SvgBlur (the blur
+               both of those use), RunningAppsService, DockPresets, DockCommands, DroppedItems, TrayIcon, Screens,
                SingleInstance, MemoryTrim, FullscreenApps, ProgramScan,
                GameLibraries, InstalledApps, AppUpdater (the dock's own updates)
   Program.cs   the entry point, which hands Velopack's installer launches over first
@@ -480,7 +485,7 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
                        install folder, the shell's images' transparency, the
-                       folders the dock draws
+                       folders the dock draws, the icons' shadow
 LICENSE                MIT with the Commons Clause: free to use and change, not to sell
 docs/step-2-transparency.md
 docs/packs.md          the language-pack and icon-set formats
@@ -570,6 +575,16 @@ shadow and a displaced key shadow, spaced on a power curve) cost nothing to redr
 (`BarShadow`). With the blur off the dock draws them, clipping the bar out, because a shadow is
 not visible through the object casting it; with it on the sheet draws the same rings under the
 blur, which is opaque and hides them where the bar is.
+
+**The icons' shadow is a picture, worked out once.** An icon's shadow is made from its own
+outline the first time the icon is drawn with one — moved down, drawn in a little so that it
+falls below the icon rather than round it, blurred as SVG blurs, and taken out wherever the icon
+covers — into a bitmap 64 pixels across that the icon draws under itself (`IconShadow`). A
+`DropShadowEffect` would look the same, but WPF keeps nothing of an effect's output, so it would
+draw every icon off-screen and blur it again on every frame of the wave; a bitmap costs the wave
+nothing measurable. The icon goes over it unchanged, where merging the two into one picture
+would have resampled the icon, and every measure is a share of the icon's size, so the wave
+magnifies the shadow with it.
 
 **The bar breathes, in fractions of a pixel.** The bar wraps whatever the icons occupy at that
 instant. That is nearly constant — the falloff sums to a constant across the middle of the dock
@@ -1007,7 +1022,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred tests cover the cosine falloff (peak, range boundary,
+Six hundred and nine tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1150,6 +1165,17 @@ glyph both of the theme's symbol fonts have; that `shell:Downloads` counts as a 
 while This PC, the Recycle Bin and a `.zip` do not;
 and that a folder in an imported settings file is drawn from the file alone, with nothing on
 disk beside it to have gone missing.
+
+Nine cover the shadow an icon casts onto the bar. The one that matters is what it was asked
+for with — a shadow that would not blur the icons: every pixel an icon covers whole is the same
+with its shadow as without it, so the icon is drawn over the shadow untouched rather than merged
+into one picture with it. The rest: that it falls below the icon, faint at its sides and next
+to nothing above it, rather than as a ring round it; that it is faint at its darkest; that none
+of it lies under the icon, where it would darken the icon's antialiased rim; that it is centred
+on the icon and grows with it, a photo's thumbnail included; that an icon is shadowed once and
+an empty picture not at all; that none is drawn when it is turned off; that the dock shadows
+every icon, ones added later included, and takes them all away again; and that it is on for a
+new dock, and for one whose settings were written before it existed.
 
 Nine cover the pins that act rather than open. The one that matters guards the other
 direction: an ordinary target — an `.exe`, a `shell:` place, an AUMID, a web address, the
