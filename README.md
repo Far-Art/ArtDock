@@ -1,8 +1,8 @@
 # ArtDock
 
-A macOS-style application dock for Windows 11. Pin applications, files and folders to a
-floating bar whose icons magnify as the pointer approaches, and launch or switch between
-them from there.
+A feature-rich, highly customizable application dock for Windows 11, inspired by macOS. Pin
+applications, files and folders, and launch or switch between them from one place. Fast,
+responsive and built to feel at home on Windows.
 
 ## Highlights
 
@@ -68,7 +68,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 
 ## What it does
 
-- **Magnifies** icons on a cosine falloff, with neighbours lifting alongside the hovered one.
+- **Magnifies** icons as the pointer approaches, on a cosine falloff, with neighbours lifting
+  alongside the hovered one.
 - **Launches pinned apps**, or raises them if they already have a window. Clicking an app
   that is already in front cycles through its windows.
 - **Shows a dot** under every app that has an open window, kept current by window events
@@ -1011,6 +1012,11 @@ implementation is not; and, for the dock's own updates, the first release to pub
 and a signature of the project's own on the feed. Then the
 smaller things: sharpening the acrylic backdrop, and the Exclusions page's blind spot for Store
 apps.
+
+Asked for, and not begun: hotkeys, with a page of the settings dialog to set them on, so the
+dock can be brought up, hidden and used from the keyboard; starting an item as administrator
+from its menu or with Ctrl+Shift+click; and previews of an app's windows on resting the pointer
+on its icon, as the taskbar shows them.
 
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
