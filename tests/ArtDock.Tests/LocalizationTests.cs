@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Controls;
 using ArtDock.Localization;
@@ -384,6 +385,100 @@ public partial class LocalizationTests : IDisposable
 
         Assert.Equal("de", library.Resolve("ru", CultureInfo.GetCultureInfo("de-DE")));
         Assert.Equal(LanguageLibrary.EnglishId, library.Resolve("en", CultureInfo.GetCultureInfo("de-DE")));
+    }
+
+    // ---- US and British English -------------------------------------------------
+
+    private const string BritishId = "en-GB";
+
+    /// <summary>
+    /// Words spelled one way in US English and another in British: the US stem, and the
+    /// British one. Only words whose spelling settles which English a string is in — "tick"
+    /// and "check" are both English, and say nothing on their own.
+    /// </summary>
+    private static readonly (string Us, string British)[] Spellings =
+    [
+        ("color", "colour"),
+        ("behavior", "behaviour"),
+        ("center", "centre"),
+        ("favorite", "favourite"),
+        ("honor", "honour"),
+        ("gray", "grey")
+    ];
+
+    private static bool Spells(string text, Func<(string Us, string British), string> which) =>
+        Spellings.Any(pair => Regex.IsMatch(text, $@"\b{which(pair)}", RegexOptions.IgnoreCase));
+
+    [Fact]
+    public void English_IsUSEnglish_AndBritishFollowsIt()
+    {
+        var library = new LanguageLibrary(_dir);
+
+        Assert.Equal(LanguageLibrary.EnglishId, library.Languages[0].Id);
+        Assert.Equal("English (United States)", library.Languages[0].DisplayName);
+
+        var british = library.Languages[1];
+        Assert.Equal(BritishId, british.Id);
+        Assert.True(british.IsBuiltIn);
+        Assert.Equal("English (United Kingdom)", british.DisplayName);
+    }
+
+    [Fact]
+    public void FollowingWindows_IsBritishOnlyForBritishEnglish()
+    {
+        var library = new LanguageLibrary(_dir);
+
+        Assert.Equal(BritishId, library.Resolve(null, CultureInfo.GetCultureInfo("en-GB")));
+        Assert.Equal(LanguageLibrary.EnglishId, library.Resolve(null, CultureInfo.GetCultureInfo("en-US")));
+        Assert.Equal(LanguageLibrary.EnglishId, library.Resolve(null, CultureInfo.GetCultureInfo("en-AU")));
+        Assert.Equal(LanguageLibrary.EnglishId, library.Resolve(null, CultureInfo.GetCultureInfo("ja-JP")));
+    }
+
+    [Fact]
+    public void USEnglish_HasNoBritishSpellings()
+    {
+        var british = LanguageLibrary.English.Keys
+            .Where(key => Spells(LanguageLibrary.English.Get(key), pair => pair.British))
+            .Order()
+            .ToList();
+
+        Assert.True(british.Count == 0, "Spelled the British way in en.json: " + string.Join(", ", british));
+    }
+
+    [Fact]
+    public void BritishEnglish_RespellsEveryUSSpelling()
+    {
+        var english = LanguageLibrary.English;
+        var british = new LanguageLibrary(_dir).Load(BritishId);
+
+        Assert.Empty(british.Rejected);
+
+        var missed = english.Keys
+            .Where(key => Spells(english.Get(key), pair => pair.Us) && Spells(british.Get(key), pair => pair.Us))
+            .Order()
+            .ToList();
+
+        Assert.True(missed.Count == 0, "Spelled the US way in en-GB.json, or missing from it: " + string.Join(", ", missed));
+    }
+
+    [Fact]
+    public void BritishEnglish_GivesOnlyWhatItChanges()
+    {
+        var path = Path.Combine(SourceRoot, "Localization", BritishId + ".json");
+        using var document = JsonDocument.Parse(
+            File.ReadAllText(path),
+            new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            });
+
+        var same = document.RootElement.GetProperty("strings").EnumerateObject()
+            .Where(entry => entry.Value.GetString() == LanguageLibrary.English.Get(entry.Name))
+            .Select(entry => entry.Name)
+            .ToList();
+
+        Assert.True(same.Count == 0, "The same in en-GB.json as in en.json: " + string.Join(", ", same));
     }
 
     // ---- XAML ----------------------------------------------------------------------

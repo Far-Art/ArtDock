@@ -47,8 +47,10 @@ commas allowed.
 ## Language packs
 
 A language pack is the dock's English string table, translated. The English table is
-[`src/ArtDock/Localization/en.json`](../src/ArtDock/Localization/en.json) — start from a copy
-of it.
+[`src/ArtDock/Localization/en.json`](../src/ArtDock/Localization/en.json), in US English — start
+from a copy of it. British English,
+[`en-GB.json`](../src/ArtDock/Localization/en-GB.json) beside it, is a built-in translation of
+the smallest kind: it gives only the strings British English spells differently.
 
 ```jsonc
 {

@@ -423,7 +423,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   dock, such as one using a placeholder English does not supply, is dropped in favour of the
   English one. Numbers are formatted in the language's own way (`16 %`, `1,40x` in German),
   and counts take the language's own plural forms, three of them in Russian. Only English
-  ships so far.
+  ships so far, in two kinds: US English, which is the default and what every translation
+  falls back to, and British English (`en-GB.json`), a translation of it that gives only the
+  strings it spells or words differently — *colour*, *Behaviour*, *Tick* — and takes the rest
+  from US English. Following Windows comes to British English only for a Windows set to it;
+  any other English, Australian included, is US English.
 - **Icon sets**: a folder of PNGs with a `pack.json` saying which image is drawn for what —
   an executable by name, a path, a Store app, a place such as the Recycle Bin (full and empty
   separately), a document type, any folder — installed in
@@ -488,8 +492,9 @@ src/ArtDock/
                SingleInstance, MemoryTrim, FullscreenApps, ProgramScan,
                GameLibraries, InstalledApps, AppUpdater (the dock's own updates)
   Program.cs   the entry point, which hands Velopack's installer launches over first
-  Localization/ en.json (every string), StringTable, LanguageLibrary, Localizer,
-               Localized (formatted text in XAML), PluralRules, LanguagePackFile
+  Localization/ en.json (every string, in US English), en-GB.json (British English),
+               StringTable, LanguageLibrary, Localizer, Localized (formatted text in XAML),
+               PluralRules, LanguagePackFile
   IconSets/    IconSet (matching and loading), IconSetLibrary, IconSetFile
   Packs/       PackKind, PackManifest, PackLocations — what every pack has in common
   Downloads/   interfaces only: the pack catalog, download, verify, install
@@ -1051,7 +1056,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and sixty-one tests cover the cosine falloff (peak, range boundary,
+Six hundred and sixty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1267,7 +1272,7 @@ And the one that matters most: the row lands in the same place on the screen wha
 its window is, which is what lets the settings dialog hold the window wide without the dock
 wandering along the edge under the slider.
 
-Thirty-nine cover the string table. Three read the source: every key the XAML and the code
+Forty-four cover the string table. Three read the source: every key the XAML and the code
 name is in `en.json`, every key in `en.json` is named somewhere, and every English string
 formats — the first catches a typo that would show a key on screen, and the second keeps the
 table from filling with strings nothing uses. The rest hold a translation to English: that it
@@ -1278,7 +1283,10 @@ translation's own rules, Russian's three forms included; and that numbers take i
 Around them, the library: English always there and first, an installed pack listed and
 loaded, six kinds of unusable pack reported rather than listed, and following Windows landing
 on the nearest language there is — German for Austrian German, English for Japanese when there
-is no Japanese.
+is no Japanese. Five hold the two Englishes to each other: US English first and British beside
+it, British only for a Windows set to it, no British spelling in `en.json`, every US spelling
+in it given its British form in `en-GB.json`, and nothing in `en-GB.json` that says the same
+as `en.json` — so a new string with *color* or *colour* in it cannot slip past the other file.
 
 Twenty-two cover icon sets. Most are about which image a pin gets — an executable by name
 wherever it lives, a shortcut by what it runs, a Store app by its id, a place by its target, a

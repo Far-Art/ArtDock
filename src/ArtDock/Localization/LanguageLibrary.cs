@@ -47,7 +47,16 @@ public sealed record LanguageInfo(
 /// </remarks>
 public sealed class LanguageLibrary
 {
-    /// <summary>The tag of the language the dock is written in, and which every other falls back to.</summary>
+    /// <summary>
+    /// The tag of the language the dock is written in — US English, which is the default — and
+    /// which every other falls back to.
+    /// </summary>
+    /// <remarks>
+    /// Plain <c>en</c> rather than <c>en-US</c>, so that a Windows set to any English there is
+    /// no pack for comes here when it is followed: <c>en-AU</c> is matched by its parent.
+    /// British English is a translation of it, <c>en-GB</c>, giving only what it spells
+    /// differently.
+    /// </remarks>
     public const string EnglishId = "en";
 
     /// <summary>The newest language-pack format this build reads.</summary>
@@ -75,11 +84,16 @@ public sealed class LanguageLibrary
         ReadInstalled(installed);
 
         // English first, as the language the dock is written in and the way back from any
-        // other; then the rest by name, in the order a reader of the current language expects.
+        // other, and its other kinds — British — beside it; then the rest by name, in the
+        // order a reader of the current language expects.
         _languages.Sort((a, b) =>
-            a.Id == EnglishId ? -1
-            : b.Id == EnglishId ? 1
+            Rank(a) != Rank(b) ? Rank(a) - Rank(b)
             : string.Compare(a.Name, b.Name, CultureInfo.CurrentCulture, CompareOptions.IgnoreCase));
+
+        static int Rank(LanguageInfo language) =>
+            language.Id == EnglishId ? 0
+            : CultureInfo.GetCultureInfo(language.Id).TwoLetterISOLanguageName == EnglishId ? 1
+            : 2;
     }
 
     /// <summary>English, built from the copy embedded in the executable.</summary>

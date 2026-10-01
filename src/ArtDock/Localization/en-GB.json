@@ -1,0 +1,49 @@
+{
+  // British English: only the strings in which it differs from the dock's own US English
+  // (en.json) — spelling, and the odd word. A key left out reads the same in both, and is
+  // taken from en.json. LocalizationTests holds the two files in step: a string in en.json
+  // with a US spelling needs its British form here.
+  "format": 1,
+  "kind": "language",
+  "id": "en-GB",
+  "name": "English (United Kingdom)",
+  "englishName": "English (United Kingdom)",
+  "version": "1.0.0",
+  "author": "ArtDock",
+  "direction": "ltr",
+  "strings": {
+    "Settings.Page.Behaviour": "Behaviour",
+
+    "Settings.Size.Influence.Hint": "How many icons either side of the pointer lift with it. Counted in icons, so changing the icon size does not change the wave.",
+
+    "Settings.Appearance.Colour": "Colour",
+    "Settings.Appearance.MatchTaskbar.Hint": "Takes the colour Windows tints the taskbar with, and keeps following it when the accent changes or the system switches between light and dark. The colour chosen below is kept, and comes back when this is turned off.",
+    "Settings.Appearance.SavedColours": "Your saved colours",
+    "Settings.Appearance.NoSavedColours": "None yet. Pick a colour, then Save it to keep it here.",
+    "Settings.Appearance.SaveColour": "Save this colour",
+
+    "Settings.Items.LockOrder.Tip": "Stops a drag rearranging the items, here or on the dock. Adding, removing and editing are unaffected.",
+    "Settings.Items.LockContents.Tip": "Stops items being added, removed or edited, here or on the dock — the dock's own commands go away, leaving a greyed Locked in their place, and a file dropped on the bar is refused. Reordering is unaffected.",
+    "Settings.Items.Hint.BothLocked": "The order and the items are both locked: nothing here or on the dock can be rearranged, added, removed or edited. Untick a lock to make changes again.",
+
+    "Settings.Position.AlongEdge.Hint": "Slides the dock from the middle of the edge towards either end. At the ends it keeps room for the magnified icons, so the wave never runs off the screen.",
+    "Settings.Position.Centre": "Centre",
+
+    "Settings.Behaviour.Title": "Behaviour",
+    "Settings.Behaviour.Handle.Hint": "A slim bar just above the taskbar marks where the dock is while you cannot see it — slid away, or under other windows. It is only a mark: hold the pointer against the bottom edge under the dock to bring it up. It shows the colours behind it reversed, so it stands out on any background, and screenshots and recordings leave it out. It is not shown over anything fullscreen, such as a video or a game.",
+    "Settings.Behaviour.Reset": "Reset Behaviour to defaults",
+
+    "Scan.Hint": "Tick a game to exclude all of its programs, or tick them one by one. Programs that give the same name share a row, since a launcher often starts a game under another file name — and a program that never fills the screen changes nothing, so when unsure, tick it. A game that is running is marked Open now and listed first.",
+    "Scan.Hint.Apps": "The apps installed on this computer, from the Start menu and the desktop — games are left to Scan for games. Tick the ones the dock should stay down for while they fill the screen: a video player, a browser, a remote desktop. An app that is running is marked Open now and listed first.",
+    "Scan.Add": "Add ticked",
+
+    "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
+    "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",
+
+    "Settings.About.StartOver.Hint": "Puts every page back the way ArtDock ships, and the dock back to the items a new dock starts with. Saved colours and excluded apps are left alone. Nothing is written until you press Save.",
+
+    "EditItem.Folder.Colour": "Colour",
+    "EditItem.Folder.Hex": "The colour in hex, #RRGGBB",
+    "EditItem.Symbol.Favourites": "Favourites"
+  }
+}
