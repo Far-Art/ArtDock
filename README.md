@@ -284,8 +284,12 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Starts when you sign in, unless told not to**: the same first run registers the dock to
   start at sign-in, and so does the setup, so *Start ArtDock when I sign in* on the System
   page comes up checked. The first run leaves alone an entry some other copy already made;
-  the setup takes it over, since installing is choosing that copy. Resetting the System page
-  checks it again.
+  the setup takes it over, since installing is choosing that copy. The checkbox and Windows'
+  own switch — Task Manager's *Startup apps*, or the Settings app's *Apps → Startup* — are one
+  switch: unchecking it leaves ArtDock on Windows' list, switched off, rather than taking it off
+  the list; one turned off in Windows shows unchecked — at once, if the settings dialog is open
+  while it happens; and neither the first run nor the setup turns it back on. Resetting the
+  System page checks it again.
 - **An empty dock is still a dock**: with nothing pinned it draws one empty slot's worth of
   bar rather than disappearing. That is not decoration — the window is per-pixel transparent
   and Windows hit-tests it by what was painted, so a dock that drew nothing would be a window
@@ -1043,7 +1047,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and twenty-nine tests cover the cosine falloff (peak, range boundary,
+Six hundred and fifty tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1407,6 +1411,21 @@ over HTTPS, and a copy nobody installed — the test run itself — is not taken
 one, and starts at sign-in from where it is, both before Velopack has looked for an
 installation and after, which is the state a build run from the source tree is in whenever
 the settings dialog asks.
+
+Twenty-one cover starting at sign-in, under a scratch registry key and never the real Run key.
+Task Manager's *Startup apps* page turns an entry off by writing a flag beside it rather than
+deleting it, so an entry turned off there reads as registered but not on, and one turned back
+on there reads as on — and so does one turned off in the Settings app's *Apps → Startup*, which
+writes a different byte for off. The one that matters: ticking the System page's box over an
+entry Windows turned off turns it on, where it used to rewrite the entry and leave it off. The
+box writes the flags Task Manager writes: unticking keeps the entry and switches it off, with
+the time, so the dock stays on Windows' list; with no entry it writes nothing. The setup and the
+first run register without touching the flag, so a setup run over an installed copy leaves a
+dock that was switched off off; and an uninstall takes the flag with an entry into its
+installation, and leaves another copy's alone. The last three are the watch the settings dialog
+keeps while it is open: it hears an entry written and a switch in Windows, and hears the second
+of two in a row — a registration is good for one change, so that one is heard only if the
+watch made it again — and hears nothing once it is stopped.
 
 ## Licence
 

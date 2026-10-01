@@ -68,10 +68,10 @@ public partial class App : Application
         // Starting at sign-in is the default, and the checkbox reads the Run key rather than
         // the file, so the first run is what makes it true. Only when there is no entry at
         // all: one that is there already belongs to another copy of the dock, and is left to
-        // it.
-        if (!_settings.LoadedFromDisk && settings.RunAtLogin && !Interop.Autostart.IsEnabled())
+        // it — as is one turned off in Task Manager, which is why this is not IsEnabled.
+        if (!_settings.LoadedFromDisk && settings.RunAtLogin && !Interop.Autostart.IsRegistered())
         {
-            Interop.Autostart.SetEnabled(true);
+            Interop.Autostart.Register();
         }
 
         // One owner for every context menu in the app; see MenuHost for why they need one.

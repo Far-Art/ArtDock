@@ -65,6 +65,13 @@ public sealed partial class SettingsWindow : Window
     private bool _loading = true;
 
     /// <summary>
+    /// Keeps the autostart checkbox in step with Windows while the dialog is open — see
+    /// <see cref="ShowAutostart"/>. Made when the dialog is shown, so one built and never shown
+    /// watches nothing.
+    /// </summary>
+    private AutostartWatch? _autostartWatch;
+
+    /// <summary>
     /// The dock's bottom margin, one of the two stored settings with no control on any page.
     /// </summary>
     /// <remarks>
@@ -241,6 +248,12 @@ public sealed partial class SettingsWindow : Window
             // A dialog that opens on the Icons page holds its item up from the start. Not from
             // the constructor, which runs before anything is listening.
             AnnounceSelectedItem();
+
+            // Then looked at once more, for a switch in Windows between the constructor's read
+            // and the watch starting.
+            _autostartWatch = new AutostartWatch();
+            _autostartWatch.Changed += (_, _) => Dispatcher.BeginInvoke(ShowAutostart);
+            ShowAutostart();
         };
     }
 
@@ -287,7 +300,7 @@ public sealed partial class SettingsWindow : Window
         ThemeBox.SelectedIndex = AppTheme.IndexOf(settings.Theme);
         BuildLanguageList(settings.Language);
 
-        // Read the Run key rather than the stored flag: the user may have turned the dock off
+        // Read the registry rather than the stored flag: the user may have turned the dock off
         // in Task Manager's Startup tab, and the checkbox should reflect reality.
         RunAtLoginCheck.IsChecked = Autostart.IsEnabled();
         ReduceMotionCheck.IsChecked = settings.ReduceMotion;
@@ -577,6 +590,33 @@ public sealed partial class SettingsWindow : Window
             RunAtLoginCheck.IsChecked = Autostart.IsEnabled();
             _loading = false;
         }
+    }
+
+    /// <summary>
+    /// Shows autostart as Windows now has it, when the entry has changed while the dialog is
+    /// open — switched in Task Manager or the Settings app beside it.
+    /// </summary>
+    /// <remarks>
+    /// Over a tick or untick not yet saved, too: the switch in Windows is the newer choice, and
+    /// it is already made, where the checkbox's waits for Save. Saving then finds the two agree
+    /// and writes nothing.
+    /// </remarks>
+    private void ShowAutostart()
+    {
+        if (_autostartWatch is null)
+        {
+            return;
+        }
+
+        var enabled = Autostart.IsEnabled();
+        if (RunAtLoginCheck.IsChecked == enabled)
+        {
+            return;
+        }
+
+        _loading = true;
+        RunAtLoginCheck.IsChecked = enabled;
+        _loading = false;
     }
 
     // ---- position ------------------------------------------------------------
@@ -2730,6 +2770,8 @@ public sealed partial class SettingsWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _autostartWatch?.Dispose();
+        _autostartWatch = null;
         _store.Changed -= OnStoreChanged;
         Localizer.LanguageChanged -= OnLanguageChanged;
         _updateDownload?.Cancel();

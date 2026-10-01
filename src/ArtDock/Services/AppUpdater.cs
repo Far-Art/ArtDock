@@ -118,10 +118,11 @@ public sealed class AppUpdater
     /// pointed at a copy run from a folder is taken over, since installing is choosing this
     /// one. The setup puts its launcher in the install folder before it calls here, so
     /// <see cref="LaunchPath"/> already finds it. An update does not come here, so autostart
-    /// turned off stays off.
+    /// turned off stays off. A setup run over an installed copy does, and so the entry is only
+    /// written, never Task Manager's flag cleared: a dock turned off there stays off through it.
     /// </para>
     /// </remarks>
-    public static void OnInstalled(SemanticVersion version) => Autostart.SetEnabled(true);
+    public static void OnInstalled(SemanticVersion version) => Autostart.Register();
 
     /// <summary>
     /// Velopack's uninstaller is about to remove this installation — the other thing its
