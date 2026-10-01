@@ -71,6 +71,49 @@ internal static class MonitorDpi
     /// <summary>True when any part of the window lies on a display that is connected.</summary>
     public static bool IsOnAnyDisplay(nint hwnd) => MonitorFromWindow(hwnd, MonitorDefaultToNull) != 0;
 
+    /// <summary>
+    /// The height of the work area of the display a window is on, or nearest to, in that
+    /// display's DIPs — or null when Windows will not say.
+    /// </summary>
+    /// <remarks>
+    /// For a window that must fit on the display it opens on. <c>SystemParameters.WorkArea</c>
+    /// is the main display's, whichever one the window is on.
+    /// </remarks>
+    public static double? WorkAreaHeightForWindow(nint hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (monitor == 0 || !GetMonitorInfo(monitor, ref info))
+        {
+            return null;
+        }
+
+        var scale = GetDpiForMonitor(monitor, EffectiveDpi, out var dpiX, out _) == 0 && dpiX > 0
+            ? dpiX / Baseline
+            : 1;
+
+        return (info.WorkBottom - info.WorkTop) / scale;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public int MonitorLeft;
+        public int MonitorTop;
+        public int MonitorRight;
+        public int MonitorBottom;
+        public int WorkLeft;
+        public int WorkTop;
+        public int WorkRight;
+        public int WorkBottom;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
+
     [DllImport("user32.dll")]
     private static extern nint MonitorFromWindow(nint hwnd, uint dwFlags);
 

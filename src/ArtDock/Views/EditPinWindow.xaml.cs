@@ -113,8 +113,14 @@ public sealed partial class EditPinWindow : Window
         }
 
         // The window takes the height of what it shows, which for a folder is a good deal more
-        // than for anything else — but never more than the screen, where it scrolls instead.
-        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 40);
+        // than for anything else — but never more than the display it is on, where it scrolls
+        // instead. The main display's until the window exists; then the display WPF centres it
+        // on, its owner's if it has one; then wherever it is moved, since the displays need
+        // not be the same height.
+        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - HeightMargin);
+        SourceInitialized += (_, _) => CapHeight(
+            new WindowInteropHelper(Owner ?? this).Handle);
+        LocationChanged += (_, _) => CapHeight(new WindowInteropHelper(this).Handle);
 
         // The dock holds this item's label open while the dialog is up, so a name being
         // typed should appear there as it is typed rather than only after saving.
@@ -465,6 +471,27 @@ public sealed partial class EditPinWindow : Window
         _drawsFolder = false;
         CustomizeButton.IsChecked = false;
         RefreshIcon();
+    }
+
+    /// <summary>Room left between the window and the edges of the work area, in DIPs.</summary>
+    private const double HeightMargin = 40;
+
+    /// <summary>
+    /// Holds the window to the work area of the display <paramref name="hwnd"/> is on, in that
+    /// display's DIPs, which is what WPF keeps a window's size in across a change of scale.
+    /// </summary>
+    /// <remarks>
+    /// Was the main display's (<c>SystemParameters.WorkArea</c>) wherever the editor opened.
+    /// Both displays here are 1392 DIPs tall, so it never showed; a shorter second display
+    /// would have had a folder's editor run past its bottom edge rather than scroll. Setting an
+    /// unchanged height does nothing, so asking on every move costs two calls into Windows.
+    /// </remarks>
+    private void CapHeight(nint hwnd)
+    {
+        if (hwnd != 0 && MonitorDpi.WorkAreaHeightForWindow(hwnd) is { } height)
+        {
+            MaxHeight = Math.Max(MinHeight, height - HeightMargin);
+        }
     }
 
     /// <summary>An image chosen for the item, in place of the drawn folder as of the item's own icon.</summary>
