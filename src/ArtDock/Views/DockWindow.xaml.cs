@@ -1037,8 +1037,13 @@ public sealed partial class DockWindow : Window
     /// <summary>
     /// Offers the right-click menu for the icon under the cursor.
     /// </summary>
+    /// <remarks>
+    /// Read afresh, not taken from <see cref="DockBar.HoveredItem"/>: a right-click on another
+    /// icon while one icon's menu is open closes that menu, and the hover is still naming the
+    /// icon it was held on — see <see cref="DockBar.ItemUnderCursor"/>.
+    /// </remarks>
     /// <returns>True when the menu was shown.</returns>
-    private bool ShowItemMenu() => ShowMenuFor(_dock.HoveredItem);
+    private bool ShowItemMenu() => ShowMenuFor(_dock.ItemUnderCursor());
 
     /// <summary>
     /// Shows the right-click menu, for one item or for the dock itself.

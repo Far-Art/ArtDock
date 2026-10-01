@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using System.Windows;
 using ArtDock.Controls;
 using ArtDock.Dock;
 
@@ -237,5 +238,68 @@ public class DockBarFocusTests
         // The next dialog opens with nothing selected, so the dock starts from the middle.
         bar.PreviewMagnification(true);
         Assert.Null(bar.PreviewedItem);
+    });
+
+    // ---- what a right-click lands on --------------------------------------------------
+
+    /// <summary>The same dock, laid out in a window of the size it asks for.</summary>
+    private static (DockBar Bar, DockItem[] Items, DockMetrics Metrics) Arranged()
+    {
+        var metrics = new DockMetrics();
+        var bar = new DockBar(metrics);
+        var items = new[] { Pin("one"), Pin("two"), Pin("three") };
+        bar.SetItems(items);
+
+        var size = bar.PreferredSize();
+        bar.Width = size.Width;
+        bar.Height = size.Height;
+        bar.Measure(size);
+        bar.Arrange(new Rect(size));
+        bar.UpdateLayout();
+
+        return (bar, items, metrics);
+    }
+
+    /// <summary>The middle of an icon at rest, in the dock's coordinates.</summary>
+    private static Point IconCentre(DockBar bar, DockMetrics metrics, int index) =>
+        new(
+            bar.RestingBarRect.Left + new DockLayout(metrics).RestingCentre(index),
+            bar.RestingBarRect.Bottom - metrics.PaddingY - (metrics.BaseSize / 2));
+
+    [Fact]
+    public void ItemAt_NamesTheIconDrawnThere() => OnStaThread(() =>
+    {
+        var (bar, items, metrics) = Arranged();
+
+        for (var i = 0; i < items.Length; i++)
+        {
+            Assert.Same(items[i], bar.ItemAt(IconCentre(bar, metrics, i)));
+        }
+
+        // Between two icons is the bar, which is the dock's own menu and no item's.
+        var between = IconCentre(bar, metrics, 0);
+        between.X = (between.X + IconCentre(bar, metrics, 1).X) / 2;
+        Assert.Null(bar.ItemAt(between));
+    });
+
+    /// <summary>
+    /// The case that opened one icon's menu over another: the hold a menu takes does not
+    /// decide what a click lands on.
+    /// </summary>
+    /// <remarks>
+    /// While an icon's menu is open the dock holds that icon and stops following the pointer,
+    /// so the hover goes on naming it — and the right-click that closes the menu over another
+    /// icon arrives before the hold is let go. The menu asked the hover, and came up over the
+    /// icon clicked with the commands of the one before.
+    /// </remarks>
+    [Fact]
+    public void ItemAt_IsNotTheHeldItem_WhereAnotherIsDrawn() => OnStaThread(() =>
+    {
+        var (bar, items, metrics) = Arranged();
+
+        bar.FocusItem(items[0]);
+        Assert.True(bar.IsHoldingLabel);
+
+        Assert.Same(items[2], bar.ItemAt(IconCentre(bar, metrics, 2)));
     });
 }

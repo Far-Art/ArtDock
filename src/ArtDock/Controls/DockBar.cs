@@ -2251,37 +2251,7 @@ public sealed class DockBar : Canvas
     /// <summary>Finds the icon under the cursor, using the live (magnified) geometry.</summary>
     private void UpdateHovered(Point? local)
     {
-        var found = -1;
-
-        if (local is { } point)
-        {
-            var iconBottom = BarBottom - Metrics.PaddingY;
-            var barTop = BarBottom - Metrics.BarHeight;
-
-            for (var i = 0; i < _items.Count; i++)
-            {
-                // Including the slide, so an icon still easing into a slot is picked up
-                // where it is drawn rather than where it is heading.
-                var left = _iconsLeft + _offsets[i] + SlotShift(i);
-                if (point.X < left || point.X > left + _sizes[i])
-                {
-                    continue;
-                }
-
-                // An icon's column runs the full height of the bar, not just the glyph's own
-                // box: the padding strip below it — where the running indicator sits — is part
-                // of the target, otherwise the bottom edge of the dock is a dead zone. Above
-                // the bar, the reachable area is however far the icon is currently magnified.
-                var top = Math.Min(barTop, iconBottom - _sizes[i]);
-                if (point.Y >= top && point.Y <= BarBottom)
-                {
-                    found = i;
-                }
-
-                break;
-            }
-        }
-
+        var found = local is { } point ? IndexAt(point) : -1;
 
         if (found == _hoveredIndex)
         {
@@ -2291,6 +2261,62 @@ public sealed class DockBar : Canvas
         _hoveredIndex = found;
         InvalidateVisual();
     }
+
+    /// <summary>The icon drawn at a point in this control's coordinates; -1 for none.</summary>
+    private int IndexAt(Point point)
+    {
+        var iconBottom = BarBottom - Metrics.PaddingY;
+        var barTop = BarBottom - Metrics.BarHeight;
+
+        for (var i = 0; i < _items.Count; i++)
+        {
+            // Including the slide, so an icon still easing into a slot is picked up
+            // where it is drawn rather than where it is heading.
+            var left = _iconsLeft + _offsets[i] + SlotShift(i);
+            if (point.X < left || point.X > left + _sizes[i])
+            {
+                continue;
+            }
+
+            // An icon's column runs the full height of the bar, not just the glyph's own
+            // box: the padding strip below it — where the running indicator sits — is part
+            // of the target, otherwise the bottom edge of the dock is a dead zone. Above
+            // the bar, the reachable area is however far the icon is currently magnified.
+            var top = Math.Min(barTop, iconBottom - _sizes[i]);
+            return point.Y >= top && point.Y <= BarBottom ? i : -1;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The item drawn at a point in this control's coordinates, or null if there is none
+    /// there.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the geometry as it is drawn, wave and all, and never of
+    /// <see cref="HoveredItem"/>, which can be out of date — see <see cref="ItemUnderCursor"/>.
+    /// </remarks>
+    public DockItem? ItemAt(Point local) =>
+        IndexAt(local) is var index and >= 0 && !_items[index].IsGhost ? _items[index].Item : null;
+
+    /// <summary>The item drawn under the cursor at this moment, or null if there is none.</summary>
+    /// <remarks>
+    /// <para>
+    /// For a click that has to name the item it landed on — the right-click menu — at a moment
+    /// when <see cref="HoveredItem"/> can still be naming another. Hover stops following the
+    /// cursor while an item is held for a menu (<see cref="TrackCursor"/>), and the right-click
+    /// that closes one icon's menu over another icon arrives before the hold is let go — the
+    /// menu's <c>Closed</c> comes later — and before a frame has looked at the cursor again.
+    /// Asking the hover gave the new menu the old icon, opened over the new one.
+    /// </para>
+    /// <para>
+    /// Not asked whether the pointer is on the dock: the click that asks came to the dock's
+    /// window, which is hit-tested by what it has drawn.
+    /// </para>
+    /// </remarks>
+    public DockItem? ItemUnderCursor() =>
+        TryGetLocalCursor(out var local) ? ItemAt(local) : null;
 
     /// <summary>
     /// The area that keeps the wave alive: the bar at this frame's amplitude, widened by
