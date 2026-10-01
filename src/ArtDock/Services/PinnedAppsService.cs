@@ -14,7 +14,7 @@ namespace ArtDock.Services;
 public sealed class PinnedAppsService
 {
     /// <summary>Pixel size icons are extracted at; large enough to stay crisp when magnified.</summary>
-    private const int IconPixelSize = 128;
+    internal const int IconPixelSize = 128;
 
     /// <summary>
     /// Icons already pulled from the shell, keyed by what was asked for.
@@ -162,6 +162,10 @@ public sealed class PinnedAppsService
         Aumid = app.Aumid,
         IconPath = app.IconPath,
         UseIconNotThumbnail = app.UseIconNotThumbnail,
+        FolderColor = app.FolderColor,
+        FolderSymbol = app.FolderSymbol,
+        FolderText = app.FolderText,
+        FolderSymbolTone = app.FolderSymbolTone,
         LinkTarget = ResolveLinkTarget(app.TargetPath),
         FontFamily = app.FontFamily,
         FontSize = app.FontSize,
@@ -245,15 +249,17 @@ public sealed class PinnedAppsService
 
     /// <summary>
     /// The icon for an item: the user's chosen image if there is one and it still exists;
-    /// otherwise, for a picture, its thumbnail; otherwise the icon set's, if a set is in use
-    /// and has one for it; otherwise whatever the shell has for the target.
+    /// otherwise, for a picture, its thumbnail; otherwise, for a folder given a colour, the
+    /// folder the dock draws; otherwise the icon set's, if a set is in use and has one for it;
+    /// otherwise whatever the shell has for the target.
     /// </summary>
     /// <remarks>
     /// The user's own choice beats the set because it is the more particular of the two: it
     /// was made for this one item, and a set is made for everybody's. A picture's thumbnail
     /// sits between them for the same reason — it is this one file, where the most a set can
-    /// match a picture by is its type, and would draw every photo on the dock the same. A set
-    /// with nothing for an item leaves it its own icon rather than a blank, so a small set is a
+    /// match a picture by is its type, and would draw every photo on the dock the same. So does
+    /// a drawn folder: its colour and symbol were chosen for this one folder. A set with
+    /// nothing for an item leaves it its own icon rather than a blank, so a small set is a
     /// usable one.
     /// </remarks>
     public static ImageSource? LoadIcon(DockItem item, IconSet? iconSet = null)
@@ -265,13 +271,17 @@ public sealed class PinnedAppsService
 
         // The set's key carries when its files last changed, so an edited set is not served
         // from what was cached for the old one.
-        var key = $"{iconSet?.Key}{item.IconPath}{item.ShellTarget}";
+        var key = $"{iconSet?.Key}{item.IconPath}{item.ShellTarget}{item.FolderColor}{item.FolderSymbol}{item.FolderText}{item.FolderSymbolTone}";
         if (IconCache.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
         var icon = item.IconPath is { Length: > 0 } custom ? LoadImageFile(custom) : null;
+
+        // Drawn rather than read, from nothing but the pin's own two settings — so an image
+        // chosen for it that has since gone missing falls back to the folder chosen with it.
+        icon ??= FolderArt.For(item.FolderColor, item.FolderSymbol, item.FolderText, item.FolderSymbolTone);
 
         if (icon is null && iconSet is not null)
         {

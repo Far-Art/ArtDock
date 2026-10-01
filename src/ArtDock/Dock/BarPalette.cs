@@ -13,7 +13,7 @@ namespace ArtDock.Dock;
 public static class BarPalette
 {
     /// <summary>The bar's stock colour, and the fallback for anything unparseable.</summary>
-    public static readonly Color Default = Color.FromRgb(0xCC, 0xD2, 0xFF);
+    public static readonly Color Default = Color.FromRgb(0xEE, 0xF1, 0xFF);
 
     /// <summary>
     /// Ready-made colours offered in the settings dialog, so choosing one does not require

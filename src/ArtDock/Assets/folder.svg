@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" color="#FFBE16">
+  <!--
+    The folder the dock draws for a folder pin given a colour of its own, and the one source of
+    its look. The dock reads this file, not a picture made from it: the shapes below, painted
+    in order, and then the symbol, if the pin has one. It is built into the program, so it is
+    the same on every machine and nobody's to edit but the program's.
+
+    It is drawn in the manner of Windows 11's own folders, so that it sits among them as one of
+    them: a tab at the top left sloping down into the back; a front that steps up past the tab
+    with a light rim along its top edge, lit from the top left; the back showing as a thin rim
+    above the front and a darker edge below it; and the symbol large on the front, tone-on-tone,
+    deepening towards its foot. It fills 16-240 across and 34-210 down, the box every one of
+    Windows' folder icons fills, so that it sits at their height. The outline is this file's
+    own, drawn to those proportions, not traced from Windows'.
+
+    The dock understands a small part of SVG on purpose - paths, <use> of a path in <defs>,
+    linear gradients and one drop shadow - and refuses anything else rather than draw something
+    other than what a browser shows; a test holds this file to that. currentColor is the colour
+    chosen for the folder, which is the colour of its back. Every other tone is black or white
+    laid over it, so that one colour is the whole of a folder's palette. The color above is the
+    one a folder starts with - Windows' own folder yellow - and what a browser shows this file
+    in.
+
+    The two rects in <defs> say where the symbol goes and where a folder's text goes instead,
+    and how each is painted; a browser does not draw them. The symbol is a glyph of the
+    system's symbol font: its em the rect's height, its ink centred on the rect. The text is
+    set in the rect's font-family and font-weight, as large as the rect takes the font's
+    capitals or the whole word, whichever is the less, and centred in it. Either is filled with
+    its rect's fill and outlined stroke-width wider in the same paint: the symbol font is drawn
+    for 16 px, a line of it a sixteenth of its em, and the outline brings that to the weight of
+    the lines on Windows' own folders, 10 of these units. That fill is the toned one, which a
+    folder has unless its pin asks for symbol-white or symbol-black instead. data-shade, on a
+    rect or on a gradient stop, darkens currentColor by mixing in that much black, which is
+    what makes the toned symbol tone-on-tone. data-shadow, on a symbol's paint, names the
+    filter - one feDropShadow - for the shadow a symbol painted in it casts: the white one
+    casts one, as the white symbols on Windows' own folders do, and the toned and the black
+    none, as the toned person on Windows' User folder casts none.
+  -->
+  <defs>
+    <!-- The back: the tab at the top left, sloping down into the back's top edge at 58. -->
+    <path id="back" d="M16,44 A10,10 0 0 1 26,34 H90 C95,34 98,36 101,40 L113,54 C116,57 119,58 123,58 H230 A10,10 0 0 1 240,68 V202 A8,8 0 0 1 232,210 H24 A8,8 0 0 1 16,202 Z"/>
+
+    <!-- The front: low at 74 beside the tab, stepping up to 62 past it; its foot at 206, four
+         above the back's, and its lower corners rounder than the back's, so the back shows
+         round its foot as a darker edge. -->
+    <path id="front" d="M16,78 A4,4 0 0 1 20,74 H93.5 C98.5,74 101.5,72 104.5,69 L109.5,64.5 C111.1,63 113.1,62 115.5,62 H232 A8,8 0 0 1 240,70 V196 A10,10 0 0 1 230,206 H26 A10,10 0 0 1 16,196 Z"/>
+
+    <linearGradient id="back-shade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.10"/>
+    </linearGradient>
+    <linearGradient id="front-light" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.59"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0.17"/>
+    </linearGradient>
+    <!-- The symbol's three paints: toned, deepening towards its foot; white; and black, a
+         little of the folder showing through it. -->
+    <linearGradient id="symbol-toned" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="currentColor" data-shade="0.24"/>
+      <stop offset="1" stop-color="currentColor" data-shade="0.36"/>
+    </linearGradient>
+    <linearGradient id="symbol-white" x1="0" y1="0" x2="0" y2="1" data-shadow="url(#symbol-shadow)">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0.92"/>
+    </linearGradient>
+    <linearGradient id="symbol-black" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.84"/>
+    </linearGradient>
+
+    <!-- The shadow a white symbol casts, fitted to the white symbols on Windows' own folders
+         at 256: black at 24%, blurred to 6, which fitted them all. Downloads and Videos fitted
+         best with no offset, Documents 2 lower and Music more; 1 takes the middle. -->
+    <filter id="symbol-shadow">
+      <feDropShadow dx="0" dy="1" stdDeviation="6" flood-color="#000" flood-opacity="0.24"/>
+    </filter>
+
+    <rect id="symbol" x="70" y="78" width="116" height="116" fill="url(#symbol-toned)" stroke-width="2.75"/>
+    <rect id="text" x="36" y="100" width="184" height="72" fill="url(#symbol-toned)" stroke-width="2" font-family="Segoe UI" font-weight="700"/>
+  </defs>
+
+  <use href="#back" fill="currentColor"/>
+  <use href="#back" fill="url(#back-shade)"/>
+  <use href="#front" fill="currentColor"/>
+  <use href="#front" fill="url(#front-light)"/>
+
+  <!-- The light along the front's top edge: the edge itself, and the same edge four lower. -->
+  <path d="M16,78 A4,4 0 0 1 20,74 H93.5 C98.5,74 101.5,72 104.5,69 L109.5,64.5 C111.1,63 113.1,62 115.5,62 H232 A8,8 0 0 1 240,70 V74 A8,8 0 0 0 232,66 H115.5 C113.1,66 111.1,67 109.5,68.5 L104.5,73 C101.5,76 98.5,78 93.5,78 H20 A4,4 0 0 0 16,82 Z" fill="#fff" fill-opacity="0.30"/>
+</svg>

@@ -1,5 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Interop;
 using ArtDock.Controls;
@@ -27,6 +30,50 @@ public sealed partial class EditPinWindow : Window
     /// <summary>The icon set the dock is drawing from, so the preview shows what the dock will.</summary>
     private readonly IconSet? _iconSet;
 
+    /// <summary>
+    /// Whether the icon is to be the folder the dock draws: one of the three ways to have it,
+    /// with an image chosen for the item and the item's own icon, each of which undoes the others.
+    /// </summary>
+    private bool _drawsFolder;
+
+    /// <summary>
+    /// The colour the folder is drawn in. Kept while the drawn folder is turned off, so that
+    /// customizing it again before saving brings back what was chosen.
+    /// </summary>
+    private Color _folderColor;
+
+    /// <summary>The symbol on the folder, as its glyph; null for none.</summary>
+    private string? _folderSymbol;
+
+    /// <summary>A few letters on the folder in place of the symbol; null for none.</summary>
+    private string? _folderText;
+
+    /// <summary>What the symbol, or the text, is painted in.</summary>
+    private FolderSymbolTone _tone;
+
+    /// <summary>
+    /// Set while the dialog writes a box itself — the hex box after the wheel moves, the text box
+    /// after a symbol is picked — so the box's own change handler does not take it for typing.
+    /// </summary>
+    private bool _writing;
+
+    private readonly ColorWheel _folderWheel = new();
+
+    private readonly List<(ToggleButton Tile, string? Glyph)> _symbolTiles = [];
+
+    /// <summary>
+    /// A text style that sets nothing, for text inside the symbol tiles: being explicit, it keeps
+    /// the window's own implicit one — which holds every TextBlock to the ordinary text colour —
+    /// off them, so they take the tile's colour, which turns to the accent's when it is pressed.
+    /// </summary>
+    private readonly Style _tileText = new(typeof(TextBlock));
+
+    /// <summary>
+    /// Whether what the item opens is a folder, and for which target that was asked — a trip
+    /// to the shell, so asked once per target rather than on every tick of the colour wheel.
+    /// </summary>
+    private (string? Target, bool IsFolder)? _folderCheck;
+
     public EditPinWindow(DockItem item, IconSet? iconSet = null)
     {
         InitializeComponent();
@@ -39,7 +86,29 @@ public sealed partial class EditPinWindow : Window
         TargetBox.Text = item.TargetPath ?? item.Aumid ?? string.Empty;
         UseIconBox.IsChecked = item.UseIconNotThumbnail;
 
+        // A folder that was never drawn starts from the design's own colour, so customizing it
+        // shows the folder as it was meant to look rather than a colour nobody chose.
+        _drawsFolder = item.FolderColor is { Length: > 0 };
+        _folderColor = FolderArt.ParseColor(item.FolderColor) ?? FolderArt.DefaultColor;
+        _folderSymbol = FolderArt.ParseSymbol(item.FolderSymbol);
+        _folderText = FolderArt.ParseText(item.FolderText);
+        _tone = FolderArt.ParseTone(item.FolderSymbolTone);
+
         BuildFontControls();
+        BuildFolderControls();
+
+        // A folder already customized opens with its customization out, which is what it is
+        // most likely being edited for. Pressed here, before the button's handler is attached,
+        // so opening is all it does: Customize would also set aside an image chosen for the item.
+        if (_drawsFolder && _iconPath is not { Length: > 0 })
+        {
+            CustomizeButton.IsChecked = true;
+            CustomizePanel.Visibility = Visibility.Visible;
+        }
+
+        // The window takes the height of what it shows, which for a folder is a good deal more
+        // than for anything else — but never more than the screen, where it scrolls instead.
+        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 40);
 
         FontFamilyBox.SelectionChanged += (_, _) => RaisePreview();
         FontStyleBox.SelectionChanged += (_, _) => RaisePreview();
@@ -57,7 +126,9 @@ public sealed partial class EditPinWindow : Window
         // than on every keystroke: resolving an icon is a COM round trip to the shell, and
         // every half-typed path would cost one.
         TargetBox.LostFocus += (_, _) => RefreshIcon();
-        ResetIconButton.Click += (_, _) => SetIconPath(null);
+        ResetIconButton.Click += (_, _) => UseOwnIcon();
+        CustomizeButton.Checked += (_, _) => Customize();
+        CustomizeButton.Unchecked += (_, _) => CustomizePanel.Visibility = Visibility.Collapsed;
         UseIconBox.Checked += (_, _) => RefreshIcon();
         UseIconBox.Unchecked += (_, _) => RefreshIcon();
         SaveButton.Click += (_, _) => { DialogResult = true; };
@@ -102,6 +173,47 @@ public sealed partial class EditPinWindow : Window
     /// </remarks>
     public bool EditedUseIconNotThumbnail =>
         UseIconBox.IsChecked == true && !IsStoreTarget && PinnedAppsService.OpensPicture(EditedTargetPath);
+
+    /// <summary>The colour of the folder the dock is to draw, or null for the shell's icon.</summary>
+    /// <remarks>
+    /// Kept only for a folder, as the thumbnail choice is kept only for a picture, and read
+    /// against the target as it stands.
+    /// </remarks>
+    public string? EditedFolderColor => DrawsFolder ? FolderArt.FormatColor(_folderColor) : null;
+
+    /// <summary>The symbol on that folder, or null for none — and for text, which takes its place.</summary>
+    public string? EditedFolderSymbol =>
+        DrawsFolder && _folderText is null && _folderSymbol is { Length: > 0 } glyph ? FolderArt.FormatSymbol(glyph) : null;
+
+    /// <summary>The text on that folder, or null for none.</summary>
+    public string? EditedFolderText => DrawsFolder ? _folderText : null;
+
+    /// <summary>What the symbol or the text is painted in, or null for toned.</summary>
+    public string? EditedFolderSymbolTone => DrawsFolder ? FolderArt.FormatTone(_tone) : null;
+
+    /// <summary>Whether the dock is to draw this item as a folder of its own.</summary>
+    private bool DrawsFolder => _drawsFolder && IsFolderTarget();
+
+    /// <summary>Whether the item opens a folder on disk, by path or by <c>shell:</c> name.</summary>
+    /// <remarks>
+    /// A folder already drawn that still opens the same place counts whatever the shell says
+    /// now, so a share that happens to be offline while the dialog is open does not lose its
+    /// colour on Save.
+    /// </remarks>
+    private bool IsFolderTarget()
+    {
+        var target = EditedTargetPath;
+        if (_folderCheck is { } check && string.Equals(check.Target, target, StringComparison.Ordinal))
+        {
+            return check.IsFolder;
+        }
+
+        var drawnBefore = Item.FolderColor is { Length: > 0 }
+            && string.Equals(target, Item.TargetPath, StringComparison.OrdinalIgnoreCase);
+        var isFolder = !IsStoreTarget && (drawnBefore || ShellNames.IsFileSystemFolder(target));
+        _folderCheck = (target, isFolder);
+        return isFolder;
+    }
 
     /// <summary>
     /// What the item should open. Null when the item is a Store app, whose activation goes
@@ -197,6 +309,231 @@ public sealed partial class EditPinWindow : Window
         FontSizeSlider.Value = Math.Clamp(Item.FontSize ?? DefaultFontSize, 8, 28);
     }
 
+    /// <summary>
+    /// Fills the folder's controls, which Customize opens: the wheel, the swatches and the hex
+    /// box for its colour; what its symbol is painted in; a tile for each symbol it can carry;
+    /// and the box for text in place of one.
+    /// </summary>
+    private void BuildFolderControls()
+    {
+        _folderWheel.Color = _folderColor;
+        _folderWheel.ColorPicked += (_, color) => SetFolderColor(color, fromWheel: true);
+        FolderWheelHost.Content = _folderWheel;
+
+        foreach (var hex in FolderArt.Swatches)
+        {
+            FolderSwatchPanel.Children.Add(BuildSwatch(hex));
+        }
+
+        WriteHex();
+
+        // Taken as it is typed, once it reads as a colour; half-typed hex changes nothing.
+        FolderHexBox.TextChanged += (_, _) =>
+        {
+            if (!_writing && FolderArt.TryParseColor(FolderHexBox.Text) is { } typed)
+            {
+                SetFolderColor(typed, fromWheel: false, fromHex: true);
+            }
+        };
+
+        // Put back as the colour it stands for once the box is left, so "f00" reads "#FF0000".
+        FolderHexBox.LostFocus += (_, _) => WriteHex();
+
+        foreach (var (button, tone) in new[]
+                 {
+                     (ToneTonedButton, FolderSymbolTone.Toned),
+                     (ToneWhiteButton, FolderSymbolTone.White),
+                     (ToneBlackButton, FolderSymbolTone.Black)
+                 })
+        {
+            button.IsChecked = _tone == tone;
+            button.Checked += (_, _) =>
+            {
+                _tone = tone;
+                ShowFolder();
+            };
+        }
+
+        AddSymbolTile(null, Localizer.Get("EditItem.Symbol.None"));
+        foreach (var symbol in FolderArt.Symbols)
+        {
+            AddSymbolTile(symbol.Glyph, Localizer.Get(symbol.NameKey));
+        }
+
+        FolderTextBox.MaxLength = FolderArt.MaxTextLength;
+        FolderTextBox.Text = _folderText ?? string.Empty;
+
+        // Text takes the symbol's place as soon as there is any; emptied, the symbol is back.
+        FolderTextBox.TextChanged += (_, _) =>
+        {
+            if (_writing)
+            {
+                return;
+            }
+
+            _folderText = FolderArt.ParseText(FolderTextBox.Text);
+            MarkSymbol();
+            ShowFolder();
+        };
+
+        MarkSymbol();
+    }
+
+    /// <summary>A colour from the wheel, a swatch or the hex box, carried to the other two and shown.</summary>
+    private void SetFolderColor(Color color, bool fromWheel, bool fromHex = false)
+    {
+        _folderColor = color;
+        if (!fromWheel)
+        {
+            _folderWheel.Color = color;
+        }
+
+        if (!fromHex)
+        {
+            WriteHex();
+        }
+
+        ShowFolder();
+    }
+
+    /// <summary>The colour into the hex box, as the dialog's own write rather than typing.</summary>
+    private void WriteHex()
+    {
+        _writing = true;
+        FolderHexBox.Text = FolderArt.FormatColor(_folderColor);
+        _writing = false;
+    }
+
+    /// <summary>One colour swatch, drawn as the settings dialog draws the bar's.</summary>
+    private Button BuildSwatch(string hex)
+    {
+        var color = FolderArt.ParseColor(hex) ?? FolderArt.DefaultColor;
+        var fill = new SolidColorBrush(color);
+        fill.Freeze();
+
+        var swatch = new Button
+        {
+            Width = 30,
+            Height = 22,
+            Margin = new Thickness(0, 0, 6, 6),
+            Padding = new Thickness(0),
+            ToolTip = hex,
+
+            // The colour lives in a child rather than in the button's own Background, which the
+            // template repaints on hover — see the settings dialog's swatches.
+            Content = new Border
+            {
+                Width = 22,
+                Height = 14,
+                Background = fill,
+                CornerRadius = new CornerRadius(3)
+            }
+        };
+
+        swatch.Click += (_, _) => SetFolderColor(color, fromWheel: false);
+
+        return swatch;
+    }
+
+    /// <summary>One symbol tile; <paramref name="glyph"/> null for the tile that takes the symbol away.</summary>
+    private void AddSymbolTile(string? glyph, string name)
+    {
+        var text = new TextBlock
+        {
+            Style = _tileText,
+            Text = glyph ?? FolderArt.NoSymbolGlyph,
+            FontSize = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        // In the theme's own symbol font, as the menus' glyphs are, and as the folder is drawn.
+        text.SetResourceReference(TextBlock.FontFamilyProperty, "SymbolThemeFontFamily");
+
+        var tile = new ToggleButton
+        {
+            Width = 32,
+            Height = 32,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 3, 3),
+            ToolTip = name,
+            Content = text
+        };
+
+        // A glyph means nothing read aloud, so the tile is named for what it shows.
+        AutomationProperties.SetName(tile, name);
+
+        // A symbol picked is a symbol shown, so it takes the place of any text.
+        tile.Click += (_, _) =>
+        {
+            _folderSymbol = glyph;
+            _folderText = null;
+            _writing = true;
+            FolderTextBox.Text = string.Empty;
+            _writing = false;
+            MarkSymbol();
+            ShowFolder();
+        };
+
+        _symbolTiles.Add((tile, glyph));
+        SymbolPanel.Children.Add(tile);
+    }
+
+    /// <summary>
+    /// Shows which symbol is chosen: one tile pressed, as in a group of radio buttons — a
+    /// pressed tile clicked again stays pressed rather than leaving none — and none while text
+    /// stands in the symbol's place.
+    /// </summary>
+    private void MarkSymbol()
+    {
+        foreach (var (tile, glyph) in _symbolTiles)
+        {
+            tile.IsChecked = _folderText is null && glyph == _folderSymbol;
+        }
+    }
+
+    /// <summary>Shows the folder in the colour and with the symbol just picked.</summary>
+    private void ShowFolder()
+    {
+        _drawsFolder = true;
+        RefreshIcon();
+    }
+
+    /// <summary>
+    /// The drawn folder, with its colour and symbol opened under the button. Pressing it is
+    /// asking for the folder, so the folder is drawn at once — in the colour last chosen, or the
+    /// design's own — rather than when something is picked, which would leave the panel showing
+    /// a colour the icon above it is not in.
+    /// </summary>
+    private void Customize()
+    {
+        _iconPath = null;
+        _drawsFolder = true;
+        CustomizePanel.Visibility = Visibility.Visible;
+        RefreshIcon();
+    }
+
+    /// <summary>
+    /// The item's own icon, as the shell has it: no chosen image, and no drawn folder either —
+    /// the button had cleared only the image, and left a drawn folder standing in front of it.
+    /// </summary>
+    private void UseOwnIcon()
+    {
+        _iconPath = null;
+        _drawsFolder = false;
+        CustomizeButton.IsChecked = false;
+        RefreshIcon();
+    }
+
+    /// <summary>An image chosen for the item, in place of the drawn folder as of the item's own icon.</summary>
+    private void UseImage(string path)
+    {
+        _iconPath = path;
+        _drawsFolder = false;
+        CustomizeButton.IsChecked = false;
+        RefreshIcon();
+    }
+
 
     /// <summary>Picks what the item opens.</summary>
     private void ChooseTarget()
@@ -226,14 +563,8 @@ public sealed partial class EditPinWindow : Window
 
         if (dialog.ShowDialog(this) == true)
         {
-            SetIconPath(dialog.FileName);
+            UseImage(dialog.FileName);
         }
-    }
-
-    private void SetIconPath(string? path)
-    {
-        _iconPath = path;
-        RefreshIcon();
     }
 
     private void RefreshIcon()
@@ -249,12 +580,29 @@ public sealed partial class EditPinWindow : Window
             Aumid = EditedAumid,
             IconPath = _iconPath,
             UseIconNotThumbnail = UseIconBox.IsChecked == true,
+            FolderColor = EditedFolderColor,
+            FolderSymbol = EditedFolderSymbol,
+            FolderText = EditedFolderText,
+            FolderSymbolTone = EditedFolderSymbolTone,
 
             // An icon set matches a shortcut by what it points at, as the dock does.
             LinkTarget = PinnedAppsService.ResolveLinkTarget(EditedTargetPath)
         };
 
-        IconPreview.Source = PinnedAppsService.LoadIcon(preview, _iconSet);
+        // A drawn folder is drawn here without being kept. LoadIcon keeps what it is given, and
+        // dragging the colour wheel would leave a folder in its caches for every colour passed.
+        var drawsFolder = DrawsFolder && _iconPath is not { Length: > 0 };
+        IconPreview.Source = drawsFolder
+            ? FolderArt.Draw(FolderArt.Look(_folderColor, _folderSymbol, _folderText, _tone))
+            : PinnedAppsService.LoadIcon(preview, _iconSet);
+
+        // Offered for a folder only; a target changed to something else closes what it opened.
+        var isFolder = IsFolderTarget();
+        CustomizeButton.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+        if (!isFolder)
+        {
+            CustomizeButton.IsChecked = false;
+        }
 
         // Offered for a picture only, and greyed while a chosen image is shown, which wins
         // over the thumbnail and the icon alike.
@@ -269,6 +617,8 @@ public sealed partial class EditPinWindow : Window
             ? Path.GetFileName(_iconPath)
             : PinnedAppsService.ThumbnailFor(preview) is not null
                 ? Localizer.Get("EditItem.UsingThumbnail")
+            : drawsFolder
+                ? Localizer.Get("EditItem.UsingFolder")
             : _iconSet is not null && _iconSet.FileFor(PinnedAppsService.SubjectOf(preview, _iconSet)) is not null
                 ? Localizer.Format("EditItem.UsingSetIcon", _iconSet.Name)
                 : Localizer.Get("EditItem.UsingOwnIcon");

@@ -90,6 +90,11 @@
          these are the ones that would otherwise be the first to soften under the wave. -->
     <Resource Include="Assets\icons\*.png" />
 
+    <!-- The folder the dock draws for a folder given a colour: the one source of its look,
+         read by Services/FolderArt.cs and drawn from at run time, not a picture made from it.
+         A manifest resource, like the string table below, so the tests can read it too. -->
+    <EmbeddedResource Include="Assets\folder.svg" LogicalName="ArtDock.Assets.folder.svg" />
+
     <!-- The built-in languages, English first among them. A manifest resource rather than
          a WPF one, so the string table can be read without an Application — which is what
          lets the tests read it, and what lets code that runs before the first window ask

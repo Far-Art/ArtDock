@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:ArtDock.Controls"
     xmlns:loc="clr-namespace:ArtDock.Localization"
+    xmlns:views="clr-namespace:ArtDock.Views"
     Title="{DynamicResource Settings.Title}"
     FlowDirection="{DynamicResource Language.FlowDirection}"
     Language="{DynamicResource Language.Tag}"
@@ -32,6 +33,8 @@
         </Style>
 
         <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+
+        <views:FolderRowIconConverter x:Key="FolderRowIcon" />
 
         <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
             <Setter Property="FontSize" Value="22" />
@@ -756,6 +759,7 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <!-- Faded while the order is locked. The grip is the
@@ -777,9 +781,30 @@
                                                 </Style>
                                             </Path.Style>
                                         </Path>
+                                        <!-- A folder shows the icon the dock draws it with, its
+                                             own colour and symbol if it has been customized, so
+                                             the folders are told apart from the rest at a glance.
+                                             The column is kept on every row, so the names stay in
+                                             line. Shrunk from 128, so high quality, or its edges
+                                             come out in steps. -->
+                                        <Image
+                                            x:Name="ItemIcon"
+                                            Grid.Column="1"
+                                            Width="20"
+                                            Height="20"
+                                            Margin="0,0,10,0"
+                                            VerticalAlignment="Center"
+                                            RenderOptions.BitmapScalingMode="HighQuality">
+                                            <Image.Source>
+                                                <MultiBinding Converter="{StaticResource FolderRowIcon}">
+                                                    <Binding />
+                                                    <Binding Path="(views:FolderRowIconConverter.IconSet)" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                </MultiBinding>
+                                            </Image.Source>
+                                        </Image>
                                         <TextBlock
                                             x:Name="ItemLabel"
-                                            Grid.Column="1"
+                                            Grid.Column="2"
                                             VerticalAlignment="Center"
                                             Text="{Binding Label}"
                                             TextTrimming="CharacterEllipsis" />
@@ -792,6 +817,7 @@
                                         <Border
                                             x:Name="SeparatorRule"
                                             Grid.Column="1"
+                                            Grid.ColumnSpan="2"
                                             Height="2"
                                             Margin="0,0,8,0"
                                             VerticalAlignment="Center"

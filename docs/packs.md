@@ -145,7 +145,8 @@ same rule without one. Among equally specific rules the first listed wins. So a 
 "every folder looks like this" and still give one folder its own image.
 
 **What wins over the set**: an icon chosen for one item in its own settings (*Item
-settings…* → *Choose image…*). **What the set does not cover** keeps its own icon.
+settings…* → *Choose image…*), and a folder given a colour of its own there, which the dock
+draws itself. **What the set does not cover** keeps its own icon.
 
 ### The images
 

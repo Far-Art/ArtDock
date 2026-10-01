@@ -667,6 +667,10 @@ public sealed partial class DockWindow : Window
                 pin.Aumid,
                 pin.IconPath,
                 pin.UseIconNotThumbnail ? "icon" : null,
+                pin.FolderColor,
+                pin.FolderSymbol,
+                pin.FolderText,
+                pin.FolderSymbolTone,
                 pin.FontFamily,
                 pin.FontSize?.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 pin.FontStyle,
@@ -1317,6 +1321,10 @@ public sealed partial class DockWindow : Window
         pin.Label = editor.EditedLabel;
         pin.IconPath = editor.EditedIconPath;
         pin.UseIconNotThumbnail = editor.EditedUseIconNotThumbnail;
+        pin.FolderColor = editor.EditedFolderColor;
+        pin.FolderSymbol = editor.EditedFolderSymbol;
+        pin.FolderText = editor.EditedFolderText;
+        pin.FolderSymbolTone = editor.EditedFolderSymbolTone;
         pin.TargetPath = editor.EditedTargetPath;
         pin.Aumid = editor.EditedAumid;
 

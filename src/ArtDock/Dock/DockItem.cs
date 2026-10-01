@@ -39,6 +39,21 @@ public sealed class DockItem
     /// </summary>
     public bool UseIconNotThumbnail { get; init; }
 
+    /// <summary>
+    /// For a folder the dock draws rather than the shell: its colour, <c>#RRGGBB</c>. Null for
+    /// the shell's folder icon. See <c>Services.FolderArt</c>.
+    /// </summary>
+    public string? FolderColor { get; init; }
+
+    /// <summary>The symbol on such a folder, as a code point in hex; null for none.</summary>
+    public string? FolderSymbol { get; init; }
+
+    /// <summary>Up to six characters on such a folder in place of a symbol; null for none.</summary>
+    public string? FolderText { get; init; }
+
+    /// <summary>What the symbol or text is painted in: <c>White</c>, <c>Black</c>, or null for toned.</summary>
+    public string? FolderSymbolTone { get; init; }
+
     /// <summary>The resolved icon — custom if one is set, otherwise the shell's.</summary>
     public ImageSource? Icon { get; set; }
 

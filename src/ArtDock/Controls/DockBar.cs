@@ -109,7 +109,7 @@ public sealed class DockBar : Canvas
     private readonly List<DockItemVisual> _items = [];
 
     private Color _barColor = BarPalette.Default;
-    private double _barOpacity = 0.5;
+    private double _barOpacity = 0.76;
     private Brush _barFill = Frozen(Color.FromArgb(0x80, 0xCC, 0xD2, 0xFF));
 
     /// <summary>The bar's fill as it is painted: its colour, at its opacity.</summary>

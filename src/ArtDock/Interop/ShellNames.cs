@@ -9,6 +9,54 @@ public static class ShellNames
     /// <summary>SIGDN_NORMALDISPLAY: the name Explorer shows, rather than a path.</summary>
     private const uint SigdnNormalDisplay = 0;
 
+    /// <summary>SFGAO_FOLDER, SFGAO_FILESYSTEM and SFGAO_STREAM.</summary>
+    private const uint SfgaoFolder = 0x2000_0000;
+
+    private const uint SfgaoFileSystem = 0x4000_0000;
+
+    private const uint SfgaoStream = 0x0040_0000;
+
+    /// <summary>
+    /// Whether a path or a <c>shell:</c> name is a folder on disk — <c>shell:Downloads</c> as
+    /// much as <c>C:\Work</c>.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the shell rather than of the file system, because the Add menu pins Downloads
+    /// and the user folder by their <c>shell:</c> names, which no <c>Directory.Exists</c> will
+    /// recognise. The shell counts more as folders than a folder on disk, though: This PC and
+    /// the Recycle Bin are folders with nothing on disk behind them, and a <c>.zip</c> is a
+    /// file it lets you browse — both ruled out by the other two attributes.
+    /// </remarks>
+    public static bool IsFileSystemFolder(string? parsingName)
+    {
+        if (string.IsNullOrWhiteSpace(parsingName))
+        {
+            return false;
+        }
+
+        const uint asked = SfgaoFolder | SfgaoFileSystem | SfgaoStream;
+
+        IShellItem? item = null;
+        try
+        {
+            SHCreateItemFromParsingName(parsingName, 0, typeof(IShellItem).GUID, out item);
+            item.GetAttributes(asked, out var attributes);
+            return (attributes & asked) == (SfgaoFolder | SfgaoFileSystem);
+        }
+        catch (Exception e) when (e is COMException or IOException or UnauthorizedAccessException
+            or ArgumentException)
+        {
+            return false;
+        }
+        finally
+        {
+            if (item is not null)
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        }
+    }
+
     /// <summary>
     /// The name Explorer shows for a path or a <c>shell:</c> name, or <see langword="null"/>
     /// when the shell will not resolve it.

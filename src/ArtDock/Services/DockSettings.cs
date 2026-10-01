@@ -32,6 +32,38 @@ public sealed class PinnedAppSetting
     /// </remarks>
     public bool UseIconNotThumbnail { get; set; }
 
+    /// <summary>
+    /// For a folder: its colour, as <c>#RRGGBB</c>, which has the dock draw it in place of the
+    /// shell's folder icon. Null keeps the shell's.
+    /// </summary>
+    /// <remarks>
+    /// The folder is drawn from this, <see cref="FolderSymbol"/> or <see cref="FolderText"/>, and
+    /// <see cref="FolderSymbolTone"/> every time the pins are read — see <c>FolderArt</c> — and
+    /// never saved as a picture, so these values are the whole of it: a reinstall or an import
+    /// loses nothing. An image chosen in <see cref="IconPath"/> still wins over it.
+    /// </remarks>
+    public string? FolderColor { get; set; }
+
+    /// <summary>
+    /// The symbol pressed into such a folder: a glyph of the system's symbol font, as its code
+    /// point in hex — <c>E896</c> is Downloads. Null for none; means nothing while
+    /// <see cref="FolderColor"/> is null.
+    /// </summary>
+    public string? FolderSymbol { get; set; }
+
+    /// <summary>
+    /// Up to six characters on such a folder in place of a symbol. Its own property rather than
+    /// a form of <see cref="FolderSymbol"/>, so that text reading <c>E896</c> can never be taken
+    /// for the glyph. Null for none.
+    /// </summary>
+    public string? FolderText { get; set; }
+
+    /// <summary>
+    /// What the symbol or text is painted in: <c>White</c>, <c>Black</c>, or null for a deeper
+    /// shade of the folder's own colour.
+    /// </summary>
+    public string? FolderSymbolTone { get; set; }
+
     /// <summary>Typeface for this item's label. Null uses the dock's default.</summary>
     public string? FontFamily { get; set; }
 
@@ -206,7 +238,7 @@ public sealed class DockSettings
     }
 
     /// <summary>Opacity of the bar's fill, 0 to 1.</summary>
-    public double BarOpacity { get; set; } = 0.5;
+    public double BarOpacity { get; set; } = 0.76;
 
     /// <summary>
     /// The bar's fill colour as <c>#RRGGBB</c>. Alpha comes from <see cref="BarOpacity"/>,
@@ -216,7 +248,7 @@ public sealed class DockSettings
     public string BarColor { get; set; } = DefaultBarColor;
 
     /// <summary>The stock bar colour, and the fallback for anything unparseable.</summary>
-    public const string DefaultBarColor = "#CCD2FF";
+    public const string DefaultBarColor = "#EEF1FF";
 
     /// <summary>
     /// Whether the bar takes its colour from the taskbar instead of from
@@ -252,7 +284,7 @@ public sealed class DockSettings
     /// How rounded the bar's ends are: 1 is a full stadium, 0 the subtle rounding a flat
     /// bar wants. Deliberately never square — see <see cref="DockMetrics.MinBarRadius"/>.
     /// </summary>
-    public double BarRoundness { get; set; } = 0.76;
+    public double BarRoundness { get; set; } = 0.40;
 
     /// <summary>
     /// Whether a sheet of system acrylic sits behind the bar, blurring what is under it.
@@ -606,6 +638,10 @@ public sealed class DockSettings
             Aumid = app.Aumid,
             IconPath = app.IconPath,
             UseIconNotThumbnail = app.UseIconNotThumbnail,
+            FolderColor = app.FolderColor,
+            FolderSymbol = app.FolderSymbol,
+            FolderText = app.FolderText,
+            FolderSymbolTone = app.FolderSymbolTone,
             FontFamily = app.FontFamily,
             FontSize = app.FontSize,
             FontStyle = app.FontStyle,

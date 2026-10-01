@@ -315,7 +315,13 @@ public sealed partial class SettingsWindow : Window
         };
 
         LanguageBox.SelectionChanged += (_, _) => Preview();
-        IconSetBox.SelectionChanged += (_, _) => Preview();
+        // The item list draws its folders from the chosen set, as the dock does — followed while
+        // the pages load as well, so the list starts with the set in force.
+        IconSetBox.SelectionChanged += (_, _) =>
+        {
+            FolderRowIconConverter.SetIconSet(PinnedList, IconSetLibrary.Installed.Find(SelectedIconSet));
+            Preview();
+        };
         LanguageFolderButton.Click += (_, _) => OpenPackFolder(PackKind.Language);
         IconSetFolderButton.Click += (_, _) => OpenPackFolder(PackKind.IconSet);
         ReduceMotionCheck.Checked += (_, _) => Preview();
@@ -857,6 +863,10 @@ public sealed partial class SettingsWindow : Window
             label: editor.EditedLabel,
             iconPath: editor.EditedIconPath,
             useIconNotThumbnail: editor.EditedUseIconNotThumbnail,
+            folderColor: editor.EditedFolderColor,
+            folderSymbol: editor.EditedFolderSymbol,
+            folderText: editor.EditedFolderText,
+            folderSymbolTone: editor.EditedFolderSymbolTone,
             targetPath: editor.EditedTargetPath,
             aumid: editor.EditedAumid,
             editor);
@@ -873,6 +883,10 @@ public sealed partial class SettingsWindow : Window
                     _pinned[i].Label,
                     _pinned[i].IconPath,
                     _pinned[i].UseIconNotThumbnail,
+                    _pinned[i].FolderColor,
+                    _pinned[i].FolderSymbol,
+                    _pinned[i].FolderText,
+                    _pinned[i].FolderSymbolTone,
                     _pinned[i].TargetPath,
                     _pinned[i].Aumid,
                     editor);
@@ -891,6 +905,10 @@ public sealed partial class SettingsWindow : Window
         string label,
         string? iconPath,
         bool useIconNotThumbnail,
+        string? folderColor,
+        string? folderSymbol,
+        string? folderText,
+        string? folderSymbolTone,
         string? targetPath,
         string? aumid,
         EditPinWindow editor) =>
@@ -902,6 +920,10 @@ public sealed partial class SettingsWindow : Window
             Aumid = aumid,
             IconPath = iconPath,
             UseIconNotThumbnail = useIconNotThumbnail,
+            FolderColor = folderColor,
+            FolderSymbol = folderSymbol,
+            FolderText = folderText,
+            FolderSymbolTone = folderSymbolTone,
             FontFamily = editor.EditedFontFamily,
             FontSize = editor.EditedFontSize,
             FontStyle = editor.EditedFontStyle,

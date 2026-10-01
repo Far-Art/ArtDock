@@ -182,10 +182,24 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   dialog's *Remove* does not ask, because nothing there is kept until Save. Editing covers its name,
   its icon and what it opens. **A pinned picture is drawn as itself**: its Windows thumbnail,
   fitted to keep its shape, unless the editor's *Use the file's icon instead of a thumbnail* is
-  ticked; an image chosen for the item wins over both; the label's font, style and size belong to the dock rather than
-  the item, so they apply to every label at once. Labels are 14 pt and bold by default,
-  because a label is read against whatever happens to be behind the dock. The item being edited holds its
-  label open on the bar so the styling can be judged where it is actually used.
+  ticked; an image chosen for the item wins over both. **A folder can be drawn by the dock
+  instead of with Windows' folder icon**, in the manner of Windows 11's own folders:
+  *Customize* draws it, and opens under it a colour of its own — from swatches, a colour wheel
+  or hex — and on its front either one of 32 symbols from Windows' own symbol font or up to six
+  characters of text, toned (a deeper shade of the folder's colour, as Windows' own carry
+  theirs), white or black. A symbol's lines are as heavy as those on Windows' own folders, and a
+  white symbol, or white text, casts the same soft shadow their white symbols cast. *Use the
+  app's own icon* puts Windows' folder back; choosing an image, drawing the folder and the
+  item's own icon each undo the others. A folder already customized opens with all of that out,
+  and the settings dialog's Items page shows every folder's icon beside its name, so the folders
+  can be told apart there. The folder's shape comes from an SVG built into the program, sized
+  and placed as all of Windows' folder icons are, so it sits level with them on the dock; it is
+  drawn from the pin's settings each time the dock reads its pins and never kept as a picture,
+  so a reinstall or an imported settings file brings it back exactly. The label's font, style
+  and size belong to the dock rather than the item, so they apply to every label at once. Labels
+  are 14 pt and bold by default, because a label is read against whatever happens to be behind
+  the dock. The item being edited holds its label open on the bar so the styling can be judged
+  where it is actually used.
 - **The Add menu offers places and actions, not only apps**: alongside *Browse…* and a few
   of the machine's own applications, **This PC**, the **User folder**, **Downloads**, the
   **Recycle Bin** and **Start**. They are there because nothing else can supply them, or not as well. This
@@ -371,7 +385,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   separately), a document type, any folder — installed in
   `%LOCALAPPDATA%\ArtDock\Packs\IconSets`, and chosen on the Appearance page. The most
   specific match wins; an item the set has nothing for keeps its own icon; and an icon chosen
-  for one item in its own settings still beats the set. The format is in
+  for one item in its own settings still beats the set, as does a folder given a colour. The format is in
   [docs/packs.md](docs/packs.md). No set ships.
 - **Settings can be moved between machines**: the System page exports the settings file and
   imports one back, pinned items included. An import fills in the pages and shows on the
@@ -422,6 +436,7 @@ src/ArtDock/
                TaskbarColour, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
                ShellIdList (what Explorer drags besides paths)
   Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,
+               FolderArt (the folders the dock draws, from Assets/folder.svg),
                RunningAppsService, DockPresets, DockCommands, DroppedItems, TrayIcon, Screens,
                SingleInstance, MemoryTrim, FullscreenApps, ProgramScan,
                GameLibraries, InstalledApps, AppUpdater (the dock's own updates)
@@ -439,7 +454,8 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        libraries, installed apps, the dock's handle, what
                        the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
-                       install folder, the shell's images' transparency
+                       install folder, the shell's images' transparency, the
+                       folders the dock draws
 LICENSE                MIT
 docs/step-2-transparency.md
 docs/packs.md          the language-pack and icon-set formats
@@ -954,7 +970,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and forty-nine tests cover the cosine falloff (peak, range boundary,
+Five hundred and seventy-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1062,6 +1078,30 @@ Two more hold the shell's transparency to what it is: an icon and a thumbnail of
 alpha, written for the test, must come back as that grey at half alpha. The shell's pixels are
 straight rather than premultiplied, and read as premultiplied they came back white — which drew
 the Recycle Bin's glass as a white box and put a white fringe round the Settings gear.
+
+Twenty-seven cover the folders the dock draws. The design is read from an SVG built into the
+program, which refuses anything it would not draw as a browser does, so the first test is
+where a refusal would be met rather than on somebody's dock. Then: that it fills, to the pixel,
+the box the shell's own folder icon fills at the size the dock asks for — drawn first a little
+low, it was seen to sit under the Downloads folder beside it; that a folder has its colour at
+the back and the same lightened in front; that a slanted edge is smoothed in every row it
+crosses — the folder is drawn at four times the size and averaged down, and shrunk by drawing
+again smaller it came out in steps, because `RenderTargetBitmap` reads 4 of every 16 pixels
+whatever scaling mode it is given; that a symbol lands in the place the design gives it and
+nowhere else, toned, white or black as asked; that its lines are as heavy as the lines on
+Windows' own folders, and of one paint all through; that a white symbol casts a shadow and a
+toned or black one none; that text takes the symbol's place inside a box of its own, six
+letters across its width and one held to its height, and is cut to six characters without
+splitting one that takes two; that one look is drawn once and shared; that
+a stored colour, symbol and tone read back as written, a mangled colour still draws a folder,
+and the hex box reads a colour only once one has been typed; that every symbol offered, and the
+editor's tile for none, is in both of the theme's symbol fonts; that no two swatches read as one;
+that a drawn folder beats an icon set and an image chosen for the item beats it; that the
+settings dialog's item list shows a folder's icon — drawn, or the chosen set's — and nothing
+beside anything else; that `shell:Downloads` counts as a folder on disk while This PC, the
+Recycle Bin and a `.zip` do not;
+and that a folder in an imported settings file is drawn from the file alone, with nothing on
+disk beside it to have gone missing.
 
 Nine cover the pins that act rather than open. The one that matters guards the other
 direction: an ordinary target — an `.exe`, a `shell:` place, an AUMID, a web address, the

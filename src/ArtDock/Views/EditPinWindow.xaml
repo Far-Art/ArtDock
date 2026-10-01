@@ -8,7 +8,8 @@
     Language="{DynamicResource Language.Tag}"
     Icon="/Assets/ArtDock.ico"
     Width="600"
-    Height="680"
+    MinHeight="680"
+    SizeToContent="Height"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
     Topmost="True"
@@ -86,6 +87,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
                         <TextBlock
@@ -101,14 +103,32 @@
                             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="6">
-                            <Image x:Name="IconPreview" Width="54" Height="54" />
+                            <!-- Every icon here is shrunk to fit, from 128 px, and the default
+                                 linear filter does that by skipping pixels: edges come out in steps. -->
+                            <Image
+                                x:Name="IconPreview"
+                                Width="54"
+                                Height="54"
+                                RenderOptions.BitmapScalingMode="HighQuality" />
                         </Border>
 
+                        <!-- Three ways to have the icon, each undoing the others: an image, the
+                             folder the dock draws, and the item's own. -->
                         <StackPanel
                             Grid.Column="2"
                             Margin="14,0,0,0"
                             VerticalAlignment="Center">
-                            <Button x:Name="BrowseButton" Content="{DynamicResource EditItem.ChooseImage}" />
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="BrowseButton" Content="{DynamicResource EditItem.ChooseImage}" />
+
+                                <!-- Only for a folder. Pressed, it draws the folder and opens its
+                                     colour and symbol under it; pressed again, it closes them. -->
+                                <ToggleButton
+                                    x:Name="CustomizeButton"
+                                    Margin="8,0,0,0"
+                                    Content="{DynamicResource EditItem.Customize}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
                             <Button x:Name="ResetIconButton" Margin="0,8,0,0" Content="{DynamicResource EditItem.UseOwnIcon}" />
                             <TextBlock
                                 x:Name="IconPathText"
@@ -126,6 +146,109 @@
                             Margin="0,12,0,0"
                             Content="{DynamicResource EditItem.UseIconNotThumbnail}"
                             Visibility="Collapsed" />
+
+                        <!-- The drawn folder's colour and symbol, under the button that opens them. -->
+                        <Grid
+                            x:Name="CustomizePanel"
+                            Grid.Row="2"
+                            Grid.ColumnSpan="3"
+                            Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock
+                                Margin="0,18,0,0"
+                                VerticalAlignment="Top"
+                                Text="{DynamicResource EditItem.Folder.Colour}" />
+
+                            <!-- The wheel is added in code: it is a drawn control, not a template. -->
+                            <ContentControl
+                                x:Name="FolderWheelHost"
+                                Grid.Column="1"
+                                Margin="0,18,0,0"
+                                VerticalAlignment="Top" />
+
+                            <StackPanel
+                                Grid.Column="2"
+                                Margin="16,18,0,0"
+                                VerticalAlignment="Top">
+                                <WrapPanel x:Name="FolderSwatchPanel" />
+
+                                <!-- The colour in hex, kept in step with the wheel and the swatches. -->
+                                <TextBox
+                                    x:Name="FolderHexBox"
+                                    Width="110"
+                                    Margin="0,4,0,0"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.Name="{DynamicResource EditItem.Folder.Hex}"
+                                    ToolTip="{DynamicResource EditItem.Folder.Hex}" />
+                            </StackPanel>
+
+                            <TextBlock
+                                Grid.Row="1"
+                                Margin="0,20,0,0"
+                                VerticalAlignment="Top"
+                                Text="{DynamicResource EditItem.Folder.Symbol}" />
+
+                            <StackPanel
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Grid.ColumnSpan="2"
+                                Margin="0,18,0,0">
+                                <!-- What the symbol, or the text, is painted in. -->
+                                <StackPanel Margin="0,0,0,10" Orientation="Horizontal">
+                                    <RadioButton
+                                        x:Name="ToneTonedButton"
+                                        GroupName="SymbolTone"
+                                        Content="{DynamicResource EditItem.Folder.Tone.Toned}" />
+                                    <RadioButton
+                                        x:Name="ToneWhiteButton"
+                                        GroupName="SymbolTone"
+                                        Content="{DynamicResource EditItem.Folder.Tone.White}" />
+                                    <RadioButton
+                                        x:Name="ToneBlackButton"
+                                        GroupName="SymbolTone"
+                                        Content="{DynamicResource EditItem.Folder.Tone.Black}" />
+                                </StackPanel>
+
+                                <!-- Tiles small enough for three rows of them, so the dialog fits a
+                                     laptop's screen without scrolling while this is open. -->
+                                <WrapPanel x:Name="SymbolPanel" />
+                            </StackPanel>
+
+                            <TextBlock
+                                Grid.Row="2"
+                                Margin="0,20,0,0"
+                                VerticalAlignment="Top"
+                                Text="{DynamicResource EditItem.Folder.Text}" />
+
+                            <!-- A few letters in place of a symbol. -->
+                            <StackPanel
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Grid.ColumnSpan="2"
+                                Margin="0,14,0,0"
+                                Orientation="Horizontal">
+                                <TextBox
+                                    x:Name="FolderTextBox"
+                                    Width="110"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="{DynamicResource EditItem.Folder.Text}" />
+                                <TextBlock
+                                    Margin="12,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource Hint}"
+                                    Text="{DynamicResource EditItem.Folder.Text.Hint}" />
+                            </StackPanel>
+                        </Grid>
                     </Grid>
                 </Border>
 
