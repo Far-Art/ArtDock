@@ -109,8 +109,17 @@ public sealed class DockBar : Canvas
     private readonly List<DockItemVisual> _items = [];
 
     private Color _barColor = BarPalette.Default;
-    private double _barOpacity = 0.76;
-    private Brush _barFill = Frozen(Color.FromArgb(0x80, 0xCC, 0xD2, 0xFF));
+    private double _barOpacity = BarPalette.DefaultOpacity;
+
+    /// <summary>
+    /// Made from the two fields above, and never written out beside them. It was, once — a
+    /// colour and an opacity of its own, <c>#CCD2FF</c> at a half, under fields that said
+    /// <c>#EEF1FF</c> at 0.76 — and <see cref="SetBarAppearance"/>, which changes nothing when
+    /// it is given what the fields already hold, left that fill up on every dock started with
+    /// the stock colour: the dock did not paint what its settings said until one of them was
+    /// changed, and then never went back.
+    /// </summary>
+    private Brush _barFill = Fill(BarPalette.Default, BarPalette.DefaultOpacity);
 
     /// <summary>The bar's fill as it is painted: its colour, at its opacity.</summary>
     public Color BarFill => ((SolidColorBrush)_barFill).Color;
@@ -1547,11 +1556,13 @@ public sealed class DockBar : Canvas
 
         _barColor = resolved;
         _barOpacity = clamped;
-
-        var alpha = (byte)Math.Clamp(clamped * 255, 0, 255);
-        _barFill = Frozen(Color.FromArgb(alpha, resolved.R, resolved.G, resolved.B));
+        _barFill = Fill(resolved, clamped);
         InvalidateVisual();
     }
+
+    /// <summary>The brush for a bar of a colour at an opacity, 0 to 1.</summary>
+    private static Brush Fill(Color color, double opacity) =>
+        Frozen(Color.FromArgb((byte)Math.Clamp(opacity * 255, 0, 255), color.R, color.G, color.B));
 
     /// <summary>
     /// The index a drop at <paramref name="screenPoint"/> should insert at, from 0 to

@@ -1055,7 +1055,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and sixty-nine tests cover the cosine falloff (peak, range boundary,
+Six hundred and eighty tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1106,7 +1106,8 @@ still opening over an icon that has just arrived.
 
 The newest group covers moving settings between machines: that an export read back is the
 same settings, that the file leads with its format version, that a file written before that
-field existed reads as format 1 rather than as unknown, and that the importer refuses what it
+field existed is taken for format 1 and brought up to date rather than passed off as current,
+and that the importer refuses what it
 should — a newer format, a root that is not an object, something that is not JSON, and, the
 one that matters most, a JSON file that is *not* ArtDock settings. That last case parses
 happily and yields a full set of defaults, so without the check an import of the wrong file
@@ -1451,6 +1452,18 @@ cannot be built in the test host. The template that draws the page list names it
 screen reader reached the page names and not one setting; every slider, drop-down, text box,
 checkbox and list has a name, its label's, where 39 of 64 had none; and both lists name their
 rows, which were read as the type of the object each holds.
+
+Eleven hold the dock to painting what its settings say, and the stock bar to the look it
+always had. A dock just made, and one told the stock settings, paint the stock bar — which is
+the one that failed: a dock's first fill used to be written out by itself, `#CCD2FF` at a half,
+under settings that said `#EEF1FF` at 0.76, and telling the bar what it was already recorded
+as holding changed nothing, so every dock on the stock settings painted the first until its
+colour or opacity was touched and the second, a good deal lighter, from then until it was next
+started. The stock values are now the ones that were on the screen, and the rest hold the move:
+a file of the older format on the old stock pair is moved to the new one, so no dock changes
+colour with the update; a file of this format holding the same pair is somebody's choice and
+is left; so is an older file with a colour or an opacity of its own, or one matching the
+taskbar, all of which were painted as asked all along; and migrating twice changes nothing.
 
 ## Licence
 

@@ -13,7 +13,16 @@ namespace ArtDock.Dock;
 public static class BarPalette
 {
     /// <summary>The bar's stock colour, and the fallback for anything unparseable.</summary>
-    public static readonly Color Default = Color.FromRgb(0xEE, 0xF1, 0xFF);
+    /// <remarks>
+    /// With <see cref="DefaultOpacity"/>, the look every dock on the stock settings has had at
+    /// every start. Until 2026-10-01 the settings said <c>#EEF1FF</c> at 0.76 and the dock
+    /// painted this instead — see <c>DockSettings.Migrate</c> — so when the two were made to
+    /// agree, it was the settings that moved to what had been on the screen.
+    /// </remarks>
+    public static readonly Color Default = Color.FromRgb(0xCC, 0xD2, 0xFF);
+
+    /// <summary>How opaque the stock bar is, 0 to 1.</summary>
+    public const double DefaultOpacity = 0.5;
 
     /// <summary>
     /// Ready-made colours offered in the settings dialog, so choosing one does not require

@@ -113,18 +113,26 @@ public sealed class DockSettings
     /// for a change that would make an existing file mean the wrong thing — a property whose
     /// units, scale or meaning changed, or one that was split or removed. Bumping it then is
     /// what lets a migration tell "this file predates the change" from "the user chose that
-    /// value", which is not recoverable after the fact. Nothing migrates yet, because nothing
-    /// has needed to.
+    /// value", which is not recoverable after the fact. <see cref="Migrate"/> is where a file
+    /// from an older format is brought up to this one.
+    /// <para>
+    /// 2, since 2026-10-01: the bar's stock colour and opacity. A file of format 1 that holds
+    /// <c>#EEF1FF</c> at 0.76 holds the stock values of its day, which the dock never painted.
+    /// </para>
+    /// <para>
+    /// A build older than a format still reads its files — nothing was renamed or removed —
+    /// so going back a version by hand costs nothing; see docs/downloads.md.
+    /// </para>
     /// </remarks>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     /// <summary>The format this file was written against.</summary>
     /// <remarks>
     /// Declared first so it is the first line of the file, where it can be read without
-    /// parsing the rest. Files written before this field existed have no version and so
-    /// deserialise to <see cref="CurrentVersion"/>, which is correct: their contents are the
-    /// format this field was introduced alongside, and stamping them 1 on the next save loses
-    /// nothing.
+    /// parsing the rest. A file written before this field existed has no version, and would
+    /// read as <see cref="CurrentVersion"/> by this initialiser; its contents are format 1,
+    /// the one the field was introduced alongside, so <see cref="SettingsStore"/> stamps it 1
+    /// as it is read, before <see cref="Migrate"/> sees it.
     /// </remarks>
     public int Version { get; set; } = CurrentVersion;
 
@@ -256,7 +264,7 @@ public sealed class DockSettings
     }
 
     /// <summary>Opacity of the bar's fill, 0 to 1.</summary>
-    public double BarOpacity { get; set; } = 0.76;
+    public double BarOpacity { get; set; } = BarPalette.DefaultOpacity;
 
     /// <summary>
     /// The bar's fill colour as <c>#RRGGBB</c>. Alpha comes from <see cref="BarOpacity"/>,
@@ -266,7 +274,58 @@ public sealed class DockSettings
     public string BarColor { get; set; } = DefaultBarColor;
 
     /// <summary>The stock bar colour, and the fallback for anything unparseable.</summary>
-    public const string DefaultBarColor = "#EEF1FF";
+    /// <remarks>The same colour as <see cref="BarPalette.Default"/>, which a test holds it to.</remarks>
+    public const string DefaultBarColor = "#CCD2FF";
+
+    /// <summary>The stock bar colour of format 1, which no dock on it ever painted.</summary>
+    private const string FormerBarColor = "#EEF1FF";
+
+    /// <summary>The stock opacity of format 1, as <see cref="FormerBarColor"/>.</summary>
+    private const double FormerBarOpacity = 0.76;
+
+    /// <summary>
+    /// Brings settings read from a file of an older format up to
+    /// <see cref="CurrentVersion"/>. Returns true when the file was older.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>1 to 2, the bar's stock look.</b> Format 1's stock bar was <c>#EEF1FF</c> at 0.76,
+    /// and a dock started on it painted <c>#CCD2FF</c> at a half: its first fill was written
+    /// out beside the stock values rather than made from them, and setting the bar to what it
+    /// was already recorded as holding changed nothing. So the stock look everyone had, at
+    /// every start, was the one the settings did not describe — until the colour or the
+    /// opacity was changed in the settings dialog, when the bar turned to what they said, a
+    /// good deal lighter, and stayed there until the dock was next started.
+    /// </para>
+    /// <para>
+    /// The fill is now made from the settings, and the stock values are the ones that were on
+    /// the screen. A file still holding the old pair is moved to the new one, or its dock would
+    /// turn lighter with the update for no reason its owner could find. A file from this format
+    /// holding the old pair is somebody's choice, made with the dock showing it truly, and is
+    /// left — which is what the version is for. Not while the bar takes the taskbar's colour:
+    /// that never matched the stock one, so it was always painted as asked, at the opacity
+    /// stored.
+    /// </para>
+    /// </remarks>
+    public bool Migrate()
+    {
+        if (Version >= CurrentVersion)
+        {
+            return false;
+        }
+
+        if (Version < 2
+            && !UseTaskbarColor
+            && BarPalette.Parse(BarColor) == BarPalette.Parse(FormerBarColor)
+            && Math.Abs(BarOpacity - FormerBarOpacity) < 0.0005)
+        {
+            BarColor = DefaultBarColor;
+            BarOpacity = BarPalette.DefaultOpacity;
+        }
+
+        Version = CurrentVersion;
+        return true;
+    }
 
     /// <summary>
     /// Whether the bar takes its colour from the taskbar instead of from

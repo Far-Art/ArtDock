@@ -71,7 +71,9 @@ public sealed class SettingsStore
                 {
                     // Not written back: the ids only have to be unique while the dock runs,
                     // and the next save stores them — as it stores the lettering where it now
-                    // lives, which until then is read from the pins again at each start.
+                    // lives, which until then is read from the pins again at each start, and
+                    // the format, which until then is brought up to date again at each start.
+                    BringUpToDate(loaded, json);
                     loaded.RepairPinIds();
                     loaded.AdoptPinLettering();
                     _current = loaded;
@@ -200,9 +202,32 @@ public sealed class SettingsStore
                 "Settings.Import.Newer", loaded.Version, DockSettings.CurrentVersion));
         }
 
+        BringUpToDate(loaded, json);
         loaded.RepairPinIds();
         loaded.AdoptPinLettering();
         return loaded;
+    }
+
+    /// <summary>
+    /// Brings settings just read from <paramref name="json"/> up to the format this build
+    /// writes — see <see cref="DockSettings.Migrate"/>.
+    /// </summary>
+    /// <remarks>
+    /// A file from before the version field has no version to read, and the property's
+    /// initialiser would pass it off as the current format. Its contents are format 1, so it
+    /// is stamped that first, or nothing in it would ever be migrated.
+    /// </remarks>
+    private static void BringUpToDate(DockSettings loaded, string json)
+    {
+        using (var document = JsonDocument.Parse(json))
+        {
+            if (!document.RootElement.TryGetProperty(nameof(DockSettings.Version), out _))
+            {
+                loaded.Version = 1;
+            }
+        }
+
+        loaded.Migrate();
     }
 
     /// <summary>Persists settings and notifies listeners.</summary>

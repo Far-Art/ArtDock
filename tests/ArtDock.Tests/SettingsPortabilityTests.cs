@@ -116,18 +116,22 @@ public class SettingsPortabilityTests : IDisposable
     }
 
     [Fact]
-    public void AFileFromBeforeTheVersionField_ReadsAsTheFirstFormat()
+    public void AFileFromBeforeTheVersionField_IsTakenForTheFirstFormat_AndBroughtUpToDate()
     {
-        // Every settings.json in the wild predates the field, and its contents are exactly
-        // the format the field was introduced alongside. Anything else would make the first
-        // migration treat an existing install as unknown.
-        var path = Write("legacy.json", """{ "BaseSize": 44, "AutoHide": true }""");
+        // A file with no version predates the field, and its contents are exactly the format
+        // the field was introduced alongside: format 1. Left to the property's initialiser it
+        // would read as the current format, and no migration would ever touch it — so the
+        // stock bar of its day, which format 2 moves, is what shows that it was taken for 1.
+        var path = Write("legacy.json", """
+            { "BaseSize": 44, "AutoHide": true, "BarColor": "#EEF1FF", "BarOpacity": 0.76 }
+            """);
 
         var loaded = SettingsStore.Import(path);
 
-        Assert.Equal(1, loaded.Version);
+        Assert.Equal(DockSettings.CurrentVersion, loaded.Version);
         Assert.Equal(44, loaded.BaseSize);
         Assert.True(loaded.AutoHide);
+        Assert.Equal(DockSettings.DefaultBarColor, loaded.BarColor);
     }
 
     [Fact]
