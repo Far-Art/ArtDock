@@ -1461,6 +1461,14 @@ public sealed partial class DockWindow : Window
     private bool _previewing;
 
     /// <summary>
+    /// Holds up the item selected on the settings dialog's Items page — magnified, its label
+    /// showing, as if the pointer were on it — or, given null, goes back to the dialog's usual
+    /// demonstration.
+    /// </summary>
+    /// <param name="id">The pin's id, or null when no row is selected or the page is not open.</param>
+    public void PreviewItem(string? id) => _dock.PreviewItem(id);
+
+    /// <summary>
     /// Lifts the dock, and the sheet behind it, above whatever is covering it.
     /// </summary>
     /// <remarks>

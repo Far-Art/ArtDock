@@ -5,14 +5,22 @@ using ArtDock.Dock;
 namespace ArtDock.Tests;
 
 /// <summary>
-/// Covers who is allowed to put the held label away.
+/// Covers who is allowed to put the held label away, and what the settings dialog's preview
+/// holds up around it.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The dock holds one item magnified with its label open while a menu or a dialog is about
 /// that item. Two of those overlap: a context menu holds the item, its entry opens the edit
 /// dialog, and the dialog takes the hold for itself — but the menu's <c>Closed</c> arrives
 /// afterwards, so a release that did not check whose hold it was took the label down in
 /// front of the dialog that had just asked for it.
+/// </para>
+/// <para>
+/// Under all of that, while the settings dialog is open, is its preview: the item selected on
+/// its Items page, or the middle icon. The selection is named by id and outlives the holds,
+/// the contents changing, and the dock not having the item yet.
+/// </para>
 /// </remarks>
 public class DockBarFocusTests
 {
@@ -123,5 +131,111 @@ public class DockBarFocusTests
         bar.PreviewMagnification(true);
 
         Assert.False(bar.IsHoldingLabel);
+    });
+
+    // ---- the item selected in the settings dialog ------------------------------------
+
+    [Fact]
+    public void PreviewItem_HoldsUpTheSelectedItem_AsTheMiddleWasHeld() => OnStaThread(() =>
+    {
+        var (bar, _) = Dock();
+        bar.PreviewMagnification(true);
+        Assert.Null(bar.PreviewedItem);
+
+        bar.PreviewItem("three");
+        Assert.Equal("three", bar.PreviewedItem?.Id);
+
+        // Labelled as a hovered item is, not held as a menu holds one: a pointer arriving on
+        // the dock takes it over, label and all.
+        Assert.False(bar.IsHoldingLabel);
+
+        bar.PreviewItem(null);
+        Assert.Null(bar.PreviewedItem);
+    });
+
+    [Fact]
+    public void PreviewItem_FollowsTheItem_WhereverTheContentsPutIt() => OnStaThread(() =>
+    {
+        var (bar, items) = Dock();
+        bar.PreviewMagnification(true);
+        bar.PreviewItem("one");
+
+        // Moved to the end, as the dialog's Move down moves it, and previewed as it moves.
+        bar.SetItems([items[1], items[2], items[0]]);
+        Assert.Equal("one", bar.PreviewedItem?.Id);
+
+        // Gone while the list is without it, and found again when it is back.
+        bar.SetItems([items[1], items[2]]);
+        Assert.Null(bar.PreviewedItem);
+
+        bar.SetItems(items);
+        Assert.Equal("one", bar.PreviewedItem?.Id);
+    });
+
+    [Fact]
+    public void PreviewItem_CanNameAnItemTheDockHasNotBeenGivenYet() => OnStaThread(() =>
+    {
+        // A row added in the dialog is selected first and previewed after, so the dock hears
+        // of the selection before it has the item.
+        var (bar, items) = Dock();
+        bar.PreviewMagnification(true);
+
+        bar.PreviewItem("four");
+        Assert.Null(bar.PreviewedItem);
+
+        bar.SetItems([.. items, Pin("four")]);
+        Assert.Equal("four", bar.PreviewedItem?.Id);
+    });
+
+    [Fact]
+    public void AHold_OutranksThePreview_AndHandsBackToTheSelection() => OnStaThread(() =>
+    {
+        var (bar, items) = Dock();
+        bar.PreviewMagnification(true);
+        bar.PreviewItem("one");
+
+        // An icon's menu on the dock, or the item editor.
+        var claim = bar.FocusItem(items[2]);
+        Assert.True(bar.IsHoldingLabel);
+        Assert.Null(bar.PreviewedItem);
+
+        // The selection moving underneath does not take the item away from the hold.
+        bar.PreviewItem("two");
+        Assert.True(bar.IsHoldingLabel);
+
+        // Let go, the dock goes back to the dialog's preview, as it now stands — not to nothing,
+        // with the dialog still open.
+        bar.ReleaseFocus(claim);
+        Assert.False(bar.IsHoldingLabel);
+        Assert.Equal("two", bar.PreviewedItem?.Id);
+    });
+
+    [Fact]
+    public void FocusItem_GivesNoClaimForAMissingItem_ThoughThePreviewComesBack() => OnStaThread(() =>
+    {
+        // Letting go of the old hold brings the preview back, which must not be mistaken for
+        // a hold taken for the item asked about.
+        var (bar, _) = Dock();
+        bar.PreviewMagnification(true);
+        bar.PreviewItem("two");
+
+        Assert.Equal(0, bar.FocusItem(Pin("missing")));
+        Assert.False(bar.IsHoldingLabel);
+        Assert.Equal("two", bar.PreviewedItem?.Id);
+    });
+
+    [Fact]
+    public void EndingThePreview_ForgetsTheSelection() => OnStaThread(() =>
+    {
+        var (bar, _) = Dock();
+        bar.PreviewMagnification(true);
+        bar.PreviewItem("one");
+
+        bar.PreviewMagnification(false);
+        Assert.Null(bar.PreviewedItem);
+
+        // The next dialog opens with nothing selected, so the dock starts from the middle.
+        bar.PreviewMagnification(true);
+        Assert.Null(bar.PreviewedItem);
     });
 }

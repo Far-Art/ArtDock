@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -7,11 +8,14 @@ using ArtDock.Services;
 
 namespace ArtDock.Views;
 
-/// <summary>The glyphs the menus draw beside their commands.</summary>
+/// <summary>
+/// The glyphs drawn beside commands: in the menus, and on the settings dialog's buttons.
+/// </summary>
 /// <remarks>
 /// Named for what the entry does rather than for the picture, so that the same command in two
 /// menus — <em>Settings…</em> is on both the dock's and the tray's — cannot be given two
-/// different pictures.
+/// different pictures. Nor can it on a button: the Items page's <em>Remove</em> is the dock
+/// menu's <em>Remove from dock</em>, and draws its glyph.
 /// </remarks>
 public enum MenuGlyph
 {
@@ -25,7 +29,10 @@ public enum MenuGlyph
     Show,
     Exit,
     Browse,
-    Info
+    Info,
+    MoveUp,
+    MoveDown,
+    ClearAll
 }
 
 /// <summary>
@@ -52,6 +59,10 @@ public enum MenuGlyph
 /// colour: <em>Remove from dock</em>, which <see cref="MenuHost.DangerItem"/> paints in the
 /// critical colour, and a note, which the theme greys by setting the disabled colour on the
 /// entry itself rather than on its header.
+/// </para>
+/// <para>
+/// The settings dialog's buttons draw the same glyphs before their words, named through
+/// <see cref="GlyphProperty"/>, and take their colour from the button the same way.
 /// </para>
 /// </remarks>
 public static class MenuIcons
@@ -87,6 +98,30 @@ public static class MenuIcons
         return text;
     }
 
+    /// <summary>
+    /// The glyph a button draws before its words, named in its XAML by the command it carries —
+    /// <c>views:MenuIcons.Glyph="Add"</c> — and drawn by the settings dialog's
+    /// <c>GlyphButton</c> style.
+    /// </summary>
+    public static readonly DependencyProperty GlyphProperty = DependencyProperty.RegisterAttached(
+        "Glyph", typeof(MenuGlyph?), typeof(MenuIcons));
+
+    public static MenuGlyph? GetGlyph(DependencyObject element) => (MenuGlyph?)element.GetValue(GlyphProperty);
+
+    public static void SetGlyph(DependencyObject element, MenuGlyph? glyph) => element.SetValue(GlyphProperty, glyph);
+
+    /// <summary>A glyph's character in the symbol font, for a binding to <see cref="GlyphProperty"/>.</summary>
+    public static IValueConverter CodePointOf { get; } = new CodePointConverter();
+
+    private sealed class CodePointConverter : IValueConverter
+    {
+        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+            value is MenuGlyph glyph ? CodePoint(glyph) : null;
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+            throw new NotSupportedException();
+    }
+
     /// <summary>The character each glyph is in the symbol font.</summary>
     public static string CodePoint(MenuGlyph glyph) => glyph switch
     {
@@ -101,6 +136,9 @@ public static class MenuIcons
         MenuGlyph.Exit => "",
         MenuGlyph.Browse => "",
         MenuGlyph.Info => "",
+        MenuGlyph.MoveUp => "",
+        MenuGlyph.MoveDown => "",
+        MenuGlyph.ClearAll => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };
 

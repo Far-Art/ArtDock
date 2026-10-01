@@ -180,10 +180,13 @@ public sealed class DockBar : Canvas
     /// </summary>
     private double? WaveCentre => _pointer is { } centre ? centre + _handoverLag : null;
 
-    /// <summary>Moves the wave's centre, easing the move if the wave is changing hands.</summary>
-    private void SetWaveCentre(double centre, WaveDriver driver)
+    /// <summary>
+    /// Moves the wave's centre, easing the move if the wave is changing hands — or when asked
+    /// to, for a parked wave sent on to another icon, which nobody's hand is moving either.
+    /// </summary>
+    private void SetWaveCentre(double centre, WaveDriver driver, bool ease = false)
     {
-        if (driver != _driver)
+        if (driver != _driver || ease)
         {
             // Keep the wave where it is being drawn and let the gap close on its own.
             _handoverLag = WaveCentre is { } drawn ? drawn - centre : 0;
@@ -336,9 +339,9 @@ public sealed class DockBar : Canvas
     /// </summary>
     /// <remarks>
     /// Used whenever something outside the dock needs a particular icon held up for review:
-    /// the settings dialog pins the middle one so its appearance sliders have something to
-    /// act on, and the item menu and edit dialog pin the icon they were opened for, so it
-    /// stays the subject of whatever the user does next.
+    /// the settings dialog pins the item selected on its Items page, or the middle one, so its
+    /// appearance sliders have something to act on, and the item menu and edit dialog pin the
+    /// icon they were opened for, so it stays the subject of whatever the user does next.
     /// </remarks>
     private int _focusIndex = -1;
 
@@ -354,9 +357,30 @@ public sealed class DockBar : Canvas
     /// <em>that</em> item and must keep holding it; the preview holds <em>the middle</em>,
     /// and has to be re-centred or it drifts toward the end as items are removed — which
     /// narrows the bar, because an icon near the end has fewer neighbours to lift, and makes
-    /// the dock look like it is resizing by the wrong amount each time.
+    /// the dock look like it is resizing by the wrong amount each time. Or it holds the item
+    /// selected in the dialog, which it has to find again wherever the change has put it.
     /// </remarks>
     private bool _focusIsPreview;
+
+    /// <summary>Whether the settings dialog is open and showing the dock off.</summary>
+    /// <remarks>
+    /// What the dock goes back to when a menu or a dialog lets go of the item it was holding:
+    /// the preview, rather than nothing. Without it, an icon's menu opened while the settings
+    /// dialog was up left the dock flat once it closed, the demonstration gone until the
+    /// dialog was opened again.
+    /// </remarks>
+    private bool _previewing;
+
+    /// <summary>
+    /// The item the settings dialog's preview holds up — the row selected on its Items page —
+    /// or null for the middle icon.
+    /// </summary>
+    /// <remarks>
+    /// Kept by id, not by index, and looked for again on every rebuild: the dialog previews each
+    /// change to the list as it is made, so the item moves under it — and the dock may not have
+    /// it yet at all, since a row added in the dialog is selected before the dock is told of it.
+    /// </remarks>
+    private string? _previewId;
 
     /// <summary>
     /// Whether the wave is being walked back and forth across the dock by itself.
@@ -372,12 +396,13 @@ public sealed class DockBar : Canvas
     private double _sweepElapsedMs;
 
     /// <summary>
-    /// True while the sweep has stood down because the pointer is on the dock.
+    /// True while the sweep has stood down because the pointer is on the dock, or because the
+    /// settings dialog has an item selected for the preview to hold up instead.
     /// </summary>
     /// <remarks>
     /// The demonstration exists to show what the wave does when nobody is pointing at the
     /// dock. The moment somebody is, they outrank it — and it picks up again, from where
-    /// they left off, when they go away.
+    /// they left off, when they go away. A selected item is somebody pointing by other means.
     /// </remarks>
     private bool _sweepYielded;
 
@@ -826,11 +851,16 @@ public sealed class DockBar : Canvas
         // The row that was just composed is the order to draw, so nothing is displaced.
         ResetDisplayOrder();
 
-        // The settings dialog's preview holds the middle icon, and the middle moves when
-        // the contents do.
-        if (_focusIsPreview && _focusIndex >= 0)
+        // The settings dialog's preview holds the item selected there, wherever the change has
+        // put it, or the middle icon, which moves when the contents do. Either can be in
+        // another slot now, and the wave travels to it rather than jumping.
+        var previewMoved = false;
+        if (PreviewHolds)
         {
-            _focusIndex = _items.Count / 2;
+            var preview = PreviewIndex();
+            previewMoved = preview != _focusIndex;
+            _focusIndex = preview;
+            _focusIsPreview = preview >= 0;
         }
 
         // The held item may have just been removed, or the row shortened past it. Left
@@ -846,7 +876,7 @@ public sealed class DockBar : Canvas
         _hoveredIndex = hovered is null ? -1 : _items.IndexOf(hovered);
         _pressedIndex = -1;
 
-        PinFocusPointer(claim: false);
+        PinFocusPointer(claim: false, ease: previewMoved);
         LayoutAtRest();
         _paintedSizes = [];
         InvalidateVisual();
@@ -1068,19 +1098,109 @@ public sealed class DockBar : Canvas
     }
 
     /// <summary>
-    /// Holds the middle icon magnified so the settings dialog's appearance sliders have
-    /// something visible to act on.
+    /// Puts the dock into the settings dialog's demonstration, or takes it out: the wave held
+    /// up on the item the dialog has selected (<see cref="PreviewItem"/>), or on the middle icon
+    /// while it has none, so the appearance sliders have something visible to act on.
     /// </summary>
     public void PreviewMagnification(bool active)
     {
+        _previewing = active;
+
         if (!active)
         {
+            // The next dialog opens with nothing selected, and so starts from the middle.
+            _previewId = null;
             ClearFocus();
             return;
         }
 
+        FocusPreview();
+    }
+
+    /// <summary>
+    /// Holds up the item the settings dialog has selected — magnified, and labelled as a
+    /// hovered one is — or, given null, goes back to the middle icon.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pointer outranks it as it outranks the rest of the demonstration, and the sweep
+    /// stands aside for it: an item picked out of the list is the one being looked at.
+    /// </para>
+    /// <para>
+    /// Kept until the dialog says otherwise, through anything else that holds an item for a
+    /// while. A menu or an edit dialog holding one of its own outranks the preview, and the
+    /// preview comes back to this item when it lets go.
+    /// </para>
+    /// </remarks>
+    /// <param name="id">The item's <see cref="DockItem.Id"/>, or null for none.</param>
+    public void PreviewItem(string? id)
+    {
+        if (id == _previewId)
+        {
+            return;
+        }
+
+        _previewId = id;
+
+        if (PreviewHolds)
+        {
+            FocusPreview();
+        }
+    }
+
+    /// <summary>
+    /// The item the settings dialog's preview is holding up because it is selected there; null
+    /// while it holds the middle icon, while a menu or a dialog holds an item of its own, and
+    /// while the dialog is closed.
+    /// </summary>
+    /// <remarks>
+    /// The condition <see cref="DrawTooltip"/> labels the preview on, said once for the same
+    /// reason <see cref="IsHoldingLabel"/> is.
+    /// </remarks>
+    public DockItem? PreviewedItem =>
+        _focusIsPreview && IsPreviewItem(_focusIndex) ? _items[_focusIndex].Item : null;
+
+    /// <summary>
+    /// True while the preview is what holds the wave: the dialog is open, and no menu or dialog
+    /// holds an item of its own. With nothing held at all only while the dock is empty.
+    /// </summary>
+    private bool PreviewHolds => _previewing && (_focusIsPreview || _focusIndex < 0);
+
+    /// <summary>
+    /// Where the preview holds the wave: the selected item, if the dock has it, and otherwise
+    /// the middle icon. -1 for an empty dock.
+    /// </summary>
+    private int PreviewIndex()
+    {
+        if (_previewId is not null)
+        {
+            var selected = _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewId);
+            if (selected >= 0)
+            {
+                return selected;
+            }
+        }
+
+        return _items.Count > 0 ? _items.Count / 2 : -1;
+    }
+
+    /// <summary>Whether the icon at an index is the item the dialog has selected.</summary>
+    private bool IsPreviewItem(int index) =>
+        _previewId is not null
+        && index >= 0
+        && index < _items.Count
+        && !_items[index].IsGhost
+        && _items[index].Item.Id == _previewId;
+
+    /// <summary>Hands the wave to the preview, on the icon <see cref="PreviewIndex"/> names.</summary>
+    /// <remarks>
+    /// No label of its own: the selected item is labelled through <see cref="PreviewedItem"/>,
+    /// as a hovered one is, so the pointer can take the label with the wave.
+    /// </remarks>
+    private void FocusPreview()
+    {
         _focusIsPreview = true;
-        FocusIndex(_items.Count / 2, showLabel: false);
+        FocusIndex(PreviewIndex(), showLabel: false);
     }
 
     /// <summary>Walks the wave from one end of the dock to the other and back, forever.</summary>
@@ -1104,7 +1224,7 @@ public sealed class DockBar : Canvas
     /// <summary>Moves the sweep on, and parks the pointer where it has got to.</summary>
     private void AdvanceSweep(double deltaMs)
     {
-        if (!_sweeping || _sweepYielded || _items.Count < 2)
+        if (!_sweeping || _sweepYielded || PreviewedItem is not null || _items.Count < 2)
         {
             return;
         }
@@ -1177,10 +1297,18 @@ public sealed class DockBar : Canvas
             index = _items.FindIndex(visual => visual.Item.Id == item.Id);
         }
 
+        // Asked of the index rather than of what ends up held: with the settings dialog open,
+        // letting go of the old hold puts the preview back, which is no claim of this caller's.
+        if (index < 0)
+        {
+            ClearFocus();
+            return 0;
+        }
+
         _focusIsPreview = false;
         FocusIndex(index, showLabel: true);
 
-        return _focusIndex < 0 ? 0 : _focusClaim;
+        return _focusClaim;
     }
 
     /// <summary>
@@ -1201,16 +1329,32 @@ public sealed class DockBar : Canvas
         }
     }
 
-    /// <summary>Releases the held item back to the pointer.</summary>
+    /// <summary>
+    /// Releases the held item: back to the settings dialog's preview while the dialog is open,
+    /// and otherwise to the pointer.
+    /// </summary>
     public void ClearFocus()
     {
-        // Superseded, so anything still holding the old claim can no longer act on it.
-        _focusClaim++;
-
-        _focusIndex = -1;
-        _focusShowsLabel = false;
-        _focusIsPreview = false;
         _labelStyle = null;
+
+        if (_previewing && PreviewIndex() >= 0)
+        {
+            // What the dock was showing before the hold, and still should be: the dialog is
+            // open behind whatever held the item. Supersedes the old claim as it takes its own.
+            FocusPreview();
+        }
+        else
+        {
+            // Superseded, so anything still holding the old claim can no longer act on it.
+            _focusClaim++;
+
+            _focusIndex = -1;
+            _focusShowsLabel = false;
+            _focusIsPreview = false;
+
+            // Hand control back to the pointer; the wave eases down if it is not over the dock.
+            EndGesture();
+        }
 
         // A previewed font may have been taller than anything actually pinned; dropping it
         // gives the window its headroom back.
@@ -1219,8 +1363,6 @@ public sealed class DockBar : Canvas
             RaisePreferredSizeChanged();
         }
 
-        // Hand control back to the pointer; the wave eases down if it is not over the dock.
-        EndGesture();
         InvalidateVisual();
     }
 
@@ -1274,10 +1416,14 @@ public sealed class DockBar : Canvas
         // A new hold supersedes whatever was holding the label before it.
         _focusClaim++;
 
+        // Another icon than the one held — the preview following the dialog's selection down
+        // the list, say — and the wave travels there rather than jumping.
+        var moved = index != _focusIndex;
+
         _focusIndex = index;
         _focusShowsLabel = showLabel;
         _labelStyle = null;
-        PinFocusPointer();
+        PinFocusPointer(ease: moved);
         InvalidateVisual();
     }
 
@@ -1292,7 +1438,12 @@ public sealed class DockBar : Canvas
     /// it straight back on the next tick, and since a handover is eased that is a visible
     /// wobble on every tick of a settings slider.
     /// </param>
-    private void PinFocusPointer(bool claim = true)
+    /// <param name="ease">
+    /// Whether a parked wave travels to the new place rather than being put there: true when
+    /// the focus has moved to another icon. False for the same icon moved by new geometry,
+    /// which the wave has to stay on exactly, or it trails the slider being dragged.
+    /// </param>
+    private void PinFocusPointer(bool claim = true, bool ease = false)
     {
         if (_focusIndex < 0 || _focusIndex >= _items.Count)
         {
@@ -1312,7 +1463,7 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        SetWaveCentre(_layout.RestingCentre(_focusIndex), WaveDriver.Parked);
+        SetWaveCentre(_layout.RestingCentre(_focusIndex), WaveDriver.Parked, ease);
         EnsureRendering();
         StartRamp(1, EnterRampMs);
     }
@@ -2009,7 +2160,7 @@ public sealed class DockBar : Canvas
 
         UpdateHovered(local: null);
 
-        if (_sweeping)
+        if (_sweeping && PreviewedItem is null)
         {
             // Nobody is pointing at it, so the demonstration takes over again — picking up
             // at the point the pointer left it rather than jumping back to its own phase.
@@ -2027,9 +2178,14 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        // A preview that is not sweeping goes back to holding the middle icon.
+        // A preview that is not sweeping goes back to holding its icon: the item the dialog has
+        // selected, or the middle one.
         if (_focusIsPreview)
         {
+            // The sweep stands aside for a selected item as it does for the pointer, and
+            // picks up from it in the same way once the selection goes.
+            _sweepYielded |= _sweeping;
+
             PinFocusPointer();
             return;
         }
@@ -2781,7 +2937,8 @@ public sealed class DockBar : Canvas
     {
         // A held item outranks the pointer: its label stays up whether or not anything is
         // hovered, so it can be judged while a menu or dialog has focus. The settings
-        // preview does not hold a label, and lets a hovered one through like any other.
+        // preview holds none: it lets a hovered label through like any other, and labels its
+        // own item only as a hovered one would be.
         if (_focusIndex >= 0 && !_focusIsPreview)
         {
             if (_focusShowsLabel && _focusIndex < _items.Count)
@@ -2792,12 +2949,19 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        if (_hoveredIndex < 0 || _hoveredIndex >= _items.Count || _progress < 0.5)
+        // The item selected in the settings dialog is labelled as a hovered one would be, for
+        // as long as the wave is parked on it: a pointer on the dock takes the wave, and the
+        // label goes with it.
+        var labelled = _hoveredIndex >= 0 ? _hoveredIndex
+            : PreviewedItem is not null && _driver == WaveDriver.Parked ? _focusIndex
+            : -1;
+
+        if (labelled < 0 || labelled >= _items.Count || _progress < 0.5)
         {
             return;
         }
 
-        DrawTooltipFor(drawingContext, _hoveredIndex, _items[_hoveredIndex].Item);
+        DrawTooltipFor(drawingContext, labelled, _items[labelled].Item);
     }
 
     /// <summary>Draws one item's label bubble above it.</summary>

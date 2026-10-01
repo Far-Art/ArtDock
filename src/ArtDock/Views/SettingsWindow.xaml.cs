@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -140,6 +141,19 @@ public sealed partial class SettingsWindow : Window
     /// <summary>Raised as the item editor's name and font controls change.</summary>
     public event EventHandler<(string? Label, string? FontFamily, double? FontSize, string? FontStyle)>?
         ItemLabelPreviewed;
+
+    /// <summary>
+    /// Raised with the id of the item the dock should hold up for the Items page — the selected
+    /// row, while that page is open — and with null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// Only while the page is open. The other pages have a demonstration of their own, and the
+    /// Size page's sweep would otherwise stand still on whatever row was selected last.
+    /// </remarks>
+    public event EventHandler<string?>? ItemSelected;
+
+    /// <summary>The id <see cref="ItemSelected"/> was last raised with, so each change is raised once.</summary>
+    private string? _selectedItemId;
 
     /// <summary>Raised by the About page's Exit.</summary>
     /// <remarks>
@@ -315,11 +329,11 @@ public sealed partial class SettingsWindow : Window
         };
 
         LanguageBox.SelectionChanged += (_, _) => Preview();
-        // The item list draws its folders from the chosen set, as the dock does — followed while
+        // The item list draws its icons from the chosen set, as the dock does — followed while
         // the pages load as well, so the list starts with the set in force.
         IconSetBox.SelectionChanged += (_, _) =>
         {
-            FolderRowIconConverter.SetIconSet(PinnedList, IconSetLibrary.Installed.Find(SelectedIconSet));
+            ItemRowIconConverter.SetIconSet(PinnedList, IconSetLibrary.Installed.Find(SelectedIconSet));
             Preview();
         };
         LanguageFolderButton.Click += (_, _) => OpenPackFolder(PackKind.Language);
@@ -361,7 +375,19 @@ public sealed partial class SettingsWindow : Window
         NoRevealRemoveButton.Click += (_, _) => RemoveNoReveal();
         NoRevealList.SelectionChanged += (_, _) => UpdateNoRevealControls();
 
-        PinnedList.SelectionChanged += (_, _) => UpdateItemButtons();
+        PinnedList.SelectionChanged += (_, _) =>
+        {
+            UpdateItemButtons();
+            AnnounceSelectedItem();
+        };
+
+        // A selection change inside any page bubbles up to here as well, which is harmless:
+        // the announcement is made only when what it says has changed.
+        Tabs.SelectionChanged += (_, _) => AnnounceSelectedItem();
+
+        // A press on nothing in particular puts the row down, and the dock lets go of it.
+        PreviewMouseDown += OnPressOutsideItems;
+
         PinnedList.MouseDoubleClick += (_, _) => EditSelected();
         ItemSettingsButton.Click += (_, _) => EditSelected();
         RemoveButton.Click += (_, _) => RemoveSelected();
@@ -959,6 +985,90 @@ public sealed partial class SettingsWindow : Window
         // The contents lock is exactly what it does protect, so that one does reach it.
         ClearItemsButton.IsEnabled = !ContentsLocked && _pinned.Count > 0;
     }
+
+    /// <summary>
+    /// Tells the dock which item to hold up: the selected row while the Items page is open, and
+    /// none otherwise.
+    /// </summary>
+    /// <remarks>
+    /// By id, and announced as soon as the row is selected — which can be before the dock has
+    /// the item, since an addition is selected first and previewed after. The dock looks for it
+    /// again whenever its contents change, so it does not have to be told twice.
+    /// </remarks>
+    private void AnnounceSelectedItem()
+    {
+        var id = Tabs.SelectedItem == ItemsPage && PinnedList.SelectedItem is PinnedAppSetting pin
+            ? pin.Id
+            : null;
+
+        if (id == _selectedItemId)
+        {
+            return;
+        }
+
+        _selectedItemId = id;
+        ItemSelected?.Invoke(this, id);
+    }
+
+    /// <summary>
+    /// Puts the Items page's selection down when a press lands on nothing in particular — the
+    /// page around the list, or the list below its last row — as a click on empty space does in
+    /// Explorer. The dock lets go of the item it was holding up along with it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Never on a control. The buttons beside the list act on the selection, and must find it
+    /// still there; a checkbox, a scroll bar or a page's tab is pressed for itself.
+    /// </para>
+    /// <para>
+    /// Inside the list, only below the last row. The rows stand a couple of pixels apart, and a
+    /// press in the gap between two is a near miss for one of them, not a choice of neither.
+    /// </para>
+    /// </remarks>
+    private void OnPressOutsideItems(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton is not (MouseButton.Left or MouseButton.Right)
+            || Tabs.SelectedItem != ItemsPage
+            || PinnedList.SelectedIndex < 0)
+        {
+            return;
+        }
+
+        for (var at = e.OriginalSource as DependencyObject; at is not null; at = PressParent(at))
+        {
+            if (at is ListBoxItem or ButtonBase or Thumb or ScrollBar or TextBoxBase or ComboBox
+                or Slider or TabItem or MenuItem or Hyperlink)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(at, PinnedList) && !IsBelowLastRow(e.GetPosition(PinnedList)))
+            {
+                return;
+            }
+
+            // Reached only by a press in this window. One in a popup — the Add menu's — ends
+            // its climb at the popup, and is not a press on the page.
+            if (ReferenceEquals(at, this))
+            {
+                PinnedList.SelectedIndex = -1;
+                return;
+            }
+        }
+    }
+
+    /// <summary>Whether a point in the list lies below its last row, where there is nothing.</summary>
+    private bool IsBelowLastRow(Point point) =>
+        _pinned.Count > 0
+        && RowContainer(_pinned.Count - 1) is { } last
+        && point.Y > last.TranslatePoint(new Point(0, last.ActualHeight), PinnedList).Y;
+
+    /// <summary>
+    /// The next element up from where a press landed: the visual parent, or for text — a run
+    /// inside a text block — the logical one, which is where its visual tree begins.
+    /// </summary>
+    private static DependencyObject? PressParent(DependencyObject child) =>
+        child is Visual ? VisualTreeHelper.GetParent(child) : LogicalTreeHelper.GetParent(child);
 
     // ---- the two locks -------------------------------------------------------
 

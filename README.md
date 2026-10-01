@@ -136,6 +136,25 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   its shadow along with the blur, so the three move as one.
 - **Pulses an icon twice** when a click actually launches something (not when it just
   raises a window that was already open).
+- **The Items page is a picture of the dock**: every row shows its item's icon as the dock
+  draws it — from the icon set chosen on the Appearance page, and a customized folder in its
+  own colour — and a folder is marked at the row's far end with Windows' folder outline, since
+  a folder drawn in a colour or by an icon set does not always look like one. The mark is on
+  exactly the items the editor offers *Customize* for: a folder on disk, `shell:Downloads`
+  included, and not This PC or the Recycle Bin. **Selecting a row holds that item up on the
+  dock**, magnified and labelled as if the pointer were on it, and the wave travels from one
+  item to the next as the selection moves down the list; the item stays held as the list is
+  reordered, and one just added is held as soon as it is on the dock. Only while the Items page
+  is open — the other pages go back to the middle icon, or to the sweep. The pointer outranks
+  it, as it outranks the sweep: on the dock it takes the wave and the label, and the selection
+  has them back when it leaves. A sweep turned on stands aside for a selected item and picks
+  up from it when the selection goes. **A click on nothing in particular puts the selection
+  down** — on the page around the list, or the empty part of the list below its last row — and
+  the dock lets go with it; the buttons beside the list keep it, since they act on it, and so
+  do the gaps between rows, where a click is a near miss rather than a choice of neither. Those
+  buttons carry the glyphs the dock's menus draw for the same commands — *Remove* the menu's
+  unpin, *Item settings…* its pencil, *Add* its plus — with arrows for the moves and a broom
+  for *Clear all*.
 - **Reorder from either side**: dragging a row in the settings dialog lifts it out under the
   pointer, reorders the list around it as it moves, and moves the icon on the dock at the same
   time; dragging an icon on the dock reorders the dialog's list to match, while it is open.
@@ -191,8 +210,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   white symbol, or white text, casts the same soft shadow their white symbols cast. *Use the
   app's own icon* puts Windows' folder back; choosing an image, drawing the folder and the
   item's own icon each undo the others. A folder already customized opens with all of that out,
-  and the settings dialog's Items page shows every folder's icon beside its name, so the folders
-  can be told apart there. The folder's shape comes from an SVG built into the program, sized
+  and the settings dialog's Items page shows it as the dock draws it, so the folders can be told
+  apart there. The folder's shape comes from an SVG built into the program, sized
   and placed as all of Windows' folder icons are, so it sits level with them on the dock; it is
   drawn from the pin's settings each time the dock reads its pins and never kept as a picture,
   so a reinstall or an imported settings file brings it back exactly. The label's font, style
@@ -429,7 +448,8 @@ src/ArtDock/
   Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet, which
                draws the bar while the blur is on),
                MenuHost (owner for the context menus), MenuIcons (their glyphs and
-               images), SettingsWindow, EditPinWindow,
+               images, and the same glyphs on the settings dialog's buttons),
+               SettingsWindow, EditPinWindow,
                AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
   Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
                WindowsApi, ShellIcons, ShellLink, AppLauncher, Autostart, MonitorDpi,
@@ -604,6 +624,16 @@ pointer just was, so handing back is a continuation rather than a jump. This is 
 a held item does not lock the real cursor out; a menu or an edit dialog still does, because
 there the point is to keep hold of one particular icon while you reach the dialog.
 
+The row selected on the Items page belongs to the demonstration, not to that kind of hold. With
+the sweep off, the dialog holds the middle icon up; a selected row takes its place, the pointer
+outranks it in the same way, and with the sweep on the sweep stands down for it as for the
+pointer. A parked wave sent to another icon travels there with the same easing as a change of
+hands, so it glides along the dock as the selection moves down the list. A menu or the item
+editor holding an icon over it hands the dock back to it when it lets go — to the demonstration
+as it then stands. Before that, an icon's menu opened on the dock while the dialog was up left
+the dock flat when it closed, unless the sweep was on, with the dialog still there to
+demonstrate it.
+
 **The wave changes hands without jumping.** A driver taking over — the cursor arriving on a
 dock that is demonstrating itself, and leaving it again — used to move the wave to its own
 position on the frame it took it, across however much dock lay in between. The gap is now
@@ -621,6 +651,8 @@ seen — and once a menu belongs to something that can be given the foreground, 
 disappears and it gets themed like everything else. Its glyphs come the same way: they are
 drawn in the theme's own `SymbolThemeFontFamily`, the font it draws a menu's check marks and
 chevrons in, so they are Windows' glyphs rather than a set this project drew (`MenuIcons`).
+The settings dialog's Items page draws the same glyphs on its buttons, chosen by command, so a
+command looks the same on a button as in a menu.
 
 **The dialogs are on WPF's own Fluent theme, not an imitation of it.** `App.xaml` sets
 `ThemeMode`, which merges `PresentationFramework.Fluent` — Microsoft's WPF implementation of
@@ -970,7 +1002,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and seventy-six tests cover the cosine falloff (peak, range boundary,
+Five hundred and eighty-five tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -985,7 +1017,10 @@ share it always meant.
 
 Later groups guard behaviour that was expensive to get right: that a separator holds its
 resting size while its neighbours magnify, that a stale release cannot put away a held label
-something else has since taken, that a colour or opacity change produces metrics equal to the
+something else has since taken, that the item selected in the settings dialog is held up by its
+id — found wherever a change to the list puts it, waited for when the dock does not have it yet,
+and come back to when a menu or a dialog holding an item of its own lets go, with no claim
+handed out for it — that a colour or opacity change produces metrics equal to the
 ones in force — which is what lets the appearance path skip the layout, and what stopped
 those sliders flickering — that an arriving drop preview grows in *under* the wave rather
 than instead of it, and that two spellings of the same path are one pin, which is what stops
@@ -1097,9 +1132,10 @@ a stored colour, symbol and tone read back as written, a mangled colour still dr
 and the hex box reads a colour only once one has been typed; that every symbol offered, and the
 editor's tile for none, is in both of the theme's symbol fonts; that no two swatches read as one;
 that a drawn folder beats an icon set and an image chosen for the item beats it; that the
-settings dialog's item list shows a folder's icon — drawn, or the chosen set's — and nothing
-beside anything else; that `shell:Downloads` counts as a folder on disk while This PC, the
-Recycle Bin and a `.zip` do not;
+settings dialog's item list shows every item's icon as the dock draws it — a folder drawn, or
+the chosen set's — and none on a separator's row, and marks the folders and nothing else, in a
+glyph both of the theme's symbol fonts have; that `shell:Downloads` counts as a folder on disk
+while This PC, the Recycle Bin and a `.zip` do not;
 and that a folder in an imported settings file is drawn from the file alone, with nothing on
 disk beside it to have gone missing.
 

@@ -492,13 +492,13 @@ public class FolderArtTests : IDisposable
     }
 
     /// <summary>
-    /// The settings dialog's item list shows a folder's icon beside its name — the one the dock
-    /// draws, with the set chosen in the dialog — and nothing beside anything else.
+    /// The settings dialog's item list shows every item's icon beside its name — the one the
+    /// dock draws, with the set chosen in the dialog — and nothing on a separator's row.
     /// </summary>
     [Fact]
-    public void TheItemList_ShowsAFoldersIcon_AndNothingForAnythingElse() => OnStaThread(() =>
+    public void TheItemList_ShowsEveryItemsIcon() => OnStaThread(() =>
     {
-        var converter = new ArtDock.Views.FolderRowIconConverter();
+        var converter = new ArtDock.Views.ItemRowIconConverter();
         object? Row(PinnedAppSetting pin, IconSet? set = null) =>
             converter.Convert([pin, set], typeof(ImageSource), null, System.Globalization.CultureInfo.InvariantCulture);
 
@@ -506,9 +506,10 @@ public class FolderArtTests : IDisposable
         var file = Path.Combine(_dir, "notes.txt");
         File.WriteAllText(file, "x");
 
+        var notes = new PinnedAppSetting { Id = "b", Label = "Notes", TargetPath = file };
         Assert.NotNull(Row(new PinnedAppSetting { Id = "a", Label = "Work", TargetPath = folder }));
-        Assert.Null(Row(new PinnedAppSetting { Id = "b", Label = "Notes", TargetPath = file }));
-        Assert.Null(Row(new PinnedAppSetting { Id = "c", Label = "Calculator", Aumid = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App" }));
+        Assert.NotNull(Row(notes));
+        Assert.Same(PinnedAppsService.LoadIcon(PinnedAppsService.ToDockItem(notes)), Row(notes));
         Assert.Null(Row(new PinnedAppSetting { Id = "d", Label = "Separator", IsSeparator = true }));
 
         // A customized folder is its drawn self, wherever it points — even where nothing is.
@@ -523,6 +524,42 @@ public class FolderArtTests : IDisposable
             Row(plain, set));
         Assert.NotSame(Row(plain), Row(plain, set));
     });
+
+    /// <summary>
+    /// The mark at the far end of a row is on exactly the items the editor offers to draw as a
+    /// folder: a folder on disk, by path or <c>shell:</c> name, and one already drawn wherever it
+    /// points — and on nothing else, whatever its icon looks like.
+    /// </summary>
+    [Fact]
+    public void TheItemList_MarksTheFolders_AndNothingElse() => OnStaThread(() =>
+    {
+        var converter = new ArtDock.Views.FolderRowMarkConverter();
+        Visibility Mark(PinnedAppSetting pin) =>
+            (Visibility)converter.Convert(pin, typeof(Visibility), null, System.Globalization.CultureInfo.InvariantCulture);
+
+        var folder = Directory.CreateDirectory(Path.Combine(_dir, "Marked")).FullName;
+        var file = Path.Combine(_dir, "notes.txt");
+        File.WriteAllText(file, "x");
+
+        Assert.Equal(Visibility.Visible, Mark(new PinnedAppSetting { Id = "a", Label = "Marked", TargetPath = folder }));
+        Assert.Equal(Visibility.Visible, Mark(new PinnedAppSetting { Id = "b", Label = "Downloads", TargetPath = "shell:Downloads" }));
+        Assert.Equal(Visibility.Visible, Mark(new PinnedAppSetting { Id = "c", Label = "Old", TargetPath = @"Z:\Nowhere", FolderColor = "#9B6BF2" }));
+
+        Assert.Equal(Visibility.Collapsed, Mark(new PinnedAppSetting { Id = "d", Label = "Notes", TargetPath = file }));
+        Assert.Equal(Visibility.Collapsed, Mark(new PinnedAppSetting { Id = "e", Label = "This PC", TargetPath = "shell:MyComputerFolder" }));
+        Assert.Equal(Visibility.Collapsed, Mark(new PinnedAppSetting { Id = "f", Label = "Calculator", Aumid = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App" }));
+        Assert.Equal(Visibility.Collapsed, Mark(new PinnedAppSetting { Id = "g", Label = "Separator", IsSeparator = true }));
+    });
+
+    /// <summary>The mark is drawn in the theme's symbol font, so it is held to both, as the symbols are.</summary>
+    [Theory]
+    [MemberData(nameof(SymbolFonts))]
+    public void TheFolderMark_IsInTheFont(string font)
+    {
+        var typeface = new Typeface(font);
+        Assert.True(typeface.TryGetGlyphTypeface(out var glyphs), $"{font} is not installed");
+        Assert.True(glyphs.CharacterToGlyphMap.ContainsKey(ArtDock.Views.FolderRowMarkConverter.Glyph[0]));
+    }
 
     // ---- which pins are offered one -----------------------------------------------------------
 

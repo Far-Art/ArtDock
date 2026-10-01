@@ -34,7 +34,8 @@
 
         <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
 
-        <views:FolderRowIconConverter x:Key="FolderRowIcon" />
+        <views:ItemRowIconConverter x:Key="ItemRowIcon" />
+        <views:FolderRowMarkConverter x:Key="FolderRowMark" />
 
         <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
             <Setter Property="FontSize" Value="22" />
@@ -96,6 +97,38 @@
              the whole-application reset — coloured so they do not read like the ones beside
              them that do not. -->
         <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+        </Style>
+
+        <!-- A button with its command's glyph before its words, named on the button with
+             views:MenuIcons.Glyph — the glyph the dock's menus draw beside the same command, so
+             Remove looks like Remove from dock. Set to the left, so the glyphs of a column of
+             buttons stand in a line, and stretched to the column, which is as wide as the widest
+             of them: the theme sizes a button to its content, and a glyph took Item settings…
+             past the others' width. Neither glyph nor words is given a colour: both take the
+             button's, which is the critical colour on a danger button, and greys with it. -->
+        <Style x:Key="GlyphButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                FontFamily="{DynamicResource SymbolThemeFontFamily}"
+                                FontSize="16"
+                                Text="{Binding (views:MenuIcons.Glyph), RelativeSource={RelativeSource AncestorType=Button}, Converter={x:Static views:MenuIcons.CodePointOf}}" />
+                            <TextBlock VerticalAlignment="Center" Text="{Binding}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- DangerButton's colour on GlyphButton's layout. -->
+        <Style x:Key="DangerGlyphButton" TargetType="Button" BasedOn="{StaticResource GlyphButton}">
             <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
         </Style>
 
@@ -721,7 +754,9 @@
             </TabItem>
 
             <!-- ==================== ITEMS ==================== -->
-            <TabItem Header="{DynamicResource Settings.Page.Items}">
+            <!-- Named so the code can tell when it is open: the row selected here is held up on
+                 the dock, but only while this page is the one being looked at. -->
+            <TabItem x:Name="ItemsPage" Header="{DynamicResource Settings.Page.Items}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -761,6 +796,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <!-- Faded while the order is locked. The grip is the
                                              row's one invitation to drag it, and an
@@ -781,12 +817,13 @@
                                                 </Style>
                                             </Path.Style>
                                         </Path>
-                                        <!-- A folder shows the icon the dock draws it with, its
-                                             own colour and symbol if it has been customized, so
-                                             the folders are told apart from the rest at a glance.
-                                             The column is kept on every row, so the names stay in
-                                             line. Shrunk from 128, so high quality, or its edges
-                                             come out in steps. -->
+                                        <!-- Every row shows the icon the dock draws its item
+                                             with — from the set chosen on the Appearance page,
+                                             and a folder in its own colour and symbol if it has
+                                             been customized — so an item is found here as it is
+                                             on the dock, by its icon before its name. Shrunk
+                                             from 128, so high quality, or its edges come out in
+                                             steps. -->
                                         <Image
                                             x:Name="ItemIcon"
                                             Grid.Column="1"
@@ -796,9 +833,9 @@
                                             VerticalAlignment="Center"
                                             RenderOptions.BitmapScalingMode="HighQuality">
                                             <Image.Source>
-                                                <MultiBinding Converter="{StaticResource FolderRowIcon}">
+                                                <MultiBinding Converter="{StaticResource ItemRowIcon}">
                                                     <Binding />
-                                                    <Binding Path="(views:FolderRowIconConverter.IconSet)" RelativeSource="{RelativeSource AncestorType=ListBox}" />
+                                                    <Binding Path="(views:ItemRowIconConverter.IconSet)" RelativeSource="{RelativeSource AncestorType=ListBox}" />
                                                 </MultiBinding>
                                             </Image.Source>
                                         </Image>
@@ -808,6 +845,25 @@
                                             VerticalAlignment="Center"
                                             Text="{Binding Label}"
                                             TextTrimming="CharacterEllipsis" />
+
+                                        <!-- A pin that opens a folder is marked at the row's far
+                                             end: the pins the item editor offers to draw as a
+                                             folder. The icon alone does not always say so — a
+                                             folder drawn in a colour of its own, or by an icon
+                                             set, reads first as that colour or that picture. In
+                                             the theme's symbol font and at the size of the menus'
+                                             glyphs; the right margin is the separator rule's, so
+                                             the two end in line. -->
+                                        <TextBlock
+                                            x:Name="FolderMark"
+                                            Grid.Column="3"
+                                            Margin="12,0,8,0"
+                                            VerticalAlignment="Center"
+                                            FontFamily="{DynamicResource SymbolThemeFontFamily}"
+                                            FontSize="16"
+                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Static views:FolderRowMarkConverter.Glyph}"
+                                            Visibility="{Binding Converter={StaticResource FolderRowMark}}" />
 
                                         <!-- A separator is punctuation rather than an entry,
                                              and the row says so the way the dock does: it
@@ -842,7 +898,13 @@
                         Margin="12,0,0,4">
                         <!-- The dropdown is built in code from the same list the dock's own
                              right-click menu uses, so the two cannot drift apart. -->
-                        <Button x:Name="AddButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.Add}" />
+                        <Button
+                            x:Name="AddButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="Add"
+                            Content="{DynamicResource Settings.Items.Add}" />
 
                         <!-- Add works on the list; everything below it works on whichever
                              item is selected, and is dead until one is. Ruled apart so the
@@ -853,15 +915,33 @@
                             Margin="4,4,4,12"
                             Background="{DynamicResource CardStrokeColorDefaultBrush}" />
 
-                        <Button x:Name="ItemSettingsButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.ItemSettings}" />
+                        <Button
+                            x:Name="ItemSettingsButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="Edit"
+                            Content="{DynamicResource Settings.Items.ItemSettings}" />
                         <Button
                             x:Name="RemoveButton"
                             Margin="0,0,0,8"
                             MinWidth="132"
-                            Style="{StaticResource DangerButton}"
+                            Style="{StaticResource DangerGlyphButton}"
+                            views:MenuIcons.Glyph="Unpin"
                             Content="{DynamicResource Common.Remove}" />
-                        <Button x:Name="MoveUpButton" Margin="0,0,0,8" MinWidth="132" Content="{DynamicResource Settings.Items.MoveUp}" />
-                        <Button x:Name="MoveDownButton" MinWidth="132" Content="{DynamicResource Settings.Items.MoveDown}" />
+                        <Button
+                            x:Name="MoveUpButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="MoveUp"
+                            Content="{DynamicResource Settings.Items.MoveUp}" />
+                        <Button
+                            x:Name="MoveDownButton"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="MoveDown"
+                            Content="{DynamicResource Settings.Items.MoveDown}" />
 
                         <!-- Not a page reset like the other pages carry. What a page reset
                              would offer here is the starting set, and that comes back with the
@@ -871,7 +951,8 @@
                             x:Name="ClearItemsButton"
                             Margin="0,20,0,0"
                             MinWidth="132"
-                            Style="{StaticResource DangerButton}"
+                            Style="{StaticResource DangerGlyphButton}"
+                            views:MenuIcons.Glyph="ClearAll"
                             Content="{DynamicResource Settings.Items.ClearAll}" />
                     </StackPanel>
 

@@ -206,17 +206,13 @@ public partial class App : Application
 
         // Editing an item from the Items page holds that item's label open on the dock, the
         // way the dock's own menu does. The dialog cannot reach the dock itself, so the
-        // routing lives here.
-        _settingsWindow.ItemBeingEdited += (_, item) =>
-        {
-            _dockWindow?.HoldItemLabel(item);
+        // routing lives here. Letting go puts back the demonstration the dialog was showing
+        // before the editor opened, which the dock does by itself while the dialog is open.
+        _settingsWindow.ItemBeingEdited += (_, item) => _dockWindow?.HoldItemLabel(item);
 
-            if (item is null)
-            {
-                // Back to the demonstration the dialog was showing before the editor opened.
-                _dockWindow?.PreviewMagnification(true);
-            }
-        };
+        // And selecting a row there holds that item up on the dock, as if pointed at, so the
+        // row and the icon it describes are seen to be the same thing.
+        _settingsWindow.ItemSelected += (_, id) => _dockWindow?.PreviewItem(id);
 
         _settingsWindow.ItemLabelPreviewed += (_, edit) => _dockWindow?.PreviewItemLabel(
             edit.Label, edit.FontFamily, edit.FontSize, edit.FontStyle);
