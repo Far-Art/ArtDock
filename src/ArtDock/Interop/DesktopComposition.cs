@@ -20,6 +20,9 @@ internal static class DesktopComposition
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaSystemBackdropType = 38;
 
+    /// <summary>No material at all.</summary>
+    private const int DwmsbtNone = 1;
+
     /// <summary>Mica — the material the Settings app and File Explorer sit on.</summary>
     private const int DwmsbtMainWindow = 2;
 
@@ -148,6 +151,26 @@ internal static class DesktopComposition
 
         var backdrop = DwmsbtMainWindow;
         return DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref backdrop, sizeof(int)) == 0;
+    }
+
+    /// <summary>
+    /// Takes a window back off Mica, undoing <see cref="EnableMica"/>: no material, and no
+    /// frame extended into the client area for one to show through.
+    /// </summary>
+    /// <remarks>
+    /// The title bar is still matched to the theme, which <see cref="EnableMica"/> otherwise
+    /// does on every change of it.
+    /// </remarks>
+    public static void DisableMica(nint hwnd, bool dark)
+    {
+        var immersive = dark ? 1 : 0;
+        DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref immersive, sizeof(int));
+
+        var backdrop = DwmsbtNone;
+        DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref backdrop, sizeof(int));
+
+        var none = default(Margins);
+        DwmExtendFrameIntoClientArea(hwnd, ref none);
     }
 
     /// <summary>

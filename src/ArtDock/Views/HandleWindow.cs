@@ -39,7 +39,8 @@ namespace ArtDock.Views;
 /// against anything, as the phone's does by turning dark over light and light over dark. There
 /// is no choice of look; that was a setting once, and was taken away as a choice nobody needed.
 /// The dock's colour is what it falls back on where Windows will not keep it out of captures of
-/// the screen, since inverting then would mean inverting itself.
+/// the screen, since inverting then would mean inverting itself — and what it is given under
+/// <c>DockSettings.NoGpu</c>, where the screen is not read at all.
 /// </para>
 /// </remarks>
 public sealed class HandleWindow : IDisposable
@@ -195,15 +196,21 @@ public sealed class HandleWindow : IDisposable
     }
 
     /// <summary>
-    /// Sets the handle's look: the colours behind it inverted — or, where Windows will not keep
-    /// it out of captures of the screen, <paramref name="fallback"/>, the dock's colour,
-    /// outlined in whatever stands out against it.
+    /// Sets the handle's look: the colours behind it inverted — or, when that is not wanted or
+    /// Windows will not keep it out of captures of the screen, <paramref name="fallback"/>, the
+    /// dock's colour, outlined in whatever stands out against it.
     /// </summary>
+    /// <param name="invert">
+    /// False under <c>DockSettings.NoGpu</c>, where reading the screen back is work for a
+    /// processor that is already doing the compositor's.
+    /// </param>
     /// <remarks>
     /// <para>
     /// Inverting keeps the window out of screenshots and recordings, because that is what keeps
-    /// it out of its own reads. The first call asks Windows for that, once; a refusal — before
-    /// Windows 10 2004 — is kept, and the handle is drawn in the dock's colour from then on.
+    /// it out of its own reads. Windows is asked for that on the way into inverting, before the
+    /// first read; a refusal — before Windows 10 2004 — is kept, and the handle is drawn in the
+    /// dock's colour from then on. On the way out it is let back into captures, since nothing
+    /// is reading any more.
     /// </para>
     /// <para>
     /// The dock's colour nearly solid, where the bar is usually see-through. Nothing is blurred
@@ -213,16 +220,16 @@ public sealed class HandleWindow : IDisposable
     /// dark window still has a light edge.
     /// </para>
     /// </remarks>
-    public void SetLook(Color fallback)
+    public void SetLook(bool invert, Color fallback)
     {
         if (_disposed)
         {
             return;
         }
 
-        var invert = _canInvert;
+        invert &= _canInvert;
 
-        if (invert && _inverting is null && !ScreenCapture.ExcludeFromCapture(_hwnd, exclude: true))
+        if (invert && _inverting != true && !ScreenCapture.ExcludeFromCapture(_hwnd, exclude: true))
         {
             _canInvert = false;
             invert = false;
@@ -230,6 +237,8 @@ public sealed class HandleWindow : IDisposable
 
         if (invert != _inverting)
         {
+            var wasInverting = _inverting == true;
+
             _inverting = invert;
             _color = null;
 
@@ -241,6 +250,13 @@ public sealed class HandleWindow : IDisposable
 
             Shape();
             UpdateReading();
+
+            // After the reading has been told to stop. A read already on its way may now find
+            // the handle in it, and is drawn into a brush the pill no longer wears.
+            if (wasInverting)
+            {
+                ScreenCapture.ExcludeFromCapture(_hwnd, exclude: false);
+            }
         }
 
         if (invert || _color == fallback)

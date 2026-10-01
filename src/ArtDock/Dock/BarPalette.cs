@@ -64,6 +64,41 @@ public static class BarPalette
         return Default;
     }
 
+    /// <summary>
+    /// What stands in for the desktop behind the bar where the bar is painted solid, under
+    /// <c>DockSettings.NoGpu</c>: the grey its colour is mixed with in place of whatever would
+    /// have shown through.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A bar is chosen by eye at the opacity it has, over a desktop: the stock one is a pale
+    /// blue at a half, and what is seen is a good deal greyer than the colour stored. Painted
+    /// solid in that colour alone it came out too light — reported the first time it was
+    /// looked at — and a white separator all but vanished on it.
+    /// </para>
+    /// <para>
+    /// The grey is what the acrylic sheet would have put there over a desktop of mid grey: its
+    /// wash, <c>#141620</c> at 22%, over <c>#808080</c>. A desktop is not mid grey, but it is
+    /// the one guess that is wrong by the same amount in both directions, and a bar that
+    /// neither darkens nor lightens much against the one it replaces is the point.
+    /// </para>
+    /// </remarks>
+    public static readonly Color Underlay = Color.FromRgb(0x68, 0x69, 0x6B);
+
+    /// <summary>
+    /// The opaque colour that <paramref name="color"/> at <paramref name="opacity"/> makes over
+    /// <paramref name="under"/>.
+    /// </summary>
+    public static Color Over(Color color, double opacity, Color under)
+    {
+        var share = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1;
+
+        byte Mix(byte top, byte bottom) =>
+            (byte)Math.Round((top * share) + (bottom * (1 - share)), MidpointRounding.AwayFromZero);
+
+        return Color.FromRgb(Mix(color.R, under.R), Mix(color.G, under.G), Mix(color.B, under.B));
+    }
+
     /// <summary>Formats a colour the way the settings file stores it.</summary>
     public static string ToHex(Color color) =>
         string.Create(

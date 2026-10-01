@@ -399,6 +399,16 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Appearance.Title}" />
 
+                        <!-- Why the blur's card below is greyed, and what the opacity does now,
+                             said at full strength: a note inside the greyed card would be
+                             dimmed with it. -->
+                        <TextBlock
+                            x:Name="NoGpuNote"
+                            Margin="2,0,0,8"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Appearance.NoGpu.Note}"
+                            Visibility="Collapsed" />
+
                         <Border Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -530,7 +540,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="BlurCard" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -762,6 +772,15 @@
                     <StackPanel>
                         <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Icons.Title}" />
 
+                        <!-- As on the Appearance page: why the shadows' card is greyed, said at
+                             full strength rather than inside the card it is about. -->
+                        <TextBlock
+                            x:Name="NoGpuIconsNote"
+                            Margin="2,0,0,8"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Icons.NoGpu.Note}"
+                            Visibility="Collapsed" />
+
                         <!-- The list is read again whenever this window comes back to the front,
                              so a set copied in with Open folder shows up without reopening
                              anything. -->
@@ -798,7 +817,7 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource Card}">
+                        <Border x:Name="IconShadowsCard" Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -1436,6 +1455,48 @@
                                     Grid.Column="1"
                                     VerticalAlignment="Center" />
                             </Grid>
+                        </Border>
+
+                        <!-- For a machine with nothing but the processor to draw with. The dock
+                             ticks this for itself once only, on a first run where WPF reports
+                             no hardware to draw with, and says so then; after that the line
+                             under it only says when that is so and the box is not ticked.
+
+                             In Windows' own caution colours, the ones its warning bars are
+                             drawn in, and the only card that is: ticking it takes the blur, the
+                             bar's opacity and the dialog's material away, and it should not be
+                             ticked in passing. The theme's keys, so it follows light and dark. -->
+                        <Border
+                            Style="{StaticResource Card}"
+                            Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                            BorderBrush="{DynamicResource SystemFillColorCautionBrush}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.System.NoGpu}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.System.NoGpu.Hint}" />
+                                    </StackPanel>
+                                    <CheckBox
+                                        x:Name="NoGpuCheck"
+                                        AutomationProperties.Name="{DynamicResource Settings.System.NoGpu}"
+                                        AutomationProperties.HelpText="{DynamicResource Settings.System.NoGpu.Hint}"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center" />
+                                </Grid>
+                                <TextBlock
+                                    x:Name="NoGpuDetected"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource CardHint}"
+                                    Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                    Text="{DynamicResource Settings.System.NoGpu.Detected}"
+                                    Visibility="Collapsed" />
+                            </StackPanel>
                         </Border>
 
                         <Button

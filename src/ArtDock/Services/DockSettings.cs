@@ -649,6 +649,105 @@ public sealed class DockSettings
     /// </summary>
     public bool ReduceMotion { get; set; }
 
+    /// <summary>
+    /// Whether the dock is drawn without a graphics card: for a virtual machine, a remote
+    /// session, a server — anywhere Windows has only the processor to draw with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The user's to turn on, and off unless they do. The dock decides it once only, on a first
+    /// run where WPF reports nothing to draw with (<see cref="AdoptNoGpu"/>), and says so; after
+    /// that the settings dialog only says when that is so and the box is not ticked. On, the dock is
+    /// drawn in software, with no Direct3D device at all (<see cref="SoftwareRendering"/>), and
+    /// gives up what leans on the compositor: the blur behind the bar (<see cref="Blurs"/>),
+    /// the bar's translucency (<see cref="BarAlpha"/>), the handle's inversion
+    /// (<see cref="HandleInverts"/>) and the dialogs' Mica. And it draws less: the
+    /// icons cast no shadows (<see cref="CastsIconShadows"/>), and the wave is drawn about
+    /// thirty times a second (<see cref="WaveFrameMs"/>). The wave itself stays —
+    /// <see cref="ReduceMotion"/> is beside it for a machine that cannot keep up even so.
+    /// </para>
+    /// <para>
+    /// What it overrides is kept underneath, the way <see cref="BarColor"/> is under
+    /// <see cref="UseTaskbarColor"/>: nothing here rewrites <see cref="BlurBackground"/>,
+    /// <see cref="BarOpacity"/> or <see cref="IconShadows"/>, so turning it off puts back the
+    /// dock that was there. Per application, like the theme, since the render mode is the
+    /// process's.
+    /// </para>
+    /// </remarks>
+    public bool NoGpu { get; set; }
+
+    /// <summary>
+    /// Turns <see cref="NoGpu"/> on for a dock starting for the first time on a machine with no
+    /// hardware to draw with. Returns true when it did, which is the caller's cue to say so.
+    /// </summary>
+    /// <remarks>
+    /// A first run only. A dock with a settings file has an owner, who has had the checkbox and
+    /// the line under it that says when this machine looks like one it is for; turning it on
+    /// under them — after a remote session, say, where the tier reads 0 for a while — would
+    /// change their dock for a reason they could not see.
+    /// </remarks>
+    public bool AdoptNoGpu(bool firstRun, bool hardwareMissing)
+    {
+        if (!firstRun || !hardwareMissing || NoGpu)
+        {
+            return false;
+        }
+
+        NoGpu = true;
+        return true;
+    }
+
+    /// <summary>Whether the acrylic sheet is up: asked for, and not ruled out by <see cref="NoGpu"/>.</summary>
+    [JsonIgnore]
+    public bool Blurs => BlurBackground && !NoGpu;
+
+    /// <summary>
+    /// The opacity the bar is painted at: <see cref="BarOpacity"/>, or solid under
+    /// <see cref="NoGpu"/> — where the opacity goes into the colour instead, see
+    /// <see cref="BarPaint"/>.
+    /// </summary>
+    [JsonIgnore]
+    public double BarAlpha => NoGpu ? 1 : BarOpacity;
+
+    /// <summary>
+    /// The colour the bar is painted, given the colour in force — <see cref="BarColor"/>, or
+    /// the taskbar's: that colour, or under <see cref="NoGpu"/> what it looks like at
+    /// <see cref="BarOpacity"/> over grey (<see cref="BarPalette.Underlay"/>), as
+    /// <c>#RRGGBB</c>.
+    /// </summary>
+    /// <remarks>
+    /// So a solid bar keeps the look it was chosen for, and the opacity slider still does
+    /// something: it sets how much of the grey comes through, where it used to set how much of
+    /// the desktop did. Painted in the stored colour alone, a bar set up translucent was
+    /// lighter solid than it had ever been seen.
+    /// </remarks>
+    public string BarPaint(string color) => NoGpu
+        ? BarPalette.ToHex(BarPalette.Over(BarPalette.Parse(color), BarOpacity, BarPalette.Underlay))
+        : color;
+
+    /// <summary>
+    /// Whether the handle shows what is behind it inverted, which takes reading the screen
+    /// under it, or takes the dock's colour — as it does under <see cref="NoGpu"/>.
+    /// </summary>
+    [JsonIgnore]
+    public bool HandleInverts => !NoGpu;
+
+    /// <summary>
+    /// Whether the icons cast their shadows: asked for in <see cref="IconShadows"/>, and not
+    /// ruled out by <see cref="NoGpu"/>, under which each would be one more picture to scale
+    /// for every icon on every frame of the wave.
+    /// </summary>
+    [JsonIgnore]
+    public bool CastsIconShadows => IconShadows && !NoGpu;
+
+    /// <summary>
+    /// The least time between two frames of the wave, in milliseconds: zero, for every frame
+    /// there is, or <see cref="WavePace.CappedFrameMs"/> under <see cref="NoGpu"/> — about
+    /// thirty frames a second.
+    /// </summary>
+    [JsonIgnore]
+    public double WaveFrameMs => NoGpu ? WavePace.CappedFrameMs : 0;
+
     // ---- contents ------------------------------------------------------------
 
     /// <summary>
@@ -820,6 +919,7 @@ public sealed class DockSettings
         Language = Language,
         SettingsPage = SettingsPage,
         ReduceMotion = ReduceMotion,
+        NoGpu = NoGpu,
         LockItemOrder = LockItemOrder,
         LockItemContents = LockItemContents,
         PinnedApps = [.. PinnedApps.Select(app => new PinnedAppSetting

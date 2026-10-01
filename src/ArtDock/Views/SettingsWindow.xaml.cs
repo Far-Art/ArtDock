@@ -232,6 +232,10 @@ public sealed partial class SettingsWindow : Window
         // language; the ones in the XAML follow by themselves.
         Localizer.LanguageChanged += OnLanguageChanged;
 
+        // The No GPU hint follows what Windows gives the dock to draw with, which can change
+        // while the dialog is open: a remote session taking over is the usual way.
+        RenderCapability.TierChanged += OnRenderTierChanged;
+
         // Coming back to this window is when a pack copied in through Open folder has had a
         // chance to arrive, so that is when the pickers look again.
         Activated += (_, _) => RefreshPacks();
@@ -304,6 +308,8 @@ public sealed partial class SettingsWindow : Window
         // in Task Manager's Startup tab, and the checkbox should reflect reality.
         RunAtLoginCheck.IsChecked = Autostart.IsEnabled();
         ReduceMotionCheck.IsChecked = settings.ReduceMotion;
+        NoGpuCheck.IsChecked = settings.NoGpu;
+        UpdateNoGpuControls();
 
         LockOrderCheck.IsChecked = settings.LockItemOrder;
         LockContentsCheck.IsChecked = settings.LockItemContents;
@@ -385,6 +391,8 @@ public sealed partial class SettingsWindow : Window
         LabelStyleBox.SelectionChanged += (_, _) => Preview();
         ReduceMotionCheck.Checked += (_, _) => Preview();
         ReduceMotionCheck.Unchecked += (_, _) => Preview();
+        NoGpuCheck.Checked += (_, _) => OnNoGpuToggled();
+        NoGpuCheck.Unchecked += (_, _) => OnNoGpuToggled();
 
         // Autostart is a system change, so it waits for Save like everything else —
         // otherwise Cancel would leave it altered.
@@ -565,6 +573,7 @@ public sealed partial class SettingsWindow : Window
             Theme = SelectedTheme,
             Language = SelectedLanguage,
             ReduceMotion = ReduceMotionCheck.IsChecked == true,
+            NoGpu = NoGpuCheck.IsChecked == true,
             LockItemOrder = OrderLocked,
             LockItemContents = ContentsLocked,
             PinnedApps = [.. _pinned]
@@ -2121,6 +2130,7 @@ public sealed partial class SettingsWindow : Window
         BuildLanguageList(defaults.Language);
         RunAtLoginCheck.IsChecked = defaults.RunAtLogin;
         ReduceMotionCheck.IsChecked = defaults.ReduceMotion;
+        NoGpuCheck.IsChecked = defaults.NoGpu;
         _loading = false;
 
         // The theme picker's own handler is suppressed while loading, and Mica is DWM's
@@ -2130,15 +2140,55 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
+    /// No GPU was ticked or unticked: the cards it overrides say so, the dialog's own material
+    /// goes or comes back, and the dock is shown the change.
+    /// </summary>
+    private void OnNoGpuToggled()
+    {
+        UpdateNoGpuControls();
+        ApplyMica();
+        Preview();
+    }
+
+    /// <summary>
+    /// Greys out what No GPU overrides, and says when this machine looks like one it is for.
+    /// </summary>
+    /// <remarks>
+    /// The blur and the icons' shadows keep their own values while they are greyed — it is the
+    /// dock that sets them aside, in <see cref="DockSettings.Blurs"/> and
+    /// <see cref="DockSettings.CastsIconShadows"/> — so they are still what is saved, and what
+    /// comes back when the box is unticked. The opacity is not greyed: the bar is solid, but the
+    /// slider still sets how much grey is mixed into its colour
+    /// (<see cref="DockSettings.BarPaint"/>). The hint is only for a box that is not ticked:
+    /// ticked, there is nothing left to suggest.
+    /// </remarks>
+    private void UpdateNoGpuControls()
+    {
+        var noGpu = NoGpuCheck.IsChecked == true;
+        var note = noGpu ? Visibility.Visible : Visibility.Collapsed;
+
+        BlurCard.IsEnabled = !noGpu;
+        NoGpuNote.Visibility = note;
+
+        IconShadowsCard.IsEnabled = !noGpu;
+        NoGpuIconsNote.Visibility = note;
+
+        NoGpuDetected.Visibility = !noGpu && SoftwareRendering.HardwareMissing
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// What Windows gives this process to draw with has changed — a remote session beginning or
+    /// ending, a display adapter coming or going — so the hint is asked again.
+    /// </summary>
+    private void OnRenderTierChanged(object? sender, EventArgs e) =>
+        Dispatcher.BeginInvoke(UpdateNoGpuControls);
+
+    /// <summary>
     /// Puts the dialog on Mica, so it sits on the same material as Windows' own Settings
     /// app rather than on a flat colour of this project's choosing.
     /// </summary>
-    /// <remarks>
-    /// The background has to be cleared for it to show: DWM composes the material behind
-    /// the window, and anything painted over the client area hides it. If DWM turns the
-    /// request down — an older build, or transparency effects switched off — the theme's
-    /// own background is left alone.
-    /// </remarks>
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -2147,17 +2197,7 @@ public sealed partial class SettingsWindow : Window
         // which display the dialog came up on, and that needs the window handle.
         ShowLogo();
 
-        if (!ApplyMica())
-        {
-            return;
-        }
-
-        if (PresentationSource.FromVisual(this) is HwndSource source)
-        {
-            source.CompositionTarget.BackgroundColor = Colors.Transparent;
-        }
-
-        Background = Brushes.Transparent;
+        ApplyMica();
     }
 
     /// <summary>
@@ -2739,11 +2779,13 @@ public sealed partial class SettingsWindow : Window
     /// Puts the window on Mica in whichever appearance is currently chosen, and tells DWM
     /// to match the title bar to it.
     /// </summary>
-    private bool ApplyMica()
-    {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        return hwnd != 0 && DesktopComposition.EnableMica(hwnd, AppTheme.IsDark(SelectedTheme));
-    }
+    /// <remarks>
+    /// Not under No GPU, where it is given the theme's plain background instead — see
+    /// <see cref="WindowMaterial"/>, which does the same for every dialog. Followed as the box
+    /// is ticked and unticked, since that is previewed like everything else.
+    /// </remarks>
+    private void ApplyMica() =>
+        WindowMaterial.Apply(this, solid: NoGpuCheck.IsChecked == true, AppTheme.IsDark(SelectedTheme));
 
     /// <summary>
     /// Takes a change made outside this dialog while it is open.
@@ -2828,6 +2870,7 @@ public sealed partial class SettingsWindow : Window
         _autostartWatch = null;
         _store.Changed -= OnStoreChanged;
         Localizer.LanguageChanged -= OnLanguageChanged;
+        RenderCapability.TierChanged -= OnRenderTierChanged;
         _updateDownload?.Cancel();
 
         Preview();

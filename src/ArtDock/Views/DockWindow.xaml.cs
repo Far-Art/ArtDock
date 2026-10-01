@@ -401,13 +401,16 @@ public sealed partial class DockWindow : Window
         {
             _dock.UpdateMetrics(settings.Metrics);
             _dock.RowAlignment = settings.EdgeAlignment;
-            _dock.SetBarAppearance(EffectiveBarColor(settings), settings.BarOpacity);
-            _dock.IconShadows = settings.IconShadows;
+            // The colour, the opacity and the blur as they are in force, which No GPU overrides,
+            // and not as they are stored underneath it.
+            _dock.SetBarAppearance(settings.BarPaint(EffectiveBarColor(settings)), settings.BarAlpha);
+            _dock.IconShadows = settings.CastsIconShadows;
+            _dock.FrameIntervalMs = settings.WaveFrameMs;
 
             // Before the window is sized: a label in a bigger lettering needs more room above
             // the bar, which is the room SizeToDock gives it.
             _dock.SetLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
-            ApplyBackdrop(settings.BlurBackground);
+            ApplyBackdrop(settings.Blurs);
 
             if (_previewing)
             {
@@ -549,7 +552,7 @@ public sealed partial class DockWindow : Window
             _backdropLeaving = false;
 
             // Unless the blur came back on while it waited, in which case the sheet is wanted.
-            if (!_applied.BlurBackground)
+            if (!_applied.Blurs)
             {
                 _backdrop?.Hide();
             }
@@ -569,7 +572,7 @@ public sealed partial class DockWindow : Window
     private void SyncBackdrop()
     {
         if (_holdBackdrop
-            || !_applied.BlurBackground
+            || !_applied.Blurs
             || _backdrop is not { IsVisible: true } backdrop
             || _chrome is not { } chrome
             || !backdrop.Follow(_dock, chrome.Hwnd))
@@ -1933,7 +1936,7 @@ public sealed partial class DockWindow : Window
             _applied.HandleWidth);
 
         _handle ??= new HandleWindow();
-        _handle.SetLook(fallback: BarPalette.Parse(EffectiveBarColor(_applied)));
+        _handle.SetLook(_applied.HandleInverts, fallback: BarPalette.Parse(EffectiveBarColor(_applied)));
         _handle.Place(bounds);
         _handle.Show();
     }

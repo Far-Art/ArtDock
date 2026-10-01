@@ -648,6 +648,17 @@ public sealed class DockBar : Canvas
     public bool MagnificationEnabled { get; set; } = true;
 
     /// <summary>
+    /// The least time between two frames of the wave, in milliseconds, or zero to draw every
+    /// frame WPF offers — see <see cref="WavePace"/>.
+    /// </summary>
+    /// <remarks>
+    /// Everything the render loop moves, not the wave alone: the sweep, an icon sliding to its
+    /// slot, the launch pulse. They share the one loop, and each frame of any of them sends the
+    /// whole window again.
+    /// </remarks>
+    public double FrameIntervalMs { get; set; }
+
+    /// <summary>
     /// Whether a drag along the bar may rearrange the icons.
     /// </summary>
     /// <remarks>
@@ -2096,11 +2107,21 @@ public sealed class DockBar : Canvas
         var deltaMs = _lastFrame == TimeSpan.Zero
             ? 0
             : (args.RenderingTime - _lastFrame).TotalMilliseconds;
-        _lastFrame = args.RenderingTime;
 
-        // First, while the shape is still the one the last frame drew.
+        // First, while the shape is still the one the last frame drew — and on every frame WPF
+        // offers, drawn here or passed over: WPF draws a change made between frames at the next
+        // one whether or not the wave moves in it, and that is the count the announcement goes by.
         _frame++;
         AnnounceDrawnBar();
+
+        // Passed over, under a cap: nothing moves, so nothing is drawn or sent. The time is
+        // left to add up, and the frame that is drawn moves by all of it.
+        if (_lastFrame != TimeSpan.Zero && !WavePace.Draws(deltaMs, FrameIntervalMs))
+        {
+            return;
+        }
+
+        _lastFrame = args.RenderingTime;
 
         _inFrame = true;
         try

@@ -69,6 +69,7 @@
     "Settings.Appearance.SavedSwatch.Tip": "{0} — right-click to remove",
     "Settings.Appearance.Blur": "Blur what is behind the bar",
     "Settings.Appearance.Blur.Hint": "Puts a sheet of Windows acrylic behind the bar. Lower the opacity above to see it.",
+    "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid and the blur off. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur keeps its setting, and comes back when No GPU is turned off.",
     "Settings.Appearance.Reset": "Reset Appearance to defaults",
 
     "Settings.Icons.Title": "Icons",
@@ -89,6 +90,7 @@
     "Settings.Icons.LabelStyle.BoldItalic": "Bold Italic",
     "Settings.Icons.LabelSize": "Label size",
     "Settings.Icons.LabelSize.Value": "{0:0} pt",
+    "Settings.Icons.NoGpu.Note": "No GPU, on the System page, is holding the shadows off. The setting keeps its value, and comes back when it is turned off.",
     "Settings.Icons.Reset": "Reset Icons to defaults",
 
     "Settings.Items.Title": "Pinned items",
@@ -203,6 +205,9 @@
     "Settings.System.RunAtLogin": "Start ArtDock when I sign in",
     "Settings.System.ReduceMotion": "Disable magnification",
     "Settings.System.ReduceMotion.Hint": "Also honored automatically when Windows animations are off.",
+    "Settings.System.NoGpu": "No GPU",
+    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, the icons cast no shadows, the handle takes the bar's color, and these windows go without Mica. Magnification stays, drawn about thirty times a second.",
+    "Settings.System.NoGpu.Detected": "Windows is giving ArtDock no graphics acceleration on this computer right now. This is worth turning on.",
     "Settings.System.Reset": "Reset System to defaults",
     "Settings.System.SettingsFile": "Settings file",
     "Settings.System.SettingsFile.Hint": "Export a copy to keep or to move to another machine. Importing fills in every page, including pinned items — nothing is written until you press Save.",
@@ -344,6 +349,8 @@
     "Tray.HideDock": "Hide dock",
     "Tray.ShowDock": "Show dock",
     "Tray.Settings": "Settings…",
+
+    "FirstRun.NoGpu": "ArtDock found no graphics card to draw with on this computer, so it has turned on No GPU: the dock is drawn by the processor alone, with a solid bar and no blur behind it.\n\nIf this computer does have one, or you would rather have the full dock, turn No GPU off in Settings, on the System page.",
 
     "AlreadyRunning.Heading": "ArtDock is already running",
     "AlreadyRunning.ShowDock": "Show dock",

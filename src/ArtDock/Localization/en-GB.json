@@ -22,6 +22,8 @@
     "Settings.Appearance.NoSavedColours": "None yet. Pick a colour, then Save it to keep it here.",
     "Settings.Appearance.SaveColour": "Save this colour",
 
+    "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid and the blur off. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur keeps its setting, and comes back when No GPU is turned off.",
+
     "Settings.Items.LockOrder.Tip": "Stops a drag rearranging the items, here or on the dock. Adding, removing and editing are unaffected.",
     "Settings.Items.LockContents.Tip": "Stops items being added, removed or edited, here or on the dock — the dock's own commands go away, leaving a greyed Locked in their place, and a file dropped on the bar is refused. Reordering is unaffected.",
     "Settings.Items.Hint.BothLocked": "The order and the items are both locked: nothing here or on the dock can be rearranged, added, removed or edited. Untick a lock to make changes again.",
@@ -39,6 +41,7 @@
 
     "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
     "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",
+    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, the icons cast no shadows, the handle takes the bar's colour, and these windows go without Mica. Magnification stays, drawn about thirty times a second.",
 
     "Settings.About.StartOver.Hint": "Puts every page back the way ArtDock ships, and the dock back to the items a new dock starts with. Saved colours and excluded apps are left alone. Nothing is written until you press Save.",
 

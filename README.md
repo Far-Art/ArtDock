@@ -118,7 +118,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   what keeps it out of its own reads (see *Known gaps*). There is no other look to choose: a
   checkbox offered the bar's colour instead, and was taken away as a choice not worth a
   setting. The bar's colour remains only as a fallback, where Windows will not keep a window
-  out of captures. It **floats over everything**, and climbs
+  out of captures, and as what *No GPU* gives it, where the screen is not read at all. It
+  **floats over everything**, and climbs
   back to the top when a window that floats comes to the front over it — the dock's own
   included, so a dock set to float does not lay its bar's shadow across the handle while the
   settings dialog shows one under the other. **It is not drawn over anything fullscreen**: a
@@ -134,6 +135,30 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
+- **Runs without a graphics card**, when told to: *No GPU* on the System page, for a virtual
+  machine or a remote session, where everything the dock asks of the compositor falls to the
+  processor. On, the dock is drawn in software, with no Direct3D device at all, and gives up
+  what leans on one: the bar is solid, with no blur behind it — painted not in its colour
+  alone, which came out far lighter than the bar had ever looked, but in its colour at its
+  opacity over a fixed grey that stands in for the desktop, so it keeps about the look it was
+  chosen for and the Opacity slider still does something; the handle takes the bar's
+  colour instead of reading the screen to invert it, and is back in screenshots; and every
+  dialog goes without Mica, on the theme's plain background. It also draws less: the icons cast no shadows, each of
+  which is one more picture to scale for every icon on every frame, and **the wave is drawn
+  about thirty times a second** instead of at the display's pace — what a frame costs is mostly
+  in sending the dock's whole transparent window again, so fewer frames is the one thing that
+  cuts it. The wave moves as far and as fast, in fewer steps: on a 120 Hz display, 19 frames
+  where there were 70. Magnification itself stays — *Disable magnification* is beside it
+  for a machine that cannot keep up even so. The blur and the icons' shadows keep their own
+  values underneath, greyed on their pages with a line saying why, and come back when it is
+  turned off. The
+  dock turns it on by itself once only: at its first run, if WPF reports that it has no
+  hardware to draw with, it starts with *No GPU* on and says so in a message — what it did, and
+  that it is turned off in Settings, on the System page. A dock that already has settings is
+  never switched under its owner; there the checkbox has a line under it that says when this
+  machine looks like one it is for, and leaves the choice there. Its card is the one on
+  the page drawn in Windows' caution colours — the theme's own, so they follow light and dark —
+  since it is not a box to tick in passing.
 - **Casts a faint shadow under each icon**, falling a little below it so the icons stand off
   the bar — *Shadow under the icons* on the Icons page, on unless turned off. Only the
   shadow is added: each icon is drawn over it exactly as it is drawn without one, and none of
@@ -703,7 +728,15 @@ the Windows 11 design system, in the box since .NET 9. The controls in the setti
 windows are therefore the real thing: WinUI-shaped sliders, accent buttons, the system's own
 colour resource keys rather than hex this project invented. The settings window sits on Mica
 via `DWMWA_SYSTEMBACKDROP_TYPE`, the same material the Settings app uses, and is laid out the
-same way — left navigation, page title, one card per setting.
+same way — left navigation, page title, one card per setting. The other dialogs are on Mica
+too, by the theme's own doing: its window style has no background at all — a transparent one —
+and lets DWM's material show through from behind. So under *No GPU* a dialog is taken off the
+material by two things together (`WindowMaterial`): DWM is told to compose none, and the window
+is given the theme's opaque background, `ApplicationBackgroundBrush`. Doing only the first left
+the settings dialog black, and doing it only to the settings dialog left the rest on Mica. And
+DWM is told twice for a window that is just opening, at its first layout and again once its
+source is ready: the theme puts its backdrop on in between, which left the item editor with a
+plain body under a title bar still on Mica.
 
 The dialogs follow Windows' light or dark setting by default, and can be pinned to either
 from **System → App theme**. `ThemeMode.System` is WPF's own switch for that, so nothing here
@@ -1022,7 +1055,8 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 - **The dock's handle is missing from screenshots and recordings.** It inverts what is
   behind it, and to read that without reading itself it asks Windows to leave it out of every
   capture of the screen — the Snipping Tool, Print Screen and recorders included. It is on the
-  monitor all the same. The price of having no other look.
+  monitor all the same. The price of having no other look — but for *No GPU*, under which it
+  is the bar's colour, reads nothing, and is captured like any other window.
 - **Only the window in front counts as fullscreen.** A video left playing fullscreen on the
   dock's display while you work on the other one has the dock back over it, if the dock
   floats, or under it with the handle drawn over the picture, if it does not. Overlays — a
@@ -1042,11 +1076,15 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   `AllowsTransparency`, which re-blits the whole window each frame — the shadow accounts for
   only about a tenth of it. Not yet optimised. The frame is drawn on the GPU, not in
   software as this used to say: the Direct3D device is in the process, and forcing software
-  rendering costs about half as much CPU again.
+  rendering — which *No GPU* does — costs about half as much CPU again on a machine that has
+  a graphics card, frame for frame. *No GPU* draws fewer of them, about thirty a second; what
+  that comes to, and what the wave costs on a machine with no graphics card, has not been
+  measured.
 - **About 35–40 MB in Task Manager**, against 15.5 MB for ObjectDock, which is native code.
   Most of it is fixed cost — the runtime, WPF, and about 15 MB for the GPU driver's Direct3D
   device. Software rendering would bring the dock to about 21 MB at the price of CPU while the
-  wave moves, which is undecided. What it no longer does is keep what a burst
+  wave moves; that trade is not the dock's to make, and is the user's in *No GPU*, which is
+  for machines with no such device to begin with. What it no longer does is keep what a burst
   of activity left behind — see *Memory is given back when the dock goes quiet*.
 
 ## Verifying
@@ -1055,7 +1093,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and eighty tests cover the cosine falloff (peak, range boundary,
+Seven hundred and seven tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1464,6 +1502,31 @@ a file of the older format on the old stock pair is moved to the new one, so no 
 colour with the update; a file of this format holding the same pair is somebody's choice and
 is left; so is an older file with a colour or an opacity of its own, or one matching the
 taskbar, all of which were painted as asked all along; and migrating twice changes nothing.
+
+Fifteen hold *No GPU* to what it promises. Off in a new dock and in a file written before it
+existed; turned on by the dock itself at a first run with no hardware to draw with, and at no
+other time — not with a graphics card, and not for a dock that already has settings; on, the bar is solid, the blur off, the handle not inverting, the icons without
+shadows and the wave capped, whatever is stored; the solid bar is its colour at its opacity
+over grey, from the grey itself to the colour itself; and what it overrides is kept underneath
+through a save and a load, so turning it off puts back the dock that was there. The file
+carries the setting and none of what follows from it. And the one read from the source: the
+dock's window applies the blur, the opacity and the shadows in force and never the stored ones
+— a line reading the stored blur would compile, work on every machine with a graphics card,
+and bring the acrylic back on the ones the setting is for.
+
+Eight more cover the pace of the capped wave (`WavePace`). Against a simulated display whose
+frames arrive a little early or late, the cap draws thirty frames a second at 60 and at 120 Hz,
+every frame at 30 and 24, and the nearest it can get in between; uncapped, every frame is
+drawn. And a real dock, in a window never shown and off every display, sweeping its wave:
+uncapped it moves at the display's pace, and capped no two frames that move it are closer than
+the cap — measured by the icons' magnification weighted by place, since the wave is built so
+that their plain sum does not change as it travels.
+
+Four hold a dialog taken off Mica to having a background (`WindowMaterial`), on windows given a
+handle and never shown: in the light theme and the dark its background is opaque, where the
+theme's own is transparent and, with no material behind it, black; put back on the material it
+has the theme's again; and a window that is transparent on purpose, as the dock's is, is left
+alone.
 
 ## Licence
 

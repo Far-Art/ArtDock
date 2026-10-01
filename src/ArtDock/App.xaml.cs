@@ -41,11 +41,23 @@ public partial class App : Application
 
         _settings = new SettingsStore();
         var settings = _settings.Load();
+        var firstRun = !_settings.LoadedFromDisk;
+
+        // A dock starting for the first time where WPF finds nothing to draw with starts with
+        // No GPU on, and says so once it is up — see ShowNoGpuNotice. Only then: a dock that
+        // has settings has an owner who has seen the checkbox, and is left as they have it.
+        var noGpuAdopted = settings.AdoptNoGpu(firstRun, SoftwareRendering.HardwareMissing);
+
+        // Before any window exists, so that none is ever given a Direct3D device to give back.
+        SoftwareRendering.Apply(settings.NoGpu);
 
         ApplyTheme(settings);
 
         // Gives the theme's drop-down lists and tooltips room for their shadows, which it cuts off.
         PopupShadows.Register();
+
+        // And has every dialog opened under No GPU come up on the theme's plain background.
+        WindowMaterial.Register();
 
         // Before any window or menu exists, so that everything is built in the right language
         // rather than built in English and then changed.
@@ -60,7 +72,10 @@ public partial class App : Application
         // be empty was fine while nothing could empty it deliberately, but the Items page's
         // Clear all can — and the stock apps reappearing on the next launch made clearing
         // look like it had not worked.
-        if (!_settings.LoadedFromDisk && new PinnedAppsService().SeedIfEmpty(settings))
+        //
+        // Written out as well when No GPU was turned on just now, which is as much a part of
+        // what this dock starts with as its pins are.
+        if (firstRun && (new PinnedAppsService().SeedIfEmpty(settings) || noGpuAdopted))
         {
             _settings.Save(settings);
         }
@@ -69,7 +84,7 @@ public partial class App : Application
         // the file, so the first run is what makes it true. Only when there is no entry at
         // all: one that is there already belongs to another copy of the dock, and is left to
         // it — as is one turned off in Task Manager, which is why this is not IsEnabled.
-        if (!_settings.LoadedFromDisk && settings.RunAtLogin && !Interop.Autostart.IsRegistered())
+        if (firstRun && settings.RunAtLogin && !Interop.Autostart.IsRegistered())
         {
             Interop.Autostart.Register();
         }
@@ -109,7 +124,31 @@ public partial class App : Application
         {
             ShowSettings();
         }
+
+        if (noGpuAdopted)
+        {
+            // Once the dock is up and drawn, so that what the notice describes is there to be
+            // seen behind it.
+            Dispatcher.BeginInvoke(ShowNoGpuNotice, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
     }
+
+    /// <summary>
+    /// Says that the dock has turned No GPU on by itself, and where to turn it off.
+    /// </summary>
+    /// <remarks>
+    /// The one time the dock decides it: a first run, with no hardware to draw with. A dock that
+    /// came up solid and unblurred with nothing said would look broken to anyone who had seen it
+    /// elsewhere, and the checkbox that explains it is three clicks away on a page nobody opens
+    /// first. Windows' own message box rather than a window of the dock's: it is the one thing
+    /// here that costs a machine with no graphics card nothing to draw.
+    /// </remarks>
+    private static void ShowNoGpuNotice() =>
+        MessageBox.Show(
+            Localizer.Get("FirstRun.NoGpu"),
+            "ArtDock",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
 
     private static bool WantsSettings(string[] args) =>
         args.Any(arg => arg.Equals("--settings", StringComparison.OrdinalIgnoreCase));
@@ -181,6 +220,29 @@ public partial class App : Application
         if (ThemeMode != mode)
         {
             ThemeMode = mode;
+
+            // A change of theme puts every window back on the backdrop, as the theme does for a
+            // new one, so under No GPU they are taken off it again.
+            if (SoftwareRendering.IsOn)
+            {
+                WindowMaterial.ApplyToOpen(solid: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws the dock with or without a graphics card, as <see cref="DockSettings.NoGpu"/> says:
+    /// the render mode, and with it what the open dialogs sit on.
+    /// </summary>
+    /// <remarks>
+    /// Only on a change, like the theme: this runs on every tick of every slider. After the
+    /// theme has been applied, since the dialogs' title bars are matched to it here.
+    /// </remarks>
+    private static void ApplyRendering(DockSettings settings)
+    {
+        if (SoftwareRendering.Apply(settings.NoGpu))
+        {
+            WindowMaterial.ApplyToOpen(solid: settings.NoGpu);
         }
     }
 
@@ -208,11 +270,12 @@ public partial class App : Application
         // so this stays cheap enough to run on every tick of a slider.
         _settingsWindow.Previewed += (_, updated) =>
         {
-            // The theme and the language are previewed like everything else, so picking one
-            // shows it before Save rather than after. Both are cheap when unchanged, which
-            // they are on every tick of every slider.
+            // The theme, the language and how the dock is drawn are previewed like everything
+            // else, so picking one shows it before Save rather than after. All are cheap when
+            // unchanged, which they are on every tick of every slider.
             ApplyTheme(updated);
             Localizer.Apply(updated.Language);
+            ApplyRendering(updated);
             _dockWindow?.ApplySettings(updated);
         };
 
@@ -247,6 +310,7 @@ public partial class App : Application
 
                 ApplyTheme(restored);
                 Localizer.Apply(restored.Language);
+                ApplyRendering(restored);
 
                 // Saving is what puts the dock back: the store raises Changed, and
                 // ApplySettings rebuilds from the values as they were before the preview.
