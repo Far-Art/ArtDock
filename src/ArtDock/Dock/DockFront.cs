@@ -1,5 +1,24 @@
 namespace ArtDock.Dock;
 
+/// <summary>How much of the dock's display the window in front has taken.</summary>
+public enum FrontFill
+{
+    /// <summary>Less than all of the work area — or the window in front is the desktop.</summary>
+    None,
+
+    /// <summary>
+    /// All of the work area, as a maximized window does with the taskbar showing: the dock
+    /// hides, and the handle marks it.
+    /// </summary>
+    Maximized,
+
+    /// <summary>
+    /// The whole display, taken for itself — a video, a game, a presentation: the dock hides,
+    /// and no handle is drawn over it.
+    /// </summary>
+    Fullscreen
+}
+
 /// <summary>What the dock does about the window in front of its display.</summary>
 public enum FrontAction
 {
@@ -38,6 +57,12 @@ public enum FrontAction
 /// over at all. The handle is a mark only — resting the pointer on it does nothing.
 /// </para>
 /// <para>
+/// On 2026-10-01 the handle was taken off fullscreen windows as well, so that it does not sit
+/// over a video: it marks a dock hidden for a maximized window, and not one hidden for a window
+/// that has the whole display. The dock hides for both alike, and the edge brings it back over
+/// both.
+/// </para>
+/// <para>
 /// The same day, the dock went <em>under</em> such a window at first, and a rule here kept a
 /// dock the pointer had lifted over it from being put straight back under by the next look.
 /// Hiding made that rule unnecessary: while the dock hides, auto-hide's own keeping of a
@@ -65,8 +90,9 @@ public static class DockFront
 
     /// <summary>Whether the handle marks the dock.</summary>
     /// <param name="showHandle">The handle is asked for.</param>
-    /// <param name="excludedInFront">
-    /// A program on the Exclusions page is in front and fills the display.
+    /// <param name="fullscreenInFront">
+    /// The window in front has the whole of the dock's display — fullscreen, or a program on
+    /// the Exclusions page filling it.
     /// </param>
     /// <param name="previewing">The settings dialog is open, showing the dock off.</param>
     /// <param name="hides">
@@ -79,9 +105,13 @@ public static class DockFront
     /// </param>
     /// <remarks>
     /// <para>
-    /// Never over a program on the Exclusions page: the dock does not come up over one, and a
-    /// mark there would promise a dock the edge will not bring. For the same reason not for a
-    /// dock put away from the tray, which only the tray brings back.
+    /// Never over a window that has the whole display: what is shown that way — a video, a
+    /// game, a presentation — wants nothing drawn over it, and a mark there sits on the picture.
+    /// Asked on 2026-10-01; before, it held only for a program on the Exclusions page, which
+    /// counts only when it fills the display and so is one of these. Over a listed program there
+    /// is a second reason: the dock does not come up over one, and a mark would promise a dock
+    /// the edge will not bring. For that reason too, not for a dock put away from the tray,
+    /// which only the tray brings back.
     /// </para>
     /// <para>
     /// A dock on its way somewhere is marked by where it is going: leaving as it hides, the
@@ -96,13 +126,13 @@ public static class DockFront
     /// </remarks>
     public static bool Marks(
         bool showHandle,
-        bool excludedInFront,
+        bool fullscreenInFront,
         bool previewing,
         bool hides,
         DockVisibility visibility,
         bool outOfSight) =>
         showHandle
-        && !excludedInFront
+        && !fullscreenInFront
         && (previewing
             || (hides && visibility is DockVisibility.Hiding or DockVisibility.Hidden)
             || (visibility is DockVisibility.Shown && outOfSight));

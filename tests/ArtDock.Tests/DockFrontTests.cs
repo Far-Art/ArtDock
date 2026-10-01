@@ -13,11 +13,13 @@ namespace ArtDock.Tests;
 /// <em>Always on top</em> says, and slides back up over it when the pointer is held against the
 /// bottom edge; the Exclusions page's programs outrank that, and the dock does not come up over
 /// them at all. The handle marks the dock whenever it is out of sight, auto-hide or not, over
-/// everything but those programs — a mark only, which the pointer cannot use.
+/// everything but those programs — a mark only, which the pointer cannot use. Since 2026-10-01
+/// not over anything fullscreen either, so that it does not sit over a video.
 /// </para>
 /// <para>
 /// What matters most: the handle never marks a dock the edge will not bring up — not over a
-/// listed program, and not for a dock put away from the tray. Keeping a dock the pointer has
+/// listed program, and not for a dock put away from the tray — and never sits over a picture
+/// that has the whole display. Keeping a dock the pointer has
 /// brought up from being sent straight away again is not tested here: that is auto-hide's own
 /// keeping of a revealed dock under the pointer, which the dock hiding for a window reuses
 /// whole.
@@ -35,7 +37,7 @@ public class DockFrontTests
 
     /// <summary>
     /// Fullscreen, or maximized with the taskbar showing — both fill the part of the display the
-    /// dock sits in, and both are one answer to <c>ForegroundApp.FillsWorkArea</c>.
+    /// dock sits in, and the dock hides for both (<c>ForegroundApp.Filling</c>).
     /// </summary>
     [Fact]
     public void A_window_filling_the_display_in_front_has_the_dock_hide()
@@ -119,23 +121,36 @@ public class DockFrontTests
     }
 
     /// <summary>
-    /// The dock does not come up over a listed program, from the edge or anywhere else, so the
-    /// handle is not drawn over one — even for a dock that is hiding itself, and even with the
-    /// settings dialog open.
+    /// A window that has the whole display — a video, a game, a presentation, a program on the
+    /// Exclusions page, which counts only when it fills the display — has nothing drawn over it:
+    /// not for a dock that is hiding itself, and not with the settings dialog open.
     /// </summary>
     [Theory]
     [InlineData(true, DockVisibility.Hidden, false, false)]
+    [InlineData(true, DockVisibility.Hiding, false, false)]
     [InlineData(false, DockVisibility.Shown, true, false)]
     [InlineData(true, DockVisibility.Shown, false, true)]
-    public void No_handle_is_drawn_over_a_program_on_the_Exclusions_page(
+    public void No_handle_is_drawn_over_a_fullscreen_window(
         bool hides, DockVisibility visibility, bool outOfSight, bool previewing)
     {
         Assert.False(Marks(
-            excludedInFront: true,
+            fullscreenInFront: true,
             hides: hides,
             visibility: visibility,
             outOfSight: outOfSight,
             previewing: previewing));
+    }
+
+    /// <summary>
+    /// What was asked on 2026-10-01: the dock hides for both alike, and only the one that has
+    /// the whole display loses the mark — so a browser maximized keeps it, and the same browser
+    /// showing a video fullscreen does not.
+    /// </summary>
+    [Fact]
+    public void A_dock_hidden_for_a_maximized_window_is_marked_and_for_a_fullscreen_one_is_not()
+    {
+        Assert.True(Marks(fullscreenInFront: false, hides: true, visibility: DockVisibility.Hidden));
+        Assert.False(Marks(fullscreenInFront: true, hides: true, visibility: DockVisibility.Hidden));
     }
 
     [Fact]
@@ -146,10 +161,10 @@ public class DockFrontTests
 
     private static bool Marks(
         bool showHandle = true,
-        bool excludedInFront = false,
+        bool fullscreenInFront = false,
         bool previewing = false,
         bool hides = false,
         DockVisibility visibility = DockVisibility.Shown,
         bool outOfSight = false) =>
-        DockFront.Marks(showHandle, excludedInFront, previewing, hides, visibility, outOfSight);
+        DockFront.Marks(showHandle, fullscreenInFront, previewing, hides, visibility, outOfSight);
 }

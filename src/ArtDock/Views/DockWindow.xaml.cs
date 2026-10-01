@@ -105,10 +105,10 @@ public sealed partial class DockWindow : Window
     private nint _asideFor;
 
     /// <summary>
-    /// True while a program on the Exclusions page is in front and fills the dock's display —
-    /// when the dock stays under it whatever else asks, and the handle is not shown.
+    /// True while the window in front has the whole of the dock's display — fullscreen, or a
+    /// program on the Exclusions page filling it — when the handle is not shown over it.
     /// </summary>
-    private bool _excludedInFront;
+    private bool _fullscreenInFront;
 
     /// <summary>
     /// True while the dock is on screen and nothing of its bar can be seen, for the windows
@@ -1637,7 +1637,8 @@ public sealed partial class DockWindow : Window
     /// <summary>
     /// Looks at what is in front of the dock's display, and puts the dock and its handle where
     /// that wants them: away while a window fills the display, back once there is none, and the
-    /// handle over whatever is not a program on the Exclusions page. The rules are
+    /// handle over whatever is not fullscreen — a program on the Exclusions page included, which
+    /// counts only when it fills the display. The rules are
     /// <see cref="DockFront"/>'s; this reads what they are asked and moves the windows they
     /// answer for.
     /// </summary>
@@ -1691,10 +1692,16 @@ public sealed partial class DockWindow : Window
         {
             var excluded = IsFullscreenAppInFront();
 
-            // The general test is not asked once the list has answered, which settles it.
-            var action = DockFront.Decide(
-                excluded,
-                filledInFront: !excluded && ForegroundApp.FillsWorkArea(_workArea));
+            // The general test is not asked once the list has answered, which settles it: a
+            // listed program counts only when it fills the display.
+            var fill = excluded ? FrontFill.Fullscreen : ForegroundApp.Filling(_display, _workArea);
+            var action = DockFront.Decide(excluded, filledInFront: fill != FrontFill.None);
+
+            // Before the dock is moved, since its sliding away is what brings the handle up, and
+            // the handle reads this to know whether it may.
+            var fullscreen = fill == FrontFill.Fullscreen;
+            marked = fullscreen != _fullscreenInFront;
+            _fullscreenInFront = fullscreen;
 
             switch (action)
             {
@@ -1713,9 +1720,6 @@ public sealed partial class DockWindow : Window
                     _autoHide?.Yield(false);
                     break;
             }
-
-            marked = excluded != _excludedInFront;
-            _excludedInFront = excluded;
         }
 
         if (!CheckSight() && marked)
@@ -1859,8 +1863,8 @@ public sealed partial class DockWindow : Window
     /// <para>
     /// Called wherever the sheet behind the bar is synced — the bar changing shape, the window
     /// moving, a settings change — whenever auto-hide moves the dock between shown and hidden,
-    /// and whenever the dock goes out of sight or comes back into it, or a program on the
-    /// Exclusions page comes to the front or leaves it. Whether the dock can be seen is not
+    /// and whenever the dock goes out of sight or comes back into it, or a fullscreen window
+    /// comes to the front or leaves it. Whether the dock can be seen is not
     /// asked here but read from what <see cref="CheckSight"/> last found, since this runs far
     /// too often for a walk of the windows. Most of those are nothing to the handle, so it is
     /// cheap when there is no handle to show and does nothing when there is one already in
@@ -1880,8 +1884,8 @@ public sealed partial class DockWindow : Window
             return;
         }
 
-        // Anything that fills the display but a program on the Exclusions page keeps it — the
-        // dock has hidden for that, and the edge brings it back up over it.
+        // A maximized window keeps it — the dock has hidden for that, and the edge brings it
+        // back up over it — and a fullscreen one does not, nor a program on the Exclusions page.
         if (!MarksDock())
         {
             _handle?.Hide();
@@ -1916,7 +1920,8 @@ public sealed partial class DockWindow : Window
     /// <summary>
     /// True when there is a dock for the handle to mark: it is asked for, and the dock is out of
     /// sight — hidden as auto-hide hides it, or on screen under the windows in front — or the
-    /// settings dialog is open; and no program on the Exclusions page is in front. The rule is
+    /// settings dialog is open; and the window in front does not have the whole display —
+    /// fullscreen, or a program on the Exclusions page filling it. The rule is
     /// <see cref="DockFront.Marks"/>'s.
     /// </summary>
     /// <remarks>
@@ -1925,12 +1930,14 @@ public sealed partial class DockWindow : Window
     /// maximized or fullscreen window in front whatever the setting, and one that does not
     /// float is out of sight under any window over it. Hidden counts when the dock hides itself
     /// and was not put away from the tray. It only marks: the edge is what brings the dock up.
+    /// Since 2026-10-01 not over a fullscreen window, so as not to sit over a video; a dock
+    /// hidden for a maximized one is still marked.
     /// </remarks>
     private bool MarksDock() =>
         _autoHide is { } autoHide
         && DockFront.Marks(
             _applied.ShowHandle,
-            _excludedInFront,
+            _fullscreenInFront,
             _previewing,
             hides: autoHide.Hides && !autoHide.IsPutAway,
             autoHide.Visibility,

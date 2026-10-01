@@ -118,12 +118,18 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   what keeps it out of its own reads (see *Known gaps*). There is no other look to choose: a
   checkbox offered the bar's colour instead, and was taken away as a choice not worth a
   setting. The bar's colour remains only as a fallback, where Windows will not keep a window
-  out of captures. It **floats over everything**, fullscreen windows included, and climbs
+  out of captures. It **floats over everything**, and climbs
   back to the top when a window that floats comes to the front over it — the dock's own
   included, so a dock set to float does not lay its bar's shadow across the handle while the
-  settings dialog shows one under the other — except a program on
-  the **Exclusions** page that fills the display, which the dock does not come up over, so
-  the handle is not drawn there. A dock hidden from the tray has none: it was put away on
+  settings dialog shows one under the other. **It is not drawn over anything fullscreen**: a
+  video, a game or a presentation has the whole display, and the handle would sit on the
+  picture. A dock hidden for a maximized window is still marked, and the edge brings the dock
+  up over either. A program on the **Exclusions** page counts only when it fills the display,
+  so it never has a handle over it either — and the dock does not come up over one at all.
+  Fullscreen is the window in front covering the whole display, past the taskbar; where the
+  taskbar hides itself a maximized window covers it too, and is told apart by its title bar —
+  a game's borderless fullscreen is a maximized window without one. A dock hidden from the
+  tray has none: it was put away on
   purpose, and only the tray brings it back. While the settings dialog is open it shows under
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
@@ -795,10 +801,11 @@ which needs no handle to the process. The list consulted is the one in force
 is looked at four times a second and at every change of foreground (`DockWindow.CheckFront`),
 since the dock hides for any window that fills its display. That test asks a different
 question from the list's: whether the window in front covers the display's *work area*
-(`ForegroundApp.FillsWorkArea`), which a window maximized with the taskbar showing does and a
-fullscreen one does too — one geometric question, no style or state read, and no program
-named. It replaced a test that told fullscreen from merely maximized by the window's title bar
-and state, which stopped mattering once both were to get the same answer. The shell's passing
+(`ForegroundApp.Filling`), which a window maximized with the taskbar showing does and a
+fullscreen one does too — geometry, and no program named. Only the handle tells the two
+apart, since it is not drawn over a fullscreen window: one that covers the whole display is
+fullscreen where the taskbar shows, and where it hides, unless it is maximized with a title bar
+(`FullscreenApps.IsFullscreen`). That is the only time a window's style or state is read. The shell's passing
 windows are not asked at all: while the taskbar, Alt+Tab's switcher, Start or the like is in
 front, the dock holds still (`ForegroundApp.IsPassingShellInFront`) — Alt+Tab's switcher is
 exactly the work area, and would otherwise slide the dock away and back on every switch. An
@@ -915,10 +922,11 @@ keeping up with the bar was on this list, and is done.
   behind it, and to read that without reading itself it asks Windows to leave it out of every
   capture of the screen — the Snipping Tool, Print Screen and recorders included. It is on the
   monitor all the same. The price of having no other look.
-- **The handle floats over a fullscreen game that is not on the Exclusions page.** That was
-  asked for — it marks the dock the game has on top of it — but a window floating over a
-  fullscreen game can cost the game its direct path to the display, and a video its controls'
-  bottom row. Listing the program takes the handle, and the dock, off it.
+- **Only the window in front counts as fullscreen.** A video left playing fullscreen on the
+  dock's display while you work on the other one has the dock back over it, if the dock
+  floats, or under it with the handle drawn over the picture, if it does not. Overlays — a
+  game's frame counter, NVIDIA's — are full-display windows that are never in front, and
+  asking the window in front is what keeps them from counting.
 - **Icons are read once and kept for as long as the dock runs**, not cached to disk. The
   Recycle Bin is the exception — never kept, and re-read whenever the shell says its icon
   changed. Invisible for most applications, whose icon does not change while they are
@@ -946,7 +954,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and thirty-six tests cover the cosine falloff (peak, range boundary,
+Five hundred and forty-nine tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1115,7 +1123,8 @@ a monitor Windows gives no path for; nothing found is nothing, which the dock tu
 main display; and two identical monitors, whose paths differ only by the connector, are told
 apart.
 
-Twenty-four cover the Exclusions page's two questions, and the dock's own third. Nine are about
+Thirty-five cover the Exclusions page's two questions, the dock's own third, and the handle's
+fourth. Nine are about
 which program: one moved to another folder by an update is still matched, case is ignored, a
 hand-written file name
 matches as a path does — and nothing overreaches, so `mygame.exe` is not `game.exe`, a
@@ -1126,15 +1135,18 @@ borderless window can, at negative coordinates, spread across both at once — a
 that matters, not a maximized window while the taskbar is showing, not one a row short, not
 one on the other display, and nothing at all before the dock has a display to measure
 against, since an empty rectangle is contained by everything. The settings round trip above
-carries the list as well. The last six are what the dock goes under whatever *Always on
+carries the list as well. Six more are what the dock goes under whatever *Always on
 top* says, listed or not: a window in front covering the display's work area. The one that
 matters is the maximize button with the taskbar showing, as Windows reports the window, its
 invisible border hanging past the work area on every side; then a window that draws its own
 frame and is the work area exactly, and a fullscreen one, which covers more. Not a snapped
 half, not a window one row short of the taskbar, and not one maximized on the other display.
-Seven used to hold the line between fullscreen and merely maximized — StarCraft II's window,
-maximized with no title bar over the whole main display, was the case that mattered — and went
-when both came to get the same answer.
+The last eleven hold the line between fullscreen and merely maximized, which only the handle
+asks, since it is not drawn over a fullscreen window: anything over the taskbar is fullscreen
+however it is styled, a maximized window is not, and where the taskbar hides itself the title
+bar decides — StarCraft II's window, maximized with no title bar over the whole main display,
+is the case that matters there. Seven held that line once before, and went when the dock came
+to hide for both alike; it came back when the handle was taken off fullscreen windows.
 
 Seventy-two cover the scans' arranging, and the case they are built around is StarCraft II's folder
 as it really is on this machine — twelve programs, three of which call themselves
@@ -1183,7 +1195,7 @@ means under it, not beside it — "StarCraft II Beta" begins with "StarCraft II"
 test reads real files: Explorer has an icon of its own, a file that is not a program and one
 that is not there have none.
 
-Twenty cover what the dock does about the window in front of its display, and when the handle
+Twenty-two cover what the dock does about the window in front of its display, and when the handle
 marks it (`DockFront`). Nothing filling the display has the dock where the settings have it; a
 window filling it — maximized or fullscreen — has it hide; and a program on the Exclusions page
 outranks both. Keeping a dock the pointer has brought up is not tested here: while the dock
@@ -1191,8 +1203,10 @@ hides for a window, that is auto-hide's own keeping of a revealed dock under the
 reused whole. The handle comes as the dock hides and goes as it comes back, even from under a
 window; marks a dock on screen that cannot be seen, hiding or not, and not one that can; is
 not offered for a dock put away from the tray, which only the tray brings back; marks nothing
-turned off; is never drawn over a listed program, even for a hidden dock or with the settings
-dialog open; and shows under a dock in plain sight while that dialog is open.
+turned off; is never drawn over a fullscreen window — a listed program among them — even for a
+hidden dock or with the settings dialog open; marks a dock hidden for a maximized window and
+not one hidden for a fullscreen one; and shows under a dock in plain sight while that dialog is
+open.
 
 Eleven cover where across the screen the edge brings the dock up, and the strip below a dock
 that is up keeps it there (`AutoHideController.IsUnderDock`), in physical pixels on both

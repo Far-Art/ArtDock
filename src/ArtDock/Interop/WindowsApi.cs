@@ -103,6 +103,11 @@ internal static class WindowsApi
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsIconic(nint hWnd);
 
+    /// <summary>True when the window is maximized.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool IsZoomed(nint hWnd);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool AttachThreadInput(

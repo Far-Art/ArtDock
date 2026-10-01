@@ -116,7 +116,7 @@
     "Settings.Behaviour.RevealDelay.Hint": "How long the pointer must be held against the bottom edge under the dock before a hidden dock returns or a covered one comes to the front, so brushing past does neither.",
     "Settings.Behaviour.RevealDelay.Value": "{0:0} ms",
     "Settings.Behaviour.Handle": "Show a handle while hidden",
-    "Settings.Behaviour.Handle.Hint": "A slim bar just above the taskbar marks where the dock is while you cannot see it — slid away, or under other windows. It is only a mark: hold the pointer against the bottom edge under the dock to bring it up. It shows the colours behind it reversed, so it stands out on any background, and screenshots and recordings leave it out. It is not shown over the apps on the Exclusions page.",
+    "Settings.Behaviour.Handle.Hint": "A slim bar just above the taskbar marks where the dock is while you cannot see it — slid away, or under other windows. It is only a mark: hold the pointer against the bottom edge under the dock to bring it up. It shows the colours behind it reversed, so it stands out on any background, and screenshots and recordings leave it out. It is not shown over anything fullscreen, such as a video or a game.",
     "Settings.Behaviour.HandleMatchesDock": "As wide as the dock",
     "Settings.Behaviour.HandleMatchesDock.Hint": "Follows the dock as icons come and go. Turn off to give the handle a width of its own.",
     "Settings.Behaviour.HandleWidth": "Handle width",

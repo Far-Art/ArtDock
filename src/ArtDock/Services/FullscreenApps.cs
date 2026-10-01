@@ -79,7 +79,8 @@ public static class FullscreenApps
     /// pointer at the edge is then on the taskbar rather than on the game. Where the taskbar
     /// hides itself a maximized window does fill the display, and then it is counted, which is
     /// what it looks like. The dock's own stand-aside asks it of the work area, which a
-    /// maximized window and a fullscreen one both cover (<c>ForegroundApp.FillsWorkArea</c>).
+    /// maximized window and a fullscreen one both cover (<c>ForegroundApp.Filling</c>); the
+    /// handle, which tells the two apart, asks <see cref="IsFullscreen"/>.
     /// </para>
     /// </remarks>
     public static bool Fills(Rect window, Rect display) =>
@@ -87,6 +88,43 @@ public static class FullscreenApps
         && display.Width > 0
         && display.Height > 0
         && window.Contains(display);
+
+    /// <summary>
+    /// True when a window has taken the whole of a display for itself — a video, a game, a
+    /// presentation — rather than being an ordinary window that happens to fill it.
+    /// </summary>
+    /// <param name="window">The window's bounds, in physical pixels.</param>
+    /// <param name="display">The display's, likewise.</param>
+    /// <param name="workArea">The display's work area, likewise.</param>
+    /// <param name="maximized">Whether Windows has the window maximized.</param>
+    /// <param name="captioned">Whether it has a title bar (<c>WS_CAPTION</c>).</param>
+    /// <remarks>
+    /// <para>
+    /// What the handle is not drawn over, asked on 2026-10-01 so that it does not sit over a
+    /// video; a maximized window still has it. Where the taskbar shows, geometry answers alone:
+    /// a maximized window stops at the taskbar, so a window that covers the display has gone
+    /// past where maximizing takes it, however it is styled.
+    /// </para>
+    /// <para>
+    /// Where the taskbar hides itself, the work area is the whole display and a maximized window
+    /// covers it too, so the window has to say. The ordinary window that fills such a display is
+    /// maximized and has a title bar; a maximized window with none is a game's borderless
+    /// fullscreen. StarCraft II's, measured here on 2026-09-28: a maximized popup with no caption,
+    /// 2560×1440 over the whole main display. So "not maximized" is the wrong question — it took
+    /// that game for an ordinary window, and left the handle drawn over it. A program that draws
+    /// its own title bar and has no caption is taken for fullscreen there, which is the failure
+    /// to prefer: no handle over a maximized window, rather than a handle drawn over a video.
+    /// </para>
+    /// <para>
+    /// The title-bar rule was here once before, for the handle of an auto-hidden dock, asked
+    /// wherever the taskbar was — and went on 2026-09-30, when the dock began to hide for
+    /// maximized and fullscreen windows alike and nothing needed the two told apart.
+    /// </para>
+    /// </remarks>
+    public static bool IsFullscreen(
+        Rect window, Rect display, Rect workArea, bool maximized, bool captioned) =>
+        Fills(window, display)
+        && (!Fills(workArea, display) || !(maximized && captioned));
 
     /// <summary>
     /// What to call a program in the settings dialog: the description it carries, which is

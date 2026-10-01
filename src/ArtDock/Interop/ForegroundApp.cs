@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using ArtDock.Dock;
 using ArtDock.Services;
 
 namespace ArtDock.Interop;
@@ -67,11 +68,16 @@ internal sealed class ForegroundApp
         return _path;
     }
 
+    /// <summary>A title bar: <c>WS_BORDER | WS_DLGFRAME</c>.</summary>
+    private const uint WS_CAPTION = 0x00C0_0000;
+
     /// <summary>
-    /// True when the window in front covers all of <paramref name="workArea"/> — maximized on
-    /// that display, or fullscreen there — whichever program it belongs to.
+    /// How much of the dock's display the window in front has taken — all of the work area,
+    /// as a maximized window does, or the whole display for itself, as a fullscreen one does —
+    /// whichever program it belongs to.
     /// </summary>
-    /// <param name="workArea">The work area of the dock's display, in physical pixels.</param>
+    /// <param name="display">The dock's display, in physical pixels.</param>
+    /// <param name="workArea">Its work area, likewise.</param>
     /// <remarks>
     /// <para>
     /// What the dock hides for, whatever <em>Always on top</em> says, until the pointer brings
@@ -92,17 +98,42 @@ internal sealed class ForegroundApp
     /// and only then the desktop ruled out, which settles it for nearly every window without
     /// reading its class: it is asked four times a second for as long as the dock runs.
     /// </para>
+    /// <para>
+    /// The two were told apart again on 2026-10-01, for the handle alone, which is not drawn over
+    /// a fullscreen window — a video, mostly — and still marks a dock hidden for a maximized one
+    /// (<see cref="FullscreenApps.IsFullscreen"/>). The window's state and style are read only
+    /// for a window that covers the whole display, which is rare enough not to count.
+    /// </para>
     /// </remarks>
-    public static bool FillsWorkArea(Rect workArea)
+    public static FrontFill Filling(Rect display, Rect workArea)
     {
         var window = WindowsApi.GetForegroundWindow();
         if (window == 0 || !NativeMethods.GetWindowRect(window, out var bounds))
         {
-            return false;
+            return FrontFill.None;
         }
 
         var rect = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-        return FullscreenApps.Fills(rect, workArea) && !IsDesktop(window);
+        if (!FullscreenApps.Fills(rect, workArea) || IsDesktop(window))
+        {
+            return FrontFill.None;
+        }
+
+        if (!FullscreenApps.Fills(rect, display))
+        {
+            return FrontFill.Maximized;
+        }
+
+        var style = (uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_STYLE);
+
+        return FullscreenApps.IsFullscreen(
+            rect,
+            display,
+            workArea,
+            maximized: WindowsApi.IsZoomed(window),
+            captioned: (style & WS_CAPTION) == WS_CAPTION)
+            ? FrontFill.Fullscreen
+            : FrontFill.Maximized;
     }
 
     /// <summary>
