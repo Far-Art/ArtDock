@@ -456,7 +456,7 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        dropping shell places, the menus' glyphs, the updater's
                        install folder, the shell's images' transparency, the
                        folders the dock draws
-LICENSE                MIT
+LICENSE                MIT with the Commons Clause: free to use and change, not to sell
 docs/step-2-transparency.md
 docs/packs.md          the language-pack and icon-set formats
 docs/downloads.md      how the dock's updates are delivered and packs are to be, and why
@@ -1288,3 +1288,10 @@ over HTTPS, and a copy nobody installed — the test run itself — is not taken
 one, and starts at sign-in from where it is, both before Velopack has looked for an
 installation and after, which is the state a build run from the source tree is in whenever
 the settings dialog asks.
+
+## Licence
+
+ArtDock is free to use, change and share, under the MIT licence with the
+[Commons Clause](https://commonsclause.com/) added: it may not be sold, and neither may any
+product or service whose value comes entirely or substantially from it — hosting and paid
+support included. The whole text is in [`LICENSE`](LICENSE).
