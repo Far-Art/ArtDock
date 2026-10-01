@@ -109,8 +109,12 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   icons come and go, or a width of its own. It **inverts the colours behind it**, so it stands
   out on anything; the inverse is pushed away from the colour behind, since plain inversion
   gives mid-grey back as mid-grey and the handle would vanish into a grey status bar. What is
-  behind is read off the screen fifteen times a second, on a thread of its own, for about half
-  a percent of one core, and the handle is kept out of screenshots and recordings — which is
+  behind is read off the screen on a thread of its own: fifteen times a second while it keeps
+  still, for about half a percent of one core, and every frame while it moves, so a page
+  scrolling or a video playing under it is followed frame for frame. Reading every frame costs
+  Windows' compositor about a tenth of one core, so it is kept for movement — two changes close
+  together; a caret blinking under the handle does not count. The handle is kept out of
+  screenshots and recordings — which is
   what keeps it out of its own reads (see *Known gaps*). There is no other look to choose: a
   checkbox offered the bar's colour instead, and was taken away as a choice not worth a
   setting. The bar's colour remains only as a fallback, where Windows will not keep a window
@@ -397,6 +401,7 @@ src/ArtDock/
   Dock/        DockMagnify, DockLayout, DockMetrics, DockItem, DockEdge, BarPalette,
                BarShadow (the bar's shadow, for whichever window draws it),
                AutoHideController, DockHandle (where the dock's handle goes),
+               HandlePace (how often it reads what is behind it),
                DockFront (what the dock does about a fullscreen window, and when the
                handle shows)
   Controls/    DockBar (the rendering surface), DockItemVisual, ColorWheel,
@@ -941,7 +946,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Five hundred and twenty-four tests cover the cosine falloff (peak, range boundary,
+Five hundred and thirty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1211,6 +1216,15 @@ inverted look: white comes back black and black white, a colour comes back as it
 what is shown is opaque whatever the read said of alpha, and nothing past the last whole pixel
 is touched — and the one that matters, that no grey from 0 to 255 comes back within fifty
 levels of itself, which a plain inversion fails at mid-grey.
+
+Twelve cover how often the handle reads what is behind it (`HandlePace`), against a simulated
+display at 120 Hz where a read finishes at the next frame, as a real one does. Something still
+is read about fifteen times a second; something moving every frame is read every frame, and a
+video at 24 fps is followed within a frame once it has been seen to move; the first change of
+something moving is seen at the quiet pace at worst; once it keeps still the reads slow down
+again; a read that did not wait for a frame is held to one a frame, and a slower display is
+read every frame of its own. And the one that matters for the cost: a caret blinking under the
+handle does not keep it reading every frame, which reading fast after any change at all would.
 
 Four cover what the project file tells the updater. The one that matters is that the folder
 Velopack installs into is not the one the settings live in: Velopack treats its folder as its

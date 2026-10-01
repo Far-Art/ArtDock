@@ -22,6 +22,12 @@ namespace ArtDock.Interop;
 /// timers would otherwise stall for a frame on every one.
 /// </para>
 /// <para>
+/// The work is DWM's instead, which copies its composed frame back for every read: about
+/// 0.09 ms of it a read, measured on 2026-09-30 — a tenth of one core at every frame of a
+/// 120 Hz display. Which is why the handle reads that often only while what is behind it
+/// moves; see <c>HandlePace</c>.
+/// </para>
+/// <para>
 /// The price of the exclusion is that the window is missing from screenshots and recordings as
 /// well. The handle always inverts, so it always pays it; README lists it under *Known gaps*.
 /// </para>

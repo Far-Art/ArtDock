@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -59,17 +60,6 @@ public sealed class HandleWindow : IDisposable
     /// gone before the bar reaches it.
     /// </remarks>
     private static readonly Duration FadeOutDuration = new(TimeSpan.FromMilliseconds(80));
-
-    /// <summary>
-    /// How often what is behind an inverted handle is read: fifteen times a second.
-    /// </summary>
-    /// <remarks>
-    /// Measured at about half a percent of one core, since a read is mostly waiting. What is
-    /// behind a thin bar at the bottom of the screen is a status bar or a scroll bar, which
-    /// rarely moves; a video under it lags by a read at most, which on a bar five pixels tall
-    /// does not show.
-    /// </remarks>
-    private static readonly TimeSpan ReadInterval = TimeSpan.FromMilliseconds(66);
 
     private readonly HwndSource _source;
     private readonly nint _hwnd;
@@ -445,10 +435,18 @@ public sealed class HandleWindow : IDisposable
     /// Reads what is behind the handle, and hands it over inverted whenever it has changed.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Unchanged is the usual answer — a status bar, a scroll bar — and costs the dock's thread
-    /// nothing: only a read that differs from the one before is inverted and drawn. Anything
-    /// thrown ends the reading and leaves the last read on the handle. A failure here must never
-    /// take the dock down with it, and a background thread's exception would.
+    /// nothing: only a read that differs from the one before is inverted and drawn. How soon the
+    /// next read comes is <see cref="HandlePace"/>'s to say: fifteen a second while what is
+    /// behind keeps still, every frame while it moves.
+    /// </para>
+    /// <para>
+    /// A read that fails — the secure desktop is up, the screen is locked — is waited on at the
+    /// quiet pace, never retried at once. Anything thrown ends the reading and leaves the last
+    /// read on the handle. A failure here must never take the dock down with it, and a background
+    /// thread's exception would.
+    /// </para>
     /// </remarks>
     private void ReadLoop(CancellationToken stop)
     {
@@ -456,6 +454,8 @@ public sealed class HandleWindow : IDisposable
         byte[] last = [];
         var lastSize = (Width: 0, Height: 0);
         var waits = new[] { stop.WaitHandle, _wake };
+        var pace = new HandlePace();
+        var clock = Stopwatch.StartNew();
 
         try
         {
@@ -467,6 +467,7 @@ public sealed class HandleWindow : IDisposable
                     region = _region;
                 }
 
+                var wait = HandlePace.StillInterval;
                 var length = region.Width * region.Height * 4;
                 if (length > 0)
                 {
@@ -475,21 +476,32 @@ public sealed class HandleWindow : IDisposable
                         read = new byte[length];
                     }
 
-                    if (ScreenCapture.TryCopy(region.X, region.Y, region.Width, region.Height, read)
-                        && (lastSize != (region.Width, region.Height) || !read.AsSpan().SequenceEqual(last)))
+                    var started = clock.Elapsed;
+                    if (ScreenCapture.TryCopy(region.X, region.Y, region.Width, region.Height, read))
                     {
-                        if (last.Length != length)
+                        var finished = clock.Elapsed;
+                        var changed = lastSize != (region.Width, region.Height) || !read.AsSpan().SequenceEqual(last);
+
+                        if (changed)
                         {
-                            last = new byte[length];
+                            if (last.Length != length)
+                            {
+                                last = new byte[length];
+                            }
+
+                            read.CopyTo(last);
+                            lastSize = (region.Width, region.Height);
+                            HandOver(read, region.Width, region.Height);
                         }
 
-                        read.CopyTo(last);
-                        lastSize = (region.Width, region.Height);
-                        HandOver(read, region.Width, region.Height);
+                        wait = pace.Next(finished, changed, finished - started);
                     }
                 }
 
-                WaitHandle.WaitAny(waits, ReadInterval);
+                if (wait > TimeSpan.Zero)
+                {
+                    WaitHandle.WaitAny(waits, wait);
+                }
             }
         }
         catch (Exception)
