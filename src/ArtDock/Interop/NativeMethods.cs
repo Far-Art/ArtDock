@@ -321,6 +321,9 @@ internal static partial class NativeMethods
     /// <summary>No monitor at all when the rectangle is on none, rather than the nearest.</summary>
     internal const uint MONITOR_DEFAULTTONULL = 0;
 
+    /// <summary>The display nearest the rectangle when it is on none.</summary>
+    internal const uint MONITOR_DEFAULTTONEAREST = 2;
+
     [DllImport("user32.dll")]
     internal static extern nint MonitorFromRect(ref NativeRect lprc, uint dwFlags);
 

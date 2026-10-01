@@ -44,6 +44,9 @@ public partial class App : Application
 
         ApplyTheme(settings);
 
+        // Gives the theme's drop-down lists and tooltips room for their shadows, which it cuts off.
+        PopupShadows.Register();
+
         // Before any window or menu exists, so that everything is built in the right language
         // rather than built in English and then changed.
         Localizer.Apply(settings.Language);

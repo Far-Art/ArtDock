@@ -458,6 +458,7 @@ src/ArtDock/
                draws the bar while the blur is on),
                MenuHost (owner for the context menus), MenuIcons (their glyphs and
                images, and the same glyphs on the settings dialog's buttons),
+               PopupShadows (room for the shadows under drop-down lists and tooltips),
                SettingsWindow, EditPinWindow,
                AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
   Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
@@ -694,6 +695,17 @@ reverts to the old Aero look, which is what happened to the sliders. And `TextBl
 `Control`: no theme sets its `Foreground`, and its own default is literally black. Every text
 style starts from one that names the system's text brush, and an implicit style catches the
 rest. Missing that is what put black text on a dark window.
+
+One fault is the theme's own. Its drop-down lists and its tooltips cast shadows, and their
+popups are only the size of what casts them — an effect is no part of a layout — so the shadows
+were cut off square at the edges. The theme's submenus, with the same shadow, inset the list in
+the popup and move the popup back by the inset; `PopupShadows` does the same for every combo
+box and tooltip in the app, reading the room from the shadow. A list is placed by its popup's
+placement rectangle rather than its offsets, because the offsets are the same whichever way the
+popup opens, and a list with no room below opens above the box: an offset that kept it under the
+box left it a shadow's depth clear of the box when it opened over it. A tooltip is placed against
+the pointer by rules WPF keeps to itself, so it is let open where WPF puts it, read back, and
+placed at that very spot with the room round it, all before its first frame is drawn.
 
 **The colour wheel is drawn, not templated.** WPF ships no colour picker, and the
 alternative is a dependency for one control. `ColorWheel` generates the hue/saturation disc
@@ -1022,7 +1034,7 @@ keeping up with the bar was on this list, and is done.
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and nine tests cover the cosine falloff (peak, range boundary,
+Six hundred and twenty-four tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1176,6 +1188,26 @@ on the icon and grows with it, a photo's thumbnail included; that an icon is sha
 an empty picture not at all; that none is drawn when it is turned off; that the dock shadows
 every icon, ones added later included, and takes them all away again; and that it is on for a
 new dock, and for one whose settings were written before it existed.
+
+Fifteen cover the room drop-down lists and tooltips are given for their shadows. One shows a
+combo box in a window off every display and finds it fitted with nothing but the app-wide
+handler asking — the rest call the fitting themselves, and passed while it never ran in the
+dialogs, because WPF raises `Loaded` only on an element with a `Loaded` handler of its own. Two
+hold the theme's templates to what the fix relies on — for the combo box a transparent popup, opened
+below, a list with a drop shadow, placed against something the box's size; for the tooltip a
+shadowed border and no margin of its own — since a theme that changed any of it would be left
+alone, and the shadows would go back to being cut off without a test noticing. For the list:
+that the room takes in the whole shadow at the sides and below; that the list still starts
+under the box at the theme's gap when it opens below, and ends over the box at the same gap
+when it opens above; that it lines up with the box at either end the popup is aligned to, and
+is as wide as the box; that a shadow deeper than the box is tall gives up some of its room
+rather than turning the placement inside out; and that fitting twice changes nothing. For the
+tooltip, whose window cannot be opened off every screen, the arithmetic on the place WPF gave
+it: that its room takes in its shadow all round, and a shadow's reach is its blur moved by its
+depth; that the window starts that far up and to the left, so the tooltip inside it is where it
+was; that the room stops at the edge of the display and of the taskbar, where going past would
+have the whole tooltip pushed back; that its sides are mirrored in a right-to-left tooltip; and
+that it is whole pixels at a scale that would have put the tooltip between two.
 
 Nine cover the pins that act rather than open. The one that matters guards the other
 direction: an ordinary target — an `.exe`, a `shell:` place, an AUMID, a web address, the
