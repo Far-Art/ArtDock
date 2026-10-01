@@ -41,7 +41,7 @@
 
     "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
     "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",
-    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, the icons cast no shadows, the handle takes the bar's colour, and these windows go without Mica. Magnification stays, drawn about thirty times a second.",
+    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, neither it nor the icons cast a shadow, the handle takes the bar's colour, and these windows go without Mica. Magnification stays.",
 
     "Settings.About.StartOver.Hint": "Puts every page back the way ArtDock ships, and the dock back to the items a new dock starts with. Saved colours and excluded apps are left alone. Nothing is written until you press Save.",
 

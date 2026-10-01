@@ -661,9 +661,9 @@ public sealed class DockSettings
     /// drawn in software, with no Direct3D device at all (<see cref="SoftwareRendering"/>), and
     /// gives up what leans on the compositor: the blur behind the bar (<see cref="Blurs"/>),
     /// the bar's translucency (<see cref="BarAlpha"/>), the handle's inversion
-    /// (<see cref="HandleInverts"/>) and the dialogs' Mica. And it draws less: the
-    /// icons cast no shadows (<see cref="CastsIconShadows"/>), and the wave is drawn about
-    /// thirty times a second (<see cref="WaveFrameMs"/>). The wave itself stays —
+    /// (<see cref="HandleInverts"/>) and the dialogs' Mica. And it draws less: neither the
+    /// bar nor the icons cast a shadow (<see cref="CastsBarShadow"/>,
+    /// <see cref="CastsIconShadows"/>). The wave itself stays, at the display's own pace —
     /// <see cref="ReduceMotion"/> is beside it for a machine that cannot keep up even so.
     /// </para>
     /// <para>
@@ -741,12 +741,20 @@ public sealed class DockSettings
     public bool CastsIconShadows => IconShadows && !NoGpu;
 
     /// <summary>
-    /// The least time between two frames of the wave, in milliseconds: zero, for every frame
-    /// there is, or <see cref="WavePace.CappedFrameMs"/> under <see cref="NoGpu"/> — about
-    /// thirty frames a second.
+    /// Whether the bar casts its shadow: always, but under <see cref="NoGpu"/>.
     /// </summary>
+    /// <remarks>
+    /// The shadow is a stack of see-through rounded rectangles under a clip, drawn again every
+    /// frame the bar changes width, which is every frame of the wave. On a graphics card that
+    /// is about a tenth of what the wave costs. In software it is most of it: measured on
+    /// 2026-10-01 with the dock as No GPU has it, the sweep cost about 85% of one core with the
+    /// shadow and 14% without, at a display's 120 frames a second — all of the difference on
+    /// WPF's render thread. Which is also why the wave is not slowed under No GPU: drawn at
+    /// thirty frames a second, as it was for an evening, it came to 11%, three points for two
+    /// frames in three.
+    /// </remarks>
     [JsonIgnore]
-    public double WaveFrameMs => NoGpu ? WavePace.CappedFrameMs : 0;
+    public bool CastsBarShadow => !NoGpu;
 
     // ---- contents ------------------------------------------------------------
 

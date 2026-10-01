@@ -405,12 +405,11 @@ public sealed partial class DockWindow : Window
             // and not as they are stored underneath it.
             _dock.SetBarAppearance(settings.BarPaint(EffectiveBarColor(settings)), settings.BarAlpha);
             _dock.IconShadows = settings.CastsIconShadows;
-            _dock.FrameIntervalMs = settings.WaveFrameMs;
 
             // Before the window is sized: a label in a bigger lettering needs more room above
             // the bar, which is the room SizeToDock gives it.
             _dock.SetLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
-            ApplyBackdrop(settings.Blurs);
+            ApplyBackdrop(settings.Blurs, settings.CastsBarShadow);
 
             if (_previewing)
             {
@@ -485,11 +484,15 @@ public sealed partial class DockWindow : Window
     /// twice.
     /// </para>
     /// </remarks>
-    private void ApplyBackdrop(bool enabled)
+    /// <param name="shadow">
+    /// Whether the dock draws the bar's shadow while it draws the bar: not under No GPU, where
+    /// the shadow is most of what the wave costs. With the sheet up the shadow is the sheet's.
+    /// </param>
+    private void ApplyBackdrop(bool enabled, bool shadow)
     {
         if (!enabled)
         {
-            _dock.DrawsShadow = true;
+            _dock.DrawsShadow = shadow;
 
             if (!_dock.DrawsBar)
             {

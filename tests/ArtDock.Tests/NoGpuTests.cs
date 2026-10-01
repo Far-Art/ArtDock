@@ -46,7 +46,7 @@ public class NoGpuTests : IDisposable
         Assert.Equal(settings.BarOpacity, settings.BarAlpha);
         Assert.True(settings.HandleInverts);
         Assert.True(settings.CastsIconShadows);
-        Assert.Equal(0, settings.WaveFrameMs);
+        Assert.True(settings.CastsBarShadow);
     }
 
     [Fact]
@@ -117,12 +117,14 @@ public class NoGpuTests : IDisposable
     }
 
     [Fact]
-    public void WithoutAGpu_TheIconsCastNoShadows_AndTheWaveIsDrawnLessOften()
+    public void WithoutAGpu_NothingCastsAShadow()
     {
         var settings = new DockSettings { NoGpu = true, IconShadows = true };
 
+        // The bar's is the one that matters: in software it was measured at most of what the
+        // wave costs, where the icons' are a picture each.
+        Assert.False(settings.CastsBarShadow);
         Assert.False(settings.CastsIconShadows);
-        Assert.Equal(WavePace.CappedFrameMs, settings.WaveFrameMs);
     }
 
     [Fact]
@@ -215,7 +217,7 @@ public class NoGpuTests : IDisposable
         Assert.DoesNotContain(nameof(DockSettings.BarAlpha), names);
         Assert.DoesNotContain(nameof(DockSettings.HandleInverts), names);
         Assert.DoesNotContain(nameof(DockSettings.CastsIconShadows), names);
-        Assert.DoesNotContain(nameof(DockSettings.WaveFrameMs), names);
+        Assert.DoesNotContain(nameof(DockSettings.CastsBarShadow), names);
     }
 
     /// <summary>
@@ -243,7 +245,7 @@ public class NoGpuTests : IDisposable
         Assert.Contains("." + nameof(DockSettings.BarAlpha), source);
         Assert.Contains("." + nameof(DockSettings.HandleInverts), source);
         Assert.Contains("." + nameof(DockSettings.CastsIconShadows), source);
-        Assert.Contains("." + nameof(DockSettings.WaveFrameMs), source);
+        Assert.Contains("." + nameof(DockSettings.CastsBarShadow), source);
     }
 
     private static string FindSourceRoot()

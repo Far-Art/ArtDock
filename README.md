@@ -143,12 +143,15 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   opacity over a fixed grey that stands in for the desktop, so it keeps about the look it was
   chosen for and the Opacity slider still does something; the handle takes the bar's
   colour instead of reading the screen to invert it, and is back in screenshots; and every
-  dialog goes without Mica, on the theme's plain background. It also draws less: the icons cast no shadows, each of
-  which is one more picture to scale for every icon on every frame, and **the wave is drawn
-  about thirty times a second** instead of at the display's pace — what a frame costs is mostly
-  in sending the dock's whole transparent window again, so fewer frames is the one thing that
-  cuts it. The wave moves as far and as fast, in fewer steps: on a 120 Hz display, 19 frames
-  where there were 70. Magnification itself stays — *Disable magnification* is beside it
+  dialog goes without Mica, on the theme's plain background. It also draws less: **neither the bar nor the
+  icons cast a shadow**. The bar's is a stack of see-through rounded rectangles under a clip,
+  drawn again on every frame of the wave, which on a graphics card is about a tenth of what the
+  wave costs and in software was measured at most of it — the settings dialog's sweep at about
+  85% of one core with the shadow and 14% without, at 120 frames a second; the icons' are one
+  more picture to scale for every icon on every frame. The wave itself is drawn at the
+  display's own pace, as it is everywhere: for an evening it was held to thirty frames a
+  second, which with the shadow gone saved three points more for two frames in three, and was
+  taken out again. Magnification itself stays — *Disable magnification* is beside it
   for a machine that cannot keep up even so. The blur and the icons' shadows keep their own
   values underneath, greyed on their pages with a line saying why, and come back when it is
   turned off. The
@@ -1077,9 +1080,10 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   only about a tenth of it. Not yet optimised. The frame is drawn on the GPU, not in
   software as this used to say: the Direct3D device is in the process, and forcing software
   rendering — which *No GPU* does — costs about half as much CPU again on a machine that has
-  a graphics card, frame for frame. *No GPU* draws fewer of them, about thirty a second; what
-  that comes to, and what the wave costs on a machine with no graphics card, has not been
-  measured.
+  a graphics card, frame for frame — nearly all of it the bar's shadow, which *No GPU*
+  therefore leaves out. Measured in a harness on a machine that has a graphics card: about
+  14% of one core for the sweep as *No GPU* draws it, at 120 frames a second. What the wave
+  costs on a machine with none has not been measured.
 - **About 35–40 MB in Task Manager**, against 15.5 MB for ObjectDock, which is native code.
   Most of it is fixed cost — the runtime, WPF, and about 15 MB for the GPU driver's Direct3D
   device. Software rendering would bring the dock to about 21 MB at the price of CPU while the
@@ -1093,7 +1097,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Seven hundred and seven tests cover the cosine falloff (peak, range boundary,
+Six hundred and ninety-nine tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1505,22 +1509,15 @@ taskbar, all of which were painted as asked all along; and migrating twice chang
 
 Fifteen hold *No GPU* to what it promises. Off in a new dock and in a file written before it
 existed; turned on by the dock itself at a first run with no hardware to draw with, and at no
-other time — not with a graphics card, and not for a dock that already has settings; on, the bar is solid, the blur off, the handle not inverting, the icons without
-shadows and the wave capped, whatever is stored; the solid bar is its colour at its opacity
+other time — not with a graphics card, and not for a dock that already has settings; on, the
+bar is solid, the blur off, the handle not inverting, neither the bar nor the icons casting a
+shadow, whatever is stored; the solid bar is its colour at its opacity
 over grey, from the grey itself to the colour itself; and what it overrides is kept underneath
 through a save and a load, so turning it off puts back the dock that was there. The file
 carries the setting and none of what follows from it. And the one read from the source: the
 dock's window applies the blur, the opacity and the shadows in force and never the stored ones
 — a line reading the stored blur would compile, work on every machine with a graphics card,
 and bring the acrylic back on the ones the setting is for.
-
-Eight more cover the pace of the capped wave (`WavePace`). Against a simulated display whose
-frames arrive a little early or late, the cap draws thirty frames a second at 60 and at 120 Hz,
-every frame at 30 and 24, and the nearest it can get in between; uncapped, every frame is
-drawn. And a real dock, in a window never shown and off every display, sweeping its wave:
-uncapped it moves at the display's pace, and capped no two frames that move it are closer than
-the cap — measured by the icons' magnification weighted by place, since the wave is built so
-that their plain sum does not change as it travels.
 
 Four hold a dialog taken off Mica to having a background (`WindowMaterial`), on windows given a
 handle and never shown: in the light theme and the dark its background is opaque, where the

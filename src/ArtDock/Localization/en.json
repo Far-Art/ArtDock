@@ -206,7 +206,7 @@
     "Settings.System.ReduceMotion": "Disable magnification",
     "Settings.System.ReduceMotion.Hint": "Also honored automatically when Windows animations are off.",
     "Settings.System.NoGpu": "No GPU",
-    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, the icons cast no shadows, the handle takes the bar's color, and these windows go without Mica. Magnification stays, drawn about thirty times a second.",
+    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, neither it nor the icons cast a shadow, the handle takes the bar's color, and these windows go without Mica. Magnification stays.",
     "Settings.System.NoGpu.Detected": "Windows is giving ArtDock no graphics acceleration on this computer right now. This is worth turning on.",
     "Settings.System.Reset": "Reset System to defaults",
     "Settings.System.SettingsFile": "Settings file",
