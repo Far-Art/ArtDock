@@ -580,7 +580,9 @@ public sealed class DockSettings
     /// <summary>
     /// The programs the dock stays down for: while one of them is in front and fills the
     /// dock's display, the dock is under it, holding the pointer against the edge neither
-    /// brings a hidden dock back nor lifts a covered one, and no handle is shown over it.
+    /// brings a hidden dock back nor lifts a covered one, and no handle is shown over it. While
+    /// one is in front at all, whatever its size and whichever display it is on, the dock lets
+    /// go of its hotkeys, so their keys reach the program.
     /// </summary>
     /// <remarks>
     /// Full paths to their executables, so the settings dialog can say which is which, but
@@ -598,6 +600,92 @@ public sealed class DockSettings
     /// distance from both of its walls.
     /// </remarks>
     public double BottomMargin { get; set; } = 12;
+
+    // ---- keyboard ------------------------------------------------------------
+
+    /// <summary>
+    /// The hotkeys, by what they do — <see cref="HotkeyAction"/>'s names — as a settings file
+    /// writes them: <c>"Keyboard": "Win+Ctrl+A"</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Absent and empty are different things, as they are for <see cref="InfluenceIcons"/>: an
+    /// action that is not here has its default (<see cref="HotkeyActions.Default"/>), and one
+    /// stored as <c>""</c> has been given none. Reading empty as absent would put a hotkey the
+    /// user cleared back at every start. So the settings dialog writes nothing for an action left
+    /// at its default, which goes on following the default if that ever changes — as the places'
+    /// did on 2026-10-02, from none to the numeric keypad — and a dock set up before hotkeys
+    /// existed, or before an action did, has its default from the update that brings it.
+    /// </para>
+    /// <para>
+    /// Each key is stored by its virtual key, not by what it types — see <see cref="Hotkey"/> — so
+    /// it is the same physical key on every keyboard layout. A name this build does not know is
+    /// a later version's action, and is carried through as it was.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, string> Hotkeys
+    {
+        get;
+        set => field = value ?? [];
+    } = [];
+
+    /// <summary>The hotkey an action has, as these settings have it — see <see cref="Hotkeys"/>.</summary>
+    public Hotkey? HotkeyFor(HotkeyAction action) => HotkeyActions.Resolve(Hotkeys, action);
+
+    /// <summary>The hotkey each action has, as these settings have it.</summary>
+    public Dictionary<HotkeyAction, Hotkey?> HotkeyChoices() =>
+        HotkeyActions.All.ToDictionary(action => action, HotkeyFor);
+
+    /// <summary>
+    /// Whether the items' hotkeys — the places', first keys and second — are registered: the
+    /// Hotkeys page's <em>Enable quick launch</em>. On by default. Off, the dock lets go of them,
+    /// and they are free for other programs; they are kept as they were set, for when it is on
+    /// again. The keyboard's own 1 to 9, once the dock has the keys, are not hotkeys, and work
+    /// either way.
+    /// </summary>
+    public bool QuickLaunch { get; set; } = true;
+
+    /// <summary>
+    /// The items whose hotkeys are off by themselves, by place, 1 to 9: the checkbox on each
+    /// item's row of the Hotkeys page, all of them ticked by default. An item that is here has
+    /// its keys, first and second, let go of as <see cref="QuickLaunch"/> off lets go of every
+    /// item's, and kept as they were set.
+    /// </summary>
+    /// <remarks>
+    /// The places that are off rather than the ones that are on, so an empty list — and a file
+    /// from before 2026-10-02, which has none — is every item on. By place, as the keys are: a
+    /// place's checkbox goes with its keys, not with whichever item is in the place.
+    /// </remarks>
+    public List<int> QuickLaunchOff
+    {
+        get;
+        set => field = value ?? [];
+    } = [];
+
+    /// <summary>
+    /// Whether holding the Windows key and Ctrl puts each item's number on its icon — the place
+    /// its keys open, while quick launch has keys: the Hotkeys page's <em>Show item numbers on
+    /// Win+Ctrl</em>, on by default. Asked for on 2026-10-02, as a checkbox of its own, the same
+    /// evening as the numbers; <see cref="RevealOnWinCtrl"/> is the dock coming up for them.
+    /// </summary>
+    public bool NumbersOnWinCtrl { get; set; } = true;
+
+    /// <summary>
+    /// Whether holding the Windows key and Ctrl brings the dock up until they are let go — out of
+    /// auto-hide, from behind a window that fills the display, or put away from the tray: the
+    /// Hotkeys page's <em>Reveal the dock on Win+Ctrl</em>, on by default. The items' numbers come
+    /// up with it (<see cref="NumbersOnWinCtrl"/>); off, they still come up on a dock already in
+    /// sight.
+    /// </summary>
+    /// <remarks>
+    /// Asked for on 2026-10-02, with the numbers. Never while a program on the Exclusions page is
+    /// in front, whose keys are its own (<see cref="NoRevealApps"/>).
+    /// </remarks>
+    public bool RevealOnWinCtrl { get; set; } = true;
+
+    /// <summary>The hotkeys to register, as these settings have them.</summary>
+    public Dictionary<HotkeyAction, Hotkey> HotkeysInForce() =>
+        HotkeyActions.InForce(HotkeyActions.InUse(HotkeyChoices(), QuickLaunch, QuickLaunchOff));
 
     // ---- system --------------------------------------------------------------
 
@@ -922,6 +1010,11 @@ public sealed class DockSettings
         HandleWidth = HandleWidth,
         NoRevealApps = [.. NoRevealApps],
         BottomMargin = BottomMargin,
+        Hotkeys = new Dictionary<string, string>(Hotkeys, StringComparer.Ordinal),
+        QuickLaunch = QuickLaunch,
+        QuickLaunchOff = [.. QuickLaunchOff],
+        NumbersOnWinCtrl = NumbersOnWinCtrl,
+        RevealOnWinCtrl = RevealOnWinCtrl,
         RunAtLogin = RunAtLogin,
         Theme = Theme,
         Language = Language,

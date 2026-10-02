@@ -12,7 +12,8 @@ responsive and built to feel at home on Windows.
   comes back up; once that window is no longer in front, the dock is back where it was.
 - **An exclusion list for the programs it must never interrupt.** Games, mostly, which scroll
   when the pointer reaches the edge of the screen. While a listed program fills the display,
-  the edge does nothing and the dock stays down. The list can be filled by scanning: the
+  the edge does nothing and the dock stays down; while one is in front at all, the dock's
+  hotkeys are let go of, so their keys reach it. The list can be filled by scanning: the
   games installed by Steam, Battle.net, the EA app, Epic Games, GOG, Ubisoft Connect, the
   Xbox app, Riot Games and Rockstar Games, or the apps on the Start menu.
 - **Settings that show on the dock as you change them.** Every slider, colour and switch in
@@ -35,10 +36,16 @@ dotnet run --project src/ArtDock
 ```
 
 The dock appears centred on the bottom edge, with a tray icon for settings. Right-click the
-tray icon for **Settings…**, **Hide dock** and **Exit**; `ArtDock.exe --settings` opens the
-dialog directly. The dialog's About page has an **Exit** of its own, for when Windows has
-tucked the tray icon away behind the overflow arrow. Either one discards anything unsaved in
-the dialog, the way Cancel does.
+tray icon for **Settings…**, **Hide dock** — **Show dock** while the dock is out of sight,
+auto-hide's slide included — and **Exit**. A dock hidden from there stays away until it is shown
+again, but for the settings dialog, which brings it up to show its preview and puts it away
+again when it closes. `ArtDock.exe --settings` opens the dialog directly, as the dock's
+**Win+Ctrl+I** does, and `--keyboard` and `--toggle` do what its hotkeys for the keyboard
+and for hiding do — take the keyboard, and hide or show the dock — whether the dock is running
+already or not, so a mouse button, a macro pad or a script can do it without a key registered.
+The dialog's About page has an **Exit** of its own, for when Windows has tucked the tray icon
+away behind the overflow arrow. Either one discards anything unsaved in the dialog, the way
+Cancel does.
 
 ## Installing and releasing
 
@@ -132,7 +139,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   taskbar hides itself a maximized window covers it too, and is told apart by its title bar —
   a game's borderless fullscreen is a maximized window without one. A dock hidden from the
   tray has none: it was put away on
-  purpose, and only the tray brings it back. While the settings dialog is open it shows under
+  purpose, and only the tray brings it back for good. While the settings dialog is open it shows under
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
@@ -257,6 +264,78 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   drawn from the pin's settings each time the dock reads its pins and never kept as a picture,
   so a reinstall or an imported settings file brings it back exactly. The item being edited
   holds its label open on the bar, so its name can be judged where it is actually used.
+- **Answers the keyboard, from anywhere in Windows**, every hotkey the Windows key and Ctrl with
+  a key. **Win+Ctrl+A** brings the dock up — out from hiding, the tray's *Hide dock* included,
+  and over whatever covers it — with its first item held up, magnified and labelled. Then Left
+  and Right move along it, Home and End go to its ends, a letter goes to the next item whose
+  name starts with it, and 1 to 9 go to the item in that place, separators not counted — held
+  up, not opened; Enter or Space opens the item held up as a click would, the menu key or
+  Shift+F10 opens its right-click menu above it, and Esc — or Win+Ctrl+A again — hands the
+  keyboard back to the window that had it. Opening an app hands it to the app instead, and a
+  click anywhere ends it as well. Esc out of the menu comes back to the dock, on the same item.
+  **Win+Ctrl+H** hides the dock or shows it, as the tray's entry does. **Win+Ctrl+I** opens the
+  settings dialog — I as in Win+I, Windows' own Settings — or, when it is open, brings it back
+  to the front: restored if it was minimised, and to the item editor or a scan if one is open
+  over it. **Win+Ctrl+Num 1** to **9**, on the numeric keypad with Num Lock on, open the item in
+  that place without the keyboard being taken first; without a keypad, Win+Ctrl+A, the digit and
+  Enter do it. **Holding the Windows key and Ctrl**, with nothing else, puts each item's number
+  on its icon the moment they are down — a small disc in the accent colour, at the icon's top
+  left, magnified with it — and brings a hidden dock up until they are let go: out of auto-hide,
+  from behind a window that fills the display, or put away from the tray, which it goes back to.
+  Numbered are the items whose keys the dock holds — quick launch on, the item not turned off,
+  its keys not another program's — and none while a program on the Exclusions page is in front;
+  an arrow, Shift or Alt pressed with them ends the hold until they are let go — the two were
+  the start of another shortcut, Win+Ctrl and an arrow switching virtual desktops above all —
+  and a dock that came up for them goes straight back, without the hide delay; one of the dock's
+  own hotkeys ends it as well. Win+Ctrl+H goes by the dock as it was before the two brought it
+  up. On the Hotkeys page, both on by default, *Show item numbers on Win+Ctrl* turns the numbers
+  off and *Reveal the dock on Win+Ctrl* the bringing up; with only the second off, the numbers
+  still come up on a dock in sight. The badge stands off the icon — a soft shadow below it, the
+  accent a shade lighter at its top, a thin half-white rim — set a little out from the corner so
+  it covers less of the picture. The keys are read as the pointer is, by looking — Ctrl about
+  thirty times a second, the rest only while it is down — never by a hook. One family, so the
+  keys are consistent, and two modifiers side by side, which one finger can hold. The places are
+  on the keypad because Windows has the number row's digits with the Windows key alone and with
+  Shift, Ctrl, Alt, and Ctrl and Shift, all for the taskbar's buttons; the one family it leaves
+  free, Win+Ctrl+Alt, was tried for a few hours and was a key too many. None of the dock's
+  hotkeys is Windows' own or PowerToys', and none was registered on the machine they were chosen
+  on: every candidate was registered and let go of at once, across nine families of modifiers
+  and three keyboard layouts — D for dock is taken in every one. For a screen reader, the dock
+  while it has the keyboard is a list of its items, read one by one as the keys move along it:
+  the dock draws its icons rather than being made of controls, and Narrator would otherwise have
+  nothing to follow.
+- **Hotkeys are set on the Hotkeys page**: click a box and press the keys — the Windows key,
+  Ctrl or Alt, with one other key — Backspace or the × in the box to empty it, Esc to put back
+  what it held. Opening the page puts the keyboard in no box: a box records while it has it.
+  Each of the first nine places on the dock has two keys, side by side on its row — its first on
+  the keypad, and a second, unset to begin with (Win+Ctrl+Alt with the digit on the number row
+  is free, for one) — and on a dialog too narrow for both, the second goes under the first. Each
+  row has the icon of the item in that place beside its name, from the dialog's own list, so a
+  change on the Items page shows there before it is saved. **Enable quick launch**, on by
+  default, turns all of the items' keys on or off at once: off, the dock lets go of them, so
+  they are free for other programs, and keeps them for when it is on again; the keyboard's own 1
+  to 9 work either way. **Each item's row has a checkbox of its own**, ticked to begin with,
+  which does the same for that item's two keys alone; **Show item numbers on Win+Ctrl** and
+  **Reveal the dock on Win+Ctrl** say what holding the two does. The page stands under Items,
+  whose items most of its keys open. A hotkey works as soon as it is recorded, so it can be
+  tried before Save, and Cancel puts the old one back; while a box records, the dock lets its
+  own hotkeys go, so pressing the one being changed reaches the box rather than firing. Keys set
+  on the page outrank the ones an action starts with — given one item's keys, another item has
+  them, and the first item's row says so — and between two set on the page, a first key keeps
+  them over a second, and otherwise the higher row. Beside each, the page says what is wrong
+  with it: another program has it already, which Windows says only by refusing it — Explorer
+  registers its own before the dock starts, so a key Windows takes in some later update would
+  otherwise just stop working; another row has it, and keeps it; it is Ctrl+Alt, which on many
+  keyboards is AltGr and would take a character from typing; or, without the Windows key,
+  programs may want it for themselves. Combinations Windows uses in every window — Alt+F4,
+  Alt+Tab, Alt+Space, Ctrl+Esc — are refused, since some of them could be registered and closing
+  a window would stop working everywhere, and F12 is Windows' for debuggers. Keys are stored by
+  the key, not by what it types, so a hotkey is the same key on every keyboard layout, and shown
+  with each key named as it is printed. **While a program on the Exclusions page is in front,
+  the hotkeys are let go of** — whatever the size of its window, and on either display — not
+  merely ignored: a key the dock holds is one the game never sees. The edge stands down only for
+  one that fills the dock's display, since only such a window reaches the edge; a key goes to
+  the window in front wherever it is.
 - **The labels' lettering is the dock's**: their font, emphasis and size are set once, on the
   settings dialog's Icons page, for every label at once — and for the drop notices, which are
   drawn as labels are. Labels are 14 pt and bold by default, because a label is read against
@@ -374,10 +453,12 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   and one started, or restarted, while the game was in front stays away too — it used to come
   up over it. Programs are added from those open at the
   time, by browsing for the `.exe`, or by **scanning for games or apps**, and are recognised by file
-  name, so a game that moves folders when it updates still counts. Only the edge stands down
-  — the tray icon, a second launch and the settings dialog bring the dock back as they
-  always do. The page was called *Fullscreen* at first, which read as a setting for going
-  fullscreen rather than as a list of apps to stay out of the way of.
+  name, so a game that moves folders when it updates still counts. Only the edge and the
+  hotkeys stand down — the tray icon, a second launch and the settings dialog bring the dock
+  back as they always do — and the hotkeys whenever the program is in front, filling the
+  display or not, since its keys are its own. The page was called *Fullscreen* at first, which
+  read as a setting for going fullscreen rather than as a list of apps to stay out of the way
+  of.
 - **Finds your games and the programs they run as**: *Scan for games…* on the Exclusions
   page asks for nothing. It finds the games the launchers on the machine have installed —
   Steam (every library, on every drive), Battle.net, the EA app, Epic Games, GOG, Ubisoft
@@ -433,9 +514,10 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   tinting the taskbar with), corner roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
   displays — and where along its edge, always-on-top, hide/reveal delays, the excluded apps
-  the edge stands down for, pinned apps, the icon set, the icons' shadow, the labels' font,
-  emphasis and size, the language, run-at-login. The dialog is paged — Size, Appearance (the
-  bar), Behaviour, Icons, Items, Exclusions, Position, System, About — and
+  the edge and the hotkeys stand down for, pinned apps, the icon set, the icons' shadow, the
+  labels' font, emphasis and size, the hotkeys, the language, run-at-login. The dialog is paged
+  — Size, Appearance (the bar), Behaviour, Icons, Items, Hotkeys, Exclusions, Position, System,
+  About — and
   each page of settings has its own reset; the two pages that hold lists of the user's own,
   Items and Exclusions, have none. About holds no settings, and so no page reset — it has the
   whole-application one instead, which puts the pinned items back to the set a new dock
@@ -921,9 +1003,26 @@ The catch is that WPF does not route mouse input to a non-activating window at a
 from the window procedure (`DockWindow.OnWindowMessage`) and resolved against the hovered icon
 the cursor poll already tracks.
 
+**So the keyboard has a window of its own, and the hotkeys are registered, not hooked.**
+`RegisterHotKey` against the dock's window, heard in its window procedure — for the reason
+edge reveal polls rather than hooking: a low-level keyboard hook sits in the input path of
+every program on the desktop. The dock's window must never take the foreground, so the keys go
+to a second window (`Views/KeyboardHost`), invisible, click-through and laid over the bar, which
+takes the foreground only while the dock has the keyboard — through `AppLauncher.Activate`,
+which attaches to the foreground's input for the moment it takes, as the settings dialog does.
+It turns keys into commands (`Dock/DockKeys`, unit-tested), and the dock holds its item up by
+the same claim a menu takes (`DockBar.FocusItem`). It gives the foreground back only while it
+still has it: a window raised from the keys has taken it and keeps it, and an app launched is
+still starting, so the window the keys came from has it meanwhile and the app takes it from
+there. The hotkeys in force are part of the settings in force (`DockWindow._applied`), so the
+settings dialog previews them as it does everything else, and `Interop/HotkeyRegistry` asks
+Windows for them only when they change or when it stops having to let them go: while a box on
+the Hotkeys page records, and while an excluded program is in front.
+
 **Fullscreen is judged by the window in front, and a program by its file name.** The edge
 stands down only while the *foreground* window belongs to a listed program and covers the
-dock's display. The foreground rather than whichever window is topmost there, because
+dock's display; the hotkeys, whenever it belongs to one (`ForegroundApp.InFront`), whatever it
+covers. The foreground rather than whichever window is topmost there, because
 overlays — a frame counter, a voice chat's — are windows of their own laid over the game,
 and none of them is ever the foreground; the cost is that a game left behind while another
 display has focus no longer counts. Covering the display's bounds rather than its work area,
@@ -1013,10 +1112,9 @@ and a signature of the project's own on the feed. Then the
 smaller things: sharpening the acrylic backdrop, and the Exclusions page's blind spot for Store
 apps.
 
-Asked for, and not begun: hotkeys, with a page of the settings dialog to set them on, so the
-dock can be brought up, hidden and used from the keyboard; starting an item as administrator
-from its menu or with Ctrl+Shift+click; and previews of an app's windows on resting the pointer
-on its icon, as the taskbar shows them.
+Asked for, and not begun: starting an item as administrator from its menu, with
+Ctrl+Shift+click, or with Ctrl+Shift+Enter from the keyboard; and previews of an app's windows
+on resting the pointer on its icon, or pressing Up from the keyboard, as the taskbar shows them.
 
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
@@ -1026,9 +1124,6 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 
 ## Known gaps
 
-- **No keyboard navigation.** `WS_EX_NOACTIVATE` means the window cannot take keyboard focus
-  at all, so Tab cannot reach the dock. The right fix
-  is a global hotkey that temporarily allows activation — not yet built.
 - **The blur is Windows' own.** Its strength is DWM's and cannot be set, and the bar's colour
   is a fill over it — over a fixed wash — rather than the colour of the blur itself.
 - **Store apps can only be pinned by path.** Anything on disk can be pinned by browsing to
@@ -1103,7 +1198,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Six hundred and ninety-nine tests cover the cosine falloff (peak, range boundary,
+Eight hundred and twenty-eight tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1530,6 +1625,62 @@ handle and never shown: in the light theme and the dark its background is opaque
 theme's own is transparent and, with no material behind it, black; put back on the material it
 has the theme's again; and a window that is transparent on purpose, as the dock's is, is left
 alone.
+
+Seventy-three cover the hotkeys. How one is written and read — the modifiers in Windows' order,
+the keys by name, by their code where they have none, and by code throughout, so a key is the
+same key on every layout — and what is refused: neither the Windows key, Ctrl nor Alt held; F12;
+what Windows does in every window, Alt+F4 among it, which could be registered and would stop
+windows closing everywhere; and what is not a key to take, a modifier or Caps Lock. That every
+default is the Windows key and Ctrl, the places' on the keypad and their second keys unset, no
+two sharing keys, and a place's second key opening the same place; that a hotkey cleared stays
+cleared through the file, where one never set follows the default; that a file from before
+hotkeys has the defaults, and one saved before the settings' hotkey and the places' defaults
+came, a day after the others, has those as well; that the file leaves the defaults out and
+carries a later version's actions through; that keys set on the page outrank a default, even one
+higher on the page, while of two set on the page a first key keeps them over a second; that
+quick launch is on for a new dock and for a file from before it, and off lets the items' keys go
+— first and second, kept for later — with no other row told an item has its keys; and that every
+item is on by itself too, for a new dock and a file from before, while one turned off lets its
+own two keys go, kept for later, and has none to share; and that holding the Windows key and
+Ctrl numbers the items and brings the dock up for a new dock and a file from before either. And,
+with real registrations on the test's own thread of a combination no keyboard has, that Windows
+gives it to one registration and tells the other it is taken; that the second, asking again once
+it has been let go, is told it is free; that two actions can trade keys; and that the dock's are
+let go of for real while the dialog records or a game is in front, and taken back after. One
+reads the dialog's XAML for a row for every action, and an icon and a checkbox for every item,
+which the dialog finds by name as it opens; and one the dock's source, to keep the hotkeys
+standing down for a program on the Exclusions page in front at any size, rather than only for
+one filling the display as the edge does — what is in front cannot be arranged in a test.
+
+Thirty-five cover the keys along the dock: that they step over separators and stop at the ends
+rather than going round; that the places are counted without the separators; that a letter
+goes round to the next name starting with it, in the language's own sense of case; and that
+each key means what it does anywhere in Windows — Esc and Alt+F4 give the keyboard back, the
+menu key and Shift+F10 open the menu, Ctrl and Alt still held from the hotkey do not stop the
+arrows or a digit going to its place, the Windows key does, and Ctrl+Shift+Enter, Windows' way
+to start a program as administrator, does nothing yet.
+
+Nine cover the Windows key and Ctrl held. That the hold counts the moment they are down, and
+ends the moment they are let go; that anything else pressed with them — an arrow, Shift, Alt —
+cuts it short, or keeps it from starting, until both are let go, and that one of the dock's own
+hotkeys, which the keys cannot see, ends it without cutting it short; and, from the source, that
+Win+Ctrl+H goes by the dock as it was before the two brought it up. That the items are numbered
+as the hotkeys count them, without the separators, only those asked for and none past the ninth,
+and that an item added while the numbers are up is numbered where it stands. And that the number
+is drawn on the icon's top-left corner in the accent, shading darker, and nothing of it anywhere
+else. The keys themselves are read from Windows and cannot be pressed in a test.
+
+Twelve cover a dock put away from the tray while something holds it up
+(`AutoHideController.HoldRevealed`), on the dock's own auto-hide over a window given a handle
+and never shown. Held, it comes up; let go, it goes away again — when the last of two holds
+lets go, not the first, and put away rather than merely hidden even with a window filling the
+display in front, so that window going does not bring it back. A dock that was up stays up, and
+one auto-hide slid away is auto-hide's again. A choice made meanwhile is kept: hidden from the
+tray or by the hotkey while held, the dock stays away, and shown again it stays up. Auto-hide
+turned on meanwhile has the dock from then on; turned off again before the hold lets go, the
+dock is put away as before. And two read the source, to keep the hotkeys that hide the dock and
+open the settings asking before the keyboard lets go of it — the other order puts the dock away
+as the keys let go, and the toggle then brings it straight back, or the dialog a moment later.
 
 ## Licence
 

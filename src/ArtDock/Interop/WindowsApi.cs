@@ -103,6 +103,14 @@ internal static class WindowsApi
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsIconic(nint hWnd);
 
+    /// <summary>The window's own popup that was active last — a dialog open over it — or the window itself.</summary>
+    [DllImport("user32.dll")]
+    internal static extern nint GetLastActivePopup(nint hWnd);
+
+    /// <summary>Whether a key is down this moment, in the high bit, whichever window has the keyboard.</summary>
+    [DllImport("user32.dll")]
+    internal static extern short GetAsyncKeyState(int vKey);
+
     /// <summary>True when the window is maximized.</summary>
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

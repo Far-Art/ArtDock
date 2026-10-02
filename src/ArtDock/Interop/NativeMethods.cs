@@ -219,6 +219,32 @@ internal static partial class NativeMethods
     /// <summary>Lets any process take the foreground, which is the only sense in which this is used.</summary>
     internal const int ASFW_ANY = -1;
 
+    // ---- hotkeys -------------------------------------------------------------
+    //
+    // Registered against the dock's own window, and heard in its window procedure. No keyboard
+    // hook, for the reason there is no mouse hook: a low-level hook sits in the input path of
+    // every program on the desktop, and a slow one slows them all.
+
+    /// <summary>Posted when a registered hotkey is pressed; <c>wParam</c> is its id.</summary>
+    internal const int WM_HOTKEY = 0x0312;
+
+    /// <summary>One message for a key held down, not one for every repeat of it.</summary>
+    internal const uint MOD_NOREPEAT = 0x4000;
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool RegisterHotKey(nint hWnd, int id, uint fsModifiers, uint vk);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool UnregisterHotKey(nint hWnd, int id);
+
+    /// <summary>For <see cref="MapVirtualKey"/>: the character a key types with nothing held, on the calling thread's layout.</summary>
+    internal const uint MAPVK_VK_TO_CHAR = 2;
+
+    [LibraryImport("user32.dll", EntryPoint = "MapVirtualKeyW")]
+    internal static partial uint MapVirtualKey(uint uCode, uint uMapType);
+
     // ---- the shell's own windows ---------------------------------------------
 
     /// <summary>

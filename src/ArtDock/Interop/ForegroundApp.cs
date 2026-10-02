@@ -6,7 +6,8 @@ using ArtDock.Services;
 namespace ArtDock.Interop;
 
 /// <summary>
-/// Which program has the window in front, when that window fills a display.
+/// Which program has the window in front: when that window fills a display, for the edge, and
+/// whatever it fills, for the hotkeys.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -52,6 +53,28 @@ internal sealed class ForegroundApp
             return null;
         }
 
+        return ProgramOf(window);
+    }
+
+    /// <summary>
+    /// The executable of the program in front, whatever the size of its window and whichever
+    /// display it is on; null when nothing is, or the desktop is.
+    /// </summary>
+    /// <remarks>
+    /// What the hotkeys stand down for: the keys go to the window in front, wherever it is, so a
+    /// program on the Exclusions page has them whether or not it fills a display — asked on
+    /// 2026-10-02. The desktop is ruled out as <see cref="FillingDisplay"/> rules it out. Asked as
+    /// often as that, and as cheap: the program behind a window is looked up once.
+    /// </remarks>
+    public string? InFront()
+    {
+        var window = WindowsApi.GetForegroundWindow();
+        return window == 0 || IsDesktop(window) ? null : ProgramOf(window);
+    }
+
+    /// <summary>The executable of the program a window belongs to, kept until another window asks.</summary>
+    private string? ProgramOf(nint window)
+    {
         WindowsApi.GetWindowThreadProcessId(window, out var processId);
         if (processId == 0)
         {

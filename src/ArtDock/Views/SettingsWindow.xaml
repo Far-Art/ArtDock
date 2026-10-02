@@ -136,6 +136,96 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
+        <!-- The Hotkeys page's rows: a box that records a hotkey (Controls/HotkeyRecorder), with
+             an × in it that empties it, as Windows' own text boxes have, and a line under it
+             saying what is wrong with what the box holds — in Windows' caution colour, as the
+             Language card's problems are, and only when there is something to say. -->
+        <Style x:Key="HotkeyField" TargetType="Grid">
+            <Setter Property="Width" Value="200" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!-- The theme's padding, 10,5,6,6, with room on the right for the ×. -->
+        <Style x:Key="HotkeyBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Padding" Value="10,5,32,6" />
+        </Style>
+
+        <!-- The ×, over the box's right end: there only while the box holds something — the code
+             greys it otherwise, and greyed it goes — and no tab stop, nor anything that takes the
+             keyboard from a box that is recording; Backspace and Delete in the box empty it from
+             the keyboard. Named for a screen reader, which can still press it. -->
+        <Style x:Key="HotkeyClear" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FontFamily" Value="{DynamicResource SymbolThemeFontFamily}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Content" Value="&#xE894;" />
+            <Setter Property="ToolTip" Value="{DynamicResource Settings.Hotkeys.Clear}" />
+            <Setter Property="AutomationProperties.Name" Value="{DynamicResource Settings.Hotkeys.Clear}" />
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="HotkeyStatus" TargetType="TextBlock" BasedOn="{StaticResource CardHint}">
+            <Setter Property="Margin" Value="0,8,0,0" />
+            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+            <Setter Property="Visibility" Value="Collapsed" />
+        </Style>
+
+        <!-- An item's two keys share its row: each is a box with its own status line under it,
+             as wide as the boxes above, so the headings line up with them. Where the page is too
+             narrow for both, the second goes under the first: the row's WrapPanel does it, and
+             the headings, made the same way, wrap with it. The gap between the two is a margin on
+             the left of both, which the panel takes back with one of its own: a margin on the
+             second alone would go with it when it wraps, and stand it out from under the first.
+             The space under each is what keeps two boxes apart when one is under the other. -->
+        <Style x:Key="PlaceKey" TargetType="StackPanel">
+            <Setter Property="Width" Value="200" />
+            <Setter Property="Margin" Value="16,0,0,4" />
+        </Style>
+
+        <Style x:Key="PlaceHeading" TargetType="TextBlock" BasedOn="{StaticResource Hint}">
+            <Setter Property="Width" Value="200" />
+            <Setter Property="Margin" Value="16,0,0,0" />
+        </Style>
+
+        <!-- A place's checkbox, which turns that item's keys on and off by themselves, as quick
+             launch turns all of them: named by the place, with the icon of the item in that place
+             before the name when there is one. At the top of its row, level with the boxes, rather
+             than halfway down the boxes and their status lines together; and no wider than what it
+             holds, where the theme makes every checkbox at least 120 wide — on a narrow dialog the
+             room is the boxes'. -->
+        <Style x:Key="PlaceCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="ToolTip" Value="{DynamicResource Settings.Hotkeys.Place.Hint}" />
+            <Setter Property="AutomationProperties.HelpText" Value="{DynamicResource Settings.Hotkeys.Place.Hint}" />
+        </Style>
+
+        <!-- The icon the dock draws the item with, as the Items page shows it — shrunk from 128,
+             so high quality, or its edges come out in steps. Its room is kept where there is no
+             item, so the names stand in line. -->
+        <Style x:Key="PlaceIcon" TargetType="Image">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
+        </Style>
+
         <!-- The column the value beside every slider sits in, one width for all of them so
              the sliders line up down a page. Sized for the longest read-out there is rather
              than for English: "100% right" set the width first, and a translated "3 icons" is
@@ -1150,10 +1240,512 @@
                 </Grid>
             </TabItem>
 
+            <!-- ==================== HOTKEYS ==================== -->
+            <!-- Called Hotkeys, after what is set on it, and not Shortcuts, which is what Windows
+                 calls these and what the dock calls half the things pinned to it; it was Keyboard
+                 for its first day, until 2026-10-02. Below Items, since most of its keys open
+                 them; it stood below Behaviour until the same day. Each row's box records while
+                 it has the keyboard (Controls/HotkeyRecorder), and each part of a row is found by
+                 the action's name — KeyboardHotkey, KeyboardHotkeyClear, KeyboardHotkeyStatus —
+                 so a row added here is a row the code finds. While a box records, the dock lets
+                 its hotkeys go, or pressing the one being changed would fire it. -->
+            <TabItem x:Name="HotkeysPage" Header="{DynamicResource Settings.Page.Hotkeys}">
+                <!-- Focusable, and so the first place on the page to take the keyboard: a click
+                     on a page's tab, with the keyboard anywhere but on another tab, hands it to the
+                     first control on the page (TabItem does it, through PART_SelectedContentHost),
+                     and here that was the first box, which records while it has the keyboard — the
+                     dock letting its hotkeys go meanwhile. The page has it instead; Tab goes on to
+                     the boxes, and a click on the page away from them takes it back out of one. -->
+                <ScrollViewer
+                    Padding="0,0,12,0"
+                    Focusable="True"
+                    IsTabStop="True"
+                    VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="{DynamicResource Settings.Hotkeys.Title}" />
+
+                        <TextBlock
+                            Margin="2,0,0,12"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Hotkeys.Hint}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Hotkeys.Take}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Hotkeys.Take.Hint}" />
+                                    </StackPanel>
+                                    <Grid Grid.Column="1" Style="{StaticResource HotkeyField}">
+                                        <TextBox
+                                            x:Name="KeyboardHotkey"
+                                            AutomationProperties.Name="{DynamicResource Settings.Hotkeys.Take}"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Take.Hint}"
+                                            Style="{StaticResource HotkeyBox}" />
+                                        <Button
+                                            x:Name="KeyboardHotkeyClear"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Take}"
+                                            Style="{StaticResource HotkeyClear}" />
+                                    </Grid>
+                                </Grid>
+                                <TextBlock x:Name="KeyboardHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Hotkeys.ShowHide}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Hotkeys.ShowHide.Hint}" />
+                                    </StackPanel>
+                                    <Grid Grid.Column="1" Style="{StaticResource HotkeyField}">
+                                        <TextBox
+                                            x:Name="ShowHideHotkey"
+                                            AutomationProperties.Name="{DynamicResource Settings.Hotkeys.ShowHide}"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.ShowHide.Hint}"
+                                            Style="{StaticResource HotkeyBox}" />
+                                        <Button
+                                            x:Name="ShowHideHotkeyClear"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.ShowHide}"
+                                            Style="{StaticResource HotkeyClear}" />
+                                    </Grid>
+                                </Grid>
+                                <TextBlock x:Name="ShowHideHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- This dialog: Win+Ctrl+I to begin with, as Win+I is Windows' own Settings. -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                        <TextBlock Text="{DynamicResource Settings.Hotkeys.Settings}" />
+                                        <TextBlock
+                                            Style="{StaticResource CardHint}"
+                                            Text="{DynamicResource Settings.Hotkeys.Settings.Hint}" />
+                                    </StackPanel>
+                                    <Grid Grid.Column="1" Style="{StaticResource HotkeyField}">
+                                        <TextBox
+                                            x:Name="SettingsHotkey"
+                                            AutomationProperties.Name="{DynamicResource Settings.Hotkeys.Settings}"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Settings.Hint}"
+                                            Style="{StaticResource HotkeyBox}" />
+                                        <Button
+                                            x:Name="SettingsHotkeyClear"
+                                            AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Settings}"
+                                            Style="{StaticResource HotkeyClear}" />
+                                    </Grid>
+                                </Grid>
+                                <TextBlock x:Name="SettingsHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- The hotkeys' two modifiers held, alone, put each item's number on its icon
+                             the moment they are down, and bring the dock up, until they are let go
+                             (DockWindow.WatchWinCtrl). Each has its checkbox: the numbers, and the
+                             bringing up — off, the numbers still come up on a dock in sight. Here rather
+                             than with the items, since the dock comes up whether or not quick launch is
+                             on. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Hotkeys.Numbers}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Hotkeys.Numbers.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="NumbersOnWinCtrlCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Hotkeys.Numbers}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Numbers.Hint}"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Hotkeys.Reveal}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Hotkeys.Reveal.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="RevealOnWinCtrlCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Hotkeys.Reveal}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.Reveal.Hint}"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- The places, as the taskbar's Win+1 to 9 open its buttons: Win+Ctrl with
+                             the keypad's digit to begin with, since Windows has the number row's
+                             with the Windows key and every comfortable set of modifiers. Quick
+                             launch, on by default, turns all of them on and off at once: off, the
+                             dock lets go of them for other programs, and the card under it is
+                             greyed, holding them for when it is on again. Each row's checkbox does
+                             the same for its own item, greying the row's two boxes; all of them are
+                             ticked to begin with. Each item's second key is beside its first, none
+                             to begin with, under headings that name the two; the label column is
+                             one width for every row (SharedSizeGroup), so the rows and the headings
+                             wrap together where the page is too narrow for both. A row's label
+                             names its checkbox and its first box for a screen reader; the second
+                             is named by a label of its own, which says it is the second key. Before
+                             each label, the icon of the item in that place on the dock as this
+                             dialog has it, unsaved changes and all — set from the code, which
+                             follows the item list (ShowPlaceIcons). -->
+                        <TextBlock Style="{StaticResource GroupHeader}" Text="{DynamicResource Settings.Hotkeys.Places}" />
+                        <TextBlock
+                            Margin="2,0,0,8"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Hotkeys.Places.Hint}" />
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Hotkeys.QuickLaunch}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Hotkeys.QuickLaunch.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="QuickLaunchCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Hotkeys.QuickLaunch}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Hotkeys.QuickLaunch.Hint}"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}" IsEnabled="{Binding IsChecked, ElementName=QuickLaunchCheck}">
+                            <StackPanel Grid.IsSharedSizeScope="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right">
+                                        <TextBlock Style="{StaticResource PlaceHeading}" Text="{DynamicResource Settings.Hotkeys.Primary}" />
+                                        <TextBlock Style="{StaticResource PlaceHeading}" Text="{DynamicResource Settings.Hotkeys.Secondary}" />
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place1Check" AutomationProperties.LabeledBy="{Binding ElementName=Place1Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place1Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place1Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="1" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place1SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="1" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place1Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place1Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place1Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place1HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place1Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place1HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place1SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place1SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place1SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place1SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place1SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place2Check" AutomationProperties.LabeledBy="{Binding ElementName=Place2Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place2Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place2Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="2" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place2SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="2" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place2Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place2Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place2Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place2HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place2Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place2HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place2SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place2SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place2SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place2SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place2SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place3Check" AutomationProperties.LabeledBy="{Binding ElementName=Place3Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place3Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place3Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="3" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place3SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="3" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place3Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place3Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place3Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place3HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place3Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place3HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place3SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place3SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place3SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place3SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place3SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place4Check" AutomationProperties.LabeledBy="{Binding ElementName=Place4Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place4Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place4Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="4" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place4SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="4" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place4Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place4Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place4Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place4HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place4Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place4HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place4SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place4SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place4SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place4SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place4SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place5Check" AutomationProperties.LabeledBy="{Binding ElementName=Place5Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place5Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place5Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="5" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place5SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="5" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place5Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place5Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place5Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place5HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place5Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place5HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place5SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place5SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place5SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place5SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place5SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place6Check" AutomationProperties.LabeledBy="{Binding ElementName=Place6Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place6Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place6Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="6" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place6SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="6" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place6Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place6Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place6Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place6HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place6Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place6HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place6SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place6SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place6SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place6SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place6SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place7Check" AutomationProperties.LabeledBy="{Binding ElementName=Place7Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place7Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place7Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="7" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place7SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="7" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place7Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place7Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place7Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place7HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place7Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place7HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place7SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place7SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place7SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place7SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place7SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place8Check" AutomationProperties.LabeledBy="{Binding ElementName=Place8Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place8Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place8Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="8" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place8SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="8" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place8Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place8Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place8Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place8HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place8Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place8HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place8SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place8SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place8SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place8SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place8SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+
+                                <Grid Margin="0,6,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="PlaceLabel" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox x:Name="Place9Check" AutomationProperties.LabeledBy="{Binding ElementName=Place9Label}" Style="{StaticResource PlaceCheck}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image x:Name="Place9Icon" Style="{StaticResource PlaceIcon}" />
+                                            <TextBlock x:Name="Place9Label" Style="{StaticResource RowLabel}" loc:Localized.Key="Settings.Hotkeys.Place" loc:Localized.Value="9" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                    <TextBlock x:Name="Place9SecondaryName" Visibility="Collapsed" loc:Localized.Key="Settings.Hotkeys.Place.Secondary" loc:Localized.Value="9" />
+                                    <WrapPanel Grid.Column="1" Margin="-16,0,0,0" HorizontalAlignment="Right" IsEnabled="{Binding IsChecked, ElementName=Place9Check}">
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place9Hotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place9Label}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place9HotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place9Label}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place9HotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                        <StackPanel Style="{StaticResource PlaceKey}">
+                                            <Grid Style="{StaticResource HotkeyField}">
+                                                <TextBox x:Name="Place9SecondaryHotkey" AutomationProperties.LabeledBy="{Binding ElementName=Place9SecondaryName}" Style="{StaticResource HotkeyBox}" />
+                                                <Button x:Name="Place9SecondaryHotkeyClear" AutomationProperties.HelpText="{Binding Text, ElementName=Place9SecondaryName}" Style="{StaticResource HotkeyClear}" />
+                                            </Grid>
+                                            <TextBlock x:Name="Place9SecondaryHotkeyStatus" Style="{StaticResource HotkeyStatus}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Button
+                            x:Name="ResetHotkeysButton"
+                            Style="{StaticResource PageReset}"
+                            Content="{DynamicResource Settings.Hotkeys.Reset}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ==================== EXCLUSIONS ==================== -->
-            <!-- After Items, because it is the other list of programs the user keeps, though
-                 what it qualifies is Behaviour: the edge that page describes does nothing over
-                 the programs listed here while they fill the screen. Called Exclusions
+            <!-- After Items and their hotkeys, because it is the other list of programs the user
+                 keeps, though what it qualifies is Behaviour and Hotkeys: the edge the first
+                 describes does nothing over the programs listed here while they fill the screen,
+                 and the hotkeys are let go of while one is in front at all. Called Exclusions
                  rather than Fullscreen, which read as a setting for going fullscreen. No page
                  reset — the list is the user's own, like the pinned items, and Remove is how
                  an entry goes. -->

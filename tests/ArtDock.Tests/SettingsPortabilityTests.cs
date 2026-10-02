@@ -67,6 +67,7 @@ public class SettingsPortabilityTests : IDisposable
             LabelFontStyle = "Italic",
             CustomColors = ["#AABBCC", "#DDEEFF"],
             NoRevealApps = [@"C:\Games\Strategy\strategy.exe"],
+            Hotkeys = { ["ShowHide"] = "", ["Place2"] = "Win+Ctrl+Alt+2" },
             PinnedApps =
             [
                 new PinnedAppSetting { Id = "a", Label = "Editor", TargetPath = @"C:\App.exe" },
@@ -96,6 +97,7 @@ public class SettingsPortabilityTests : IDisposable
 
         Assert.Equal(original.CustomColors, back.CustomColors);
         Assert.Equal(original.NoRevealApps, back.NoRevealApps);
+        Assert.Equal(original.Hotkeys, back.Hotkeys);
         Assert.Equal(2, back.PinnedApps.Count);
         Assert.Equal("Editor", back.PinnedApps[0].Label);
         Assert.Equal(@"C:\App.exe", back.PinnedApps[0].TargetPath);
@@ -246,6 +248,16 @@ public class SettingsPortabilityTests : IDisposable
         if (type == typeof(List<string>))
         {
             return new List<string> { "#010203" };
+        }
+
+        if (type == typeof(List<int>))
+        {
+            return new List<int> { 4, 7 };
+        }
+
+        if (type == typeof(Dictionary<string, string>))
+        {
+            return new Dictionary<string, string> { ["Keyboard"] = "Win+Ctrl+Q", ["ShowHide"] = "" };
         }
 
         if (type == typeof(List<PinnedAppSetting>))

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using ArtDock.Dock;
@@ -269,6 +270,25 @@ public sealed class DockItemVisual : FrameworkElement
     }
 
     /// <summary>
+    /// The number on the icon's corner — the item's place for the hotkeys, 1 to 9 — or null for
+    /// none. Up while the Windows key and Ctrl are held; see <see cref="DrawBadge"/>.
+    /// </summary>
+    public int? Badge
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
     /// Launch-flash strength, 0 to 1. Driven by <see cref="DockBar"/> on the same tick
     /// as the wave.
     /// </summary>
@@ -360,6 +380,133 @@ public sealed class DockItemVisual : FrameworkElement
         {
             drawingContext.Pop();
         }
+
+        if (Badge is { } badge)
+        {
+            DrawBadge(drawingContext, badge);
+        }
+    }
+
+    /// <summary>
+    /// Draws a number on the icon's top-left corner, as Windows 11 draws a badge: a disc in the
+    /// accent colour with the number in the colour that reads on it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In the icon's own frame, so the wave magnifies it with the icon and the row's slide carries
+    /// it. A little over two-fifths of the icon across, about the size of a badge on the taskbar
+    /// at the stock icon size. The top left, where nothing else is drawn: the top right is where
+    /// Windows puts an app's own badge, a count of what is waiting. Not faded with the icon, by a
+    /// launch's pulse or a missing program's dimming, since it is about the key, not the item.
+    /// </para>
+    /// <para>
+    /// Lifted off the icon rather than stuck on it — asked for on 2026-10-02, after a first look
+    /// with a flat disc in a thick white ring: a soft shadow falling a little below it, the accent
+    /// a shade lighter at the top than at the bottom, as Windows' accent buttons are, and a thin
+    /// rim of half-white that keeps it apart from an icon of the same colour without outlining
+    /// it. Set a little out from the corner, into the margin round the icon, so it covers less
+    /// of the picture.
+    /// </para>
+    /// </remarks>
+    private void DrawBadge(DrawingContext drawingContext, int number)
+    {
+        var diameter = RestingSize * 0.42;
+        var radius = diameter / 2;
+        var centre = new Point(radius - (diameter * 0.12), radius - (diameter * 0.12));
+        var (fill, ink) = BadgeColours();
+
+        drawingContext.DrawEllipse(
+            BadgeShadow, pen: null, new Point(centre.X, centre.Y + (diameter * 0.08)), radius * 1.22, radius * 1.22);
+
+        var rim = new Pen(BadgeRimBrush, Math.Max(1, diameter * 0.05));
+        rim.Freeze();
+        drawingContext.DrawEllipse(fill, rim, centre, radius, radius);
+
+        var text = new FormattedText(
+            number.ToString(CultureInfo.InvariantCulture),
+            CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            BadgeTypeface,
+            diameter * 0.6,
+            ink,
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+        // Centred by its ink rather than by its line, which keeps room above and below for
+        // what a digit does not have.
+        var bounds = text.BuildGeometry(default).Bounds;
+        drawingContext.DrawText(
+            text,
+            new Point(centre.X - bounds.X - (bounds.Width / 2), centre.Y - bounds.Y - (bounds.Height / 2)));
+    }
+
+    /// <summary>The badges' rim: white at about half.</summary>
+    private static readonly Brush BadgeRimBrush = Frozen(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF));
+
+    /// <summary>
+    /// The badges' shadow: black, softest at its edge, drawn a little larger than the disc so a
+    /// ring of it shows — mostly below, where it is set.
+    /// </summary>
+    private static readonly Brush BadgeShadow = FrozenBrush(new RadialGradientBrush(
+        new GradientStopCollection
+        {
+            new GradientStop(Color.FromArgb(0x55, 0, 0, 0), 0.7),
+            new GradientStop(Color.FromArgb(0x22, 0, 0, 0), 0.86),
+            new GradientStop(Color.FromArgb(0x00, 0, 0, 0), 1)
+        }));
+
+    /// <summary>The badges' numbers: Windows' own face, as heavy as a badge's on the taskbar.</summary>
+    private static readonly Typeface BadgeTypeface =
+        new(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+
+    private static (Color Light, Color Dark) _badgeAccent;
+    private static Brush? _badgeFill;
+    private static Brush? _badgeInk;
+
+    /// <summary>
+    /// The badge's fill and the number's colour, from the accent Windows has now: from the accent
+    /// itself at the top to its darker shade at the bottom, the shade Windows 11's own controls
+    /// fill with on a light theme — and the number white on it, or black, should the accent be so
+    /// light that white would not read on its darker shade.
+    /// </summary>
+    /// <remarks>
+    /// Read as a badge is drawn rather than once, so a change of accent shows on the next badges
+    /// put up; brushes of the theme's own cannot be frozen, so these are made from the colours.
+    /// </remarks>
+    private static (Brush Fill, Brush Ink) BadgeColours()
+    {
+        var accent = (Light: Opaque(SystemColors.AccentColor), Dark: Opaque(SystemColors.AccentColorDark1));
+        if (_badgeFill is null || _badgeInk is null || accent != _badgeAccent)
+        {
+            _badgeAccent = accent;
+            _badgeFill = FrozenBrush(new LinearGradientBrush(accent.Light, accent.Dark, 90));
+
+            // By the darker shade, as Windows writes white on it: the default blue's lighter top is
+            // just past 0.18, where black has the better contrast by WCAG's measure, and a black
+            // number on Windows' own blue reads as a mistake.
+            _badgeInk = Frozen(Luminance(accent.Dark) > 0.18 ? Colors.Black : Colors.White);
+        }
+
+        return (_badgeFill, _badgeInk);
+    }
+
+    private static Color Opaque(Color color) => Color.FromRgb(color.R, color.G, color.B);
+
+    private static Brush FrozenBrush(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>A colour's relative luminance, 0 for black to 1 for white, as WCAG defines it.</summary>
+    private static double Luminance(Color color)
+    {
+        static double Linear(byte channel)
+        {
+            var c = channel / 255.0;
+            return c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Linear(color.R)) + (0.7152 * Linear(color.G)) + (0.0722 * Linear(color.B));
     }
 
     /// <summary>

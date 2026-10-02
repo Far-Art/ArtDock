@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using ArtDock.Controls;
 using ArtDock.Dock;
 using ArtDock.IconSets;
@@ -181,7 +182,8 @@ public sealed partial class SettingsWindow : Window
     /// Not the order the dialog shows them in. A page is numbered when it is added, at the end
     /// of this list, so a page put anywhere else in the dialog moves no other page's number —
     /// where numbering by position would reopen the dialog a page off for everyone whose file
-    /// names one. Icons came last, and stands below Behaviour.
+    /// names one. Icons came after About, and stands below Behaviour; Hotkeys came last, and
+    /// stands below Items.
     /// </remarks>
     private readonly TabItem[] _pages;
 
@@ -195,7 +197,7 @@ public sealed partial class SettingsWindow : Window
         _pages =
         [
             SizePage, AppearancePage, BehaviourPage, ItemsPage, ExclusionsPage, PositionPage,
-            SystemPage, AboutPage, IconsPage
+            SystemPage, AboutPage, IconsPage, HotkeysPage
         ];
 
         _store = store;
@@ -209,6 +211,7 @@ public sealed partial class SettingsWindow : Window
         BuildSwatches();
         BuildAddMenu();
         FillScreenBox();
+        BuildHotkeyRows();
 
         WheelHost.Content = _wheel;
         _wheel.ColorPicked += (_, color) =>
@@ -259,6 +262,27 @@ public sealed partial class SettingsWindow : Window
             _autostartWatch.Changed += (_, _) => Dispatcher.BeginInvoke(ShowAutostart);
             ShowAutostart();
         };
+    }
+
+    /// <summary>
+    /// Brings the dialog back to the front as it was left, for the tray's entry, the dock's menu
+    /// or the hotkey asking for it while it is open.
+    /// </summary>
+    /// <remarks>
+    /// Restored if it was minimised, which activating alone would leave on the taskbar; and to
+    /// whichever of its own dialogs is open over it — the item editor, a scan — as Alt+Tab goes,
+    /// since Windows activates no window that is disabled, and one of those disables it. Through
+    /// <see cref="AppLauncher.Activate"/>, for the reason the dialog opens through it.
+    /// </remarks>
+    public void BringToFront()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (WindowsApi.IsIconic(handle))
+        {
+            WindowsApi.ShowWindow(handle, WindowsApi.SW_RESTORE);
+        }
+
+        AppLauncher.Activate(WindowsApi.GetLastActivePopup(handle));
     }
 
     private void LoadFrom(DockSettings settings)
@@ -313,6 +337,8 @@ public sealed partial class SettingsWindow : Window
 
         LockOrderCheck.IsChecked = settings.LockItemOrder;
         LockContentsCheck.IsChecked = settings.LockItemContents;
+
+        LoadHotkeys(settings);
 
         _pinned.Clear();
         foreach (var app in settings.PinnedApps)
@@ -380,6 +406,7 @@ public sealed partial class SettingsWindow : Window
         IconSetBox.SelectionChanged += (_, _) =>
         {
             ItemRowIconConverter.SetIconSet(PinnedList, IconSetLibrary.Installed.Find(SelectedIconSet));
+            SchedulePlaceIcons();
             Preview();
         };
         LanguageFolderButton.Click += (_, _) => OpenPackFolder(PackKind.Language);
@@ -489,6 +516,19 @@ public sealed partial class SettingsWindow : Window
         ResetIconsButton.Click += (_, _) => ResetIconsPage();
         ClearItemsButton.Click += (_, _) => ClearItems();
         ResetBehaviourButton.Click += (_, _) => ResetBehaviourPage();
+        ResetHotkeysButton.Click += (_, _) => ResetHotkeysPage();
+        QuickLaunchCheck.Checked += (_, _) => OnHotkeysEdited();
+        QuickLaunchCheck.Unchecked += (_, _) => OnHotkeysEdited();
+        foreach (var check in _placeChecks)
+        {
+            check.Checked += (_, _) => OnHotkeysEdited();
+            check.Unchecked += (_, _) => OnHotkeysEdited();
+        }
+
+        NumbersOnWinCtrlCheck.Checked += (_, _) => Preview();
+        NumbersOnWinCtrlCheck.Unchecked += (_, _) => Preview();
+        RevealOnWinCtrlCheck.Checked += (_, _) => Preview();
+        RevealOnWinCtrlCheck.Unchecked += (_, _) => Preview();
         ResetSystemButton.Click += (_, _) => ResetSystemPage();
         ResetButton.Click += (_, _) => ResetToDefaults();
         ImportButton.Click += (_, _) => ImportSettings();
@@ -498,10 +538,11 @@ public sealed partial class SettingsWindow : Window
         SaveButton.Click += (_, _) => Save();
         CancelButton.Click += (_, _) => Close();
 
-        // Escape cancels, matching the button.
+        // Escape cancels, matching the button — but not out of a box recording a hotkey, where it
+        // puts back what the box held. This is the window's, and so hears the key before the box.
         PreviewKeyDown += (_, key) =>
         {
-            if (key.Key == System.Windows.Input.Key.Escape)
+            if (key.Key == System.Windows.Input.Key.Escape && !IsRecordingHotkey)
             {
                 Close();
             }
@@ -569,6 +610,11 @@ public sealed partial class SettingsWindow : Window
             HandleWidth = Math.Round(HandleWidthSlider.Value),
             NoRevealApps = [.. NoRevealPaths],
             BottomMargin = _bottomMargin,
+            Hotkeys = HotkeyActions.Store(HotkeyChoices(), _otherHotkeys),
+            QuickLaunch = QuickLaunch,
+            QuickLaunchOff = PlacesOff,
+            NumbersOnWinCtrl = NumbersOnWinCtrlCheck.IsChecked == true,
+            RevealOnWinCtrl = RevealOnWinCtrlCheck.IsChecked == true,
             RunAtLogin = RunAtLoginCheck.IsChecked == true,
             Theme = SelectedTheme,
             Language = SelectedLanguage,
@@ -1162,6 +1208,9 @@ public sealed partial class SettingsWindow : Window
     /// </remarks>
     public void RefreshRecycleBinRows()
     {
+        // The Hotkeys page shows it too, when it is among the first nine.
+        SchedulePlaceIcons();
+
         for (var index = 0; index < _pinned.Count; index++)
         {
             if (!DockPresets.IsRecycleBin(_pinned[index].TargetPath)
@@ -2121,6 +2170,320 @@ public sealed partial class SettingsWindow : Window
         NoRevealEmptyHint.Visibility = _noReveal.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    // ---- hotkeys -------------------------------------------------------------
+
+    /// <summary>One row of the Hotkeys page: the box that records, the × in it, and the line under it.</summary>
+    private sealed class HotkeyRow(HotkeyAction action, HotkeyRecorder recorder, Button clear, TextBlock status)
+    {
+        public HotkeyAction Action { get; } = action;
+
+        public HotkeyRecorder Recorder { get; } = recorder;
+
+        public Button Clear { get; } = clear;
+
+        public TextBlock Status { get; } = status;
+
+        /// <summary>
+        /// What was wrong with the last combination pressed into the box, until another is
+        /// recorded or the box is left.
+        /// </summary>
+        public HotkeyProblem? Refusal { get; set; }
+    }
+
+    /// <summary>The Hotkeys page's rows, by action, in the order the page lists them.</summary>
+    private readonly Dictionary<HotkeyAction, HotkeyRow> _hotkeyRows = [];
+
+    /// <summary>
+    /// Hotkeys stored under names this build does not know — a later version's actions — carried
+    /// through to Save as they were found, the way <see cref="_edge"/> is.
+    /// </summary>
+    private Dictionary<string, string> _otherHotkeys = [];
+
+    /// <summary>The hotkeys another program has, as the dock last found them, by action.</summary>
+    private IReadOnlyDictionary<HotkeyAction, Hotkey> _takenHotkeys = new Dictionary<HotkeyAction, Hotkey>();
+
+    /// <summary>Whether the dock was last told a box is recording, so it is told only of a change.</summary>
+    private bool _toldRecording;
+
+    /// <summary>
+    /// Raised with true as a box on the Hotkeys page starts recording, and with false once none
+    /// is — for the dock to let its hotkeys go meanwhile, or pressing the one being changed would
+    /// fire it rather than reach the box.
+    /// </summary>
+    public event EventHandler<bool>? HotkeyRecording;
+
+    /// <summary>True while a box on the Hotkeys page has the keyboard, and records.</summary>
+    private bool IsRecordingHotkey => _hotkeyRows.Values.Any(row => row.Recorder.IsRecording);
+
+    /// <summary>Says, beside each hotkey another program has, that it does.</summary>
+    public void ShowTakenHotkeys(IReadOnlyDictionary<HotkeyAction, Hotkey> taken)
+    {
+        _takenHotkeys = new Dictionary<HotkeyAction, Hotkey>(taken);
+        ShowHotkeyStatus();
+    }
+
+    /// <summary>Finds each action's row by its name, and makes its box record.</summary>
+    private void BuildHotkeyRows()
+    {
+        foreach (var action in HotkeyActions.All)
+        {
+            var name = action + "Hotkey";
+            if (FindName(name) is not TextBox box
+                || FindName(name + "Clear") is not Button clear
+                || FindName(name + "Status") is not TextBlock status)
+            {
+                throw new InvalidOperationException($"The Hotkeys page has no row named {name}.");
+            }
+
+            var row = new HotkeyRow(action, new HotkeyRecorder(box), clear, status);
+
+            row.Recorder.ValueChanged += (_, _) =>
+            {
+                row.Refusal = null;
+                OnHotkeysEdited();
+            };
+
+            row.Recorder.Refused += (_, problem) =>
+            {
+                row.Refusal = problem;
+                ShowHotkeyStatus();
+            };
+
+            row.Recorder.RecordingChanged += (_, _) =>
+            {
+                if (!row.Recorder.IsRecording && row.Refusal is not null)
+                {
+                    row.Refusal = null;
+                    ShowHotkeyStatus();
+                }
+
+                // Once the keyboard has settled: from one box to the next is a moment with none
+                // recording, and the dock would take its hotkeys back for it.
+                Dispatcher.BeginInvoke(TellRecording, DispatcherPriority.Input);
+            };
+
+            clear.Click += (_, _) =>
+            {
+                row.Recorder.Value = null;
+                row.Refusal = null;
+                OnHotkeysEdited();
+            };
+
+            _hotkeyRows[action] = row;
+        }
+
+        for (var place = 1; place <= _placeIcons.Length; place++)
+        {
+            _placeIcons[place - 1] = FindName($"Place{place}Icon") as Image
+                ?? throw new InvalidOperationException($"The Hotkeys page has no icon named Place{place}Icon.");
+            _placeChecks[place - 1] = FindName($"Place{place}Check") as CheckBox
+                ?? throw new InvalidOperationException($"The Hotkeys page has no checkbox named Place{place}Check.");
+        }
+
+        // The items move, come and go on the Items page — and the whole list is read again when
+        // the dock changes it — so the icons follow the list.
+        _pinned.CollectionChanged += (_, _) => SchedulePlaceIcons();
+    }
+
+    /// <summary>The icon beside each place's row, place 1 first.</summary>
+    private readonly Image[] _placeIcons = new Image[9];
+
+    /// <summary>The checkbox that turns each place's keys on and off by themselves, place 1 first.</summary>
+    private readonly CheckBox[] _placeChecks = new CheckBox[9];
+
+    /// <summary>Whether <see cref="ShowPlaceIcons"/> is already on its way.</summary>
+    private bool _placeIconsPending;
+
+    /// <summary>Shows the places' icons afresh, once whatever is changing the list has finished.</summary>
+    /// <remarks>
+    /// A list read again is cleared and filled a pin at a time, each a change of its own, and the
+    /// Recycle Bin's icon is read afresh every time it is asked for; so the icons are put right
+    /// once, after the last. Before the next frame is drawn, so a page opening shows them from
+    /// the first.
+    /// </remarks>
+    private void SchedulePlaceIcons()
+    {
+        if (_placeIconsPending)
+        {
+            return;
+        }
+
+        _placeIconsPending = true;
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                _placeIconsPending = false;
+                ShowPlaceIcons();
+            },
+            DispatcherPriority.Normal);
+    }
+
+    /// <summary>
+    /// Puts before each place's name the icon of the item in that place, with the item's name as
+    /// its tooltip — from this dialog's list, unsaved changes and all, counted without the
+    /// separators as the hotkeys count them, and drawn from the icon set chosen on the Icons
+    /// page, as the dock draws it. Nothing past the last item.
+    /// </summary>
+    private void ShowPlaceIcons()
+    {
+        var items = _pinned.Where(pin => !pin.IsSeparator).ToList();
+        var set = IconSetLibrary.Installed.Find(SelectedIconSet);
+
+        for (var index = 0; index < _placeIcons.Length; index++)
+        {
+            var pin = index < items.Count ? items[index] : null;
+            var icon = _placeIcons[index];
+
+            icon.Source = pin is null ? null : PinnedAppsService.LoadIcon(PinnedAppsService.ToDockItem(pin), set);
+            icon.ToolTip = pin is { Label.Length: > 0 } ? pin.Label : null;
+            System.Windows.Automation.AutomationProperties.SetName(icon, pin?.Label ?? string.Empty);
+        }
+    }
+
+    private void LoadHotkeys(DockSettings settings)
+    {
+        foreach (var row in _hotkeyRows.Values)
+        {
+            row.Recorder.Value = settings.HotkeyFor(row.Action);
+            row.Refusal = null;
+        }
+
+        _otherHotkeys = settings.Hotkeys
+            .Where(pair => !HotkeyActions.IsAction(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+
+        QuickLaunchCheck.IsChecked = settings.QuickLaunch;
+        ShowPlacesOff(settings.QuickLaunchOff);
+        NumbersOnWinCtrlCheck.IsChecked = settings.NumbersOnWinCtrl;
+        RevealOnWinCtrlCheck.IsChecked = settings.RevealOnWinCtrl;
+
+        UpdateHotkeyControls();
+    }
+
+    /// <summary>Whether the items' hotkeys are to be registered, as the page has it.</summary>
+    private bool QuickLaunch => QuickLaunchCheck.IsChecked == true;
+
+    /// <summary>The places whose keys are off by themselves, as the page has them — their checkboxes not ticked.</summary>
+    private List<int> PlacesOff =>
+        [.. Enumerable.Range(1, _placeChecks.Length).Where(place => _placeChecks[place - 1].IsChecked != true)];
+
+    /// <summary>Ticks each place's checkbox, but for those of the places that are off.</summary>
+    private void ShowPlacesOff(IReadOnlyCollection<int> placesOff)
+    {
+        for (var place = 1; place <= _placeChecks.Length; place++)
+        {
+            _placeChecks[place - 1].IsChecked = !placesOff.Contains(place);
+        }
+    }
+
+    /// <summary>The hotkey each row holds.</summary>
+    private Dictionary<HotkeyAction, Hotkey?> HotkeyChoices() =>
+        _hotkeyRows.ToDictionary(pair => pair.Key, pair => pair.Value.Recorder.Value);
+
+    private void OnHotkeysEdited()
+    {
+        UpdateHotkeyControls();
+        Preview();
+    }
+
+    /// <summary>
+    /// Greys each box's × with nothing to clear — which hides it — and says what is wrong with
+    /// each row.
+    /// </summary>
+    private void UpdateHotkeyControls()
+    {
+        foreach (var row in _hotkeyRows.Values)
+        {
+            row.Clear.IsEnabled = row.Recorder.Value is not null;
+        }
+
+        ShowHotkeyStatus();
+    }
+
+    /// <summary>
+    /// Says, under each row, the worst that is wrong with it: keys just pressed that cannot be a
+    /// hotkey; keys another row has, which that row keeps; keys another program has; and,
+    /// for keys that work, what they may cost — Ctrl+Alt is AltGr on many keyboards, and
+    /// without the Windows key a combination is one programs may want for themselves. Nothing
+    /// for the items while quick launch is off, nor for an item turned off by itself: their keys
+    /// are nobody's then, theirs included.
+    /// </summary>
+    private void ShowHotkeyStatus()
+    {
+        var choices = HotkeyActions.InUse(HotkeyChoices(), QuickLaunch, PlacesOff);
+
+        foreach (var row in _hotkeyRows.Values)
+        {
+            var value = row.Recorder.Value;
+            var message = !choices.ContainsKey(row.Action) ? null : row.Refusal switch
+            {
+                HotkeyProblem.Reserved => Localizer.Get("Settings.Hotkeys.Reserved"),
+                HotkeyProblem.Windows => Localizer.Get("Settings.Hotkeys.Windows"),
+                HotkeyProblem.NeedsModifier or HotkeyProblem.NotAKey => Localizer.Get("Settings.Hotkeys.NeedsModifier"),
+                _ => HotkeyActions.SharedWith(choices, row.Action) is { } earlier
+                        ? Localizer.Format("Settings.Hotkeys.Shared", HotkeyLabel(earlier))
+                    : value is { } hotkey && _takenHotkeys.TryGetValue(row.Action, out var taken) && taken == hotkey
+                        ? Localizer.Get("Settings.Hotkeys.Taken")
+                    : value is { IsAltGr: true }
+                        ? Localizer.Get("Settings.Hotkeys.AltGr")
+                    : value is { HasWin: false }
+                        ? Localizer.Get("Settings.Hotkeys.Programs")
+                    : null
+            };
+
+            row.Status.Text = message ?? string.Empty;
+            row.Status.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    /// <summary>What a row is called on the page, for another row to say it has its keys.</summary>
+    private static string HotkeyLabel(HotkeyAction action) => action switch
+    {
+        HotkeyAction.Keyboard => Localizer.Get("Settings.Hotkeys.Take"),
+        HotkeyAction.ShowHide => Localizer.Get("Settings.Hotkeys.ShowHide"),
+        HotkeyAction.Settings => Localizer.Get("Settings.Hotkeys.Settings"),
+        _ when HotkeyActions.IsSecondary(action) => Localizer.Format("Settings.Hotkeys.Place.Secondary", HotkeyActions.Place(action)),
+        _ => Localizer.Format("Settings.Hotkeys.Place", HotkeyActions.Place(action))
+    };
+
+    /// <summary>Tells the dock whether a box is recording, if that has changed.</summary>
+    private void TellRecording()
+    {
+        var recording = IsRecordingHotkey;
+        if (recording == _toldRecording)
+        {
+            return;
+        }
+
+        _toldRecording = recording;
+        HotkeyRecording?.Invoke(this, recording);
+    }
+
+    /// <remarks>
+    /// Back to the hotkeys a new dock starts with, quick launch on, for every item, and the items'
+    /// numbers and the dock both up on Win+Ctrl. Those under names this build does not know are left as they were,
+    /// being no row's here.
+    /// </remarks>
+    private void ResetHotkeysPage()
+    {
+        var defaults = new DockSettings();
+
+        _loading = true;
+        QuickLaunchCheck.IsChecked = defaults.QuickLaunch;
+        ShowPlacesOff(defaults.QuickLaunchOff);
+        NumbersOnWinCtrlCheck.IsChecked = defaults.NumbersOnWinCtrl;
+        RevealOnWinCtrlCheck.IsChecked = defaults.RevealOnWinCtrl;
+        _loading = false;
+
+        foreach (var row in _hotkeyRows.Values)
+        {
+            row.Recorder.Value = defaults.HotkeyFor(row.Action);
+            row.Refusal = null;
+        }
+
+        OnHotkeysEdited();
+    }
+
     private void ResetSystemPage()
     {
         var defaults = new DockSettings();
@@ -2773,6 +3136,13 @@ public sealed partial class SettingsWindow : Window
             ShowAbout();
             ShowEdgeOffset();
             UpdateItemLocks();
+
+            foreach (var row in _hotkeyRows.Values)
+            {
+                row.Recorder.Show();
+            }
+
+            ShowHotkeyStatus();
         });
 
     /// <summary>

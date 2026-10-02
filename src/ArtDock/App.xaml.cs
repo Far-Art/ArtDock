@@ -28,11 +28,12 @@ public partial class App : Application
 
         // Before anything is created. A second dock would overlap the first on the same
         // screen edge, add a second identical tray icon, and race it for the settings file.
+        var request = SingleInstance.RequestOf(e.Args);
         if (!SingleInstance.TryClaim())
         {
             // Reported rather than acted on: whether this launch wants an answer depends on
             // whether the dock can be seen, and only the copy already running knows that.
-            SingleInstance.NotifyExisting(showSettings: WantsSettings(e.Args));
+            SingleInstance.NotifyExisting(request);
             Shutdown();
             return;
         }
@@ -95,6 +96,18 @@ public partial class App : Application
         _dockWindow = new DockWindow(_settings, _menus);
         _dockWindow.SettingsRequested += (_, _) => ShowSettings();
 
+        // The hotkey that hides or shows the dock does what the tray's entry does.
+        _dockWindow.ShowHideRequested += (_, _) => ToggleDock();
+
+        // Which hotkeys another program has is said on the settings dialog's Hotkeys page.
+        _dockWindow.TakenHotkeysChanged += (_, _) =>
+        {
+            if (_settingsWindow is { IsLoaded: true } && _dockWindow is { } dock)
+            {
+                _settingsWindow.ShowTakenHotkeys(dock.TakenHotkeys);
+            }
+        };
+
         // The dialog has no watch on the bin of its own; the dock's tells its list as well.
         _dockWindow.RecycleBinIconChanged += (_, _) =>
         {
@@ -107,12 +120,25 @@ public partial class App : Application
 
         // Now that there is a dock to ask about, a later launch has somewhere to be sent — and
         // the uninstaller somewhere to ask for the dock to go, which it does the way Exit does.
-        SingleInstance.Listen(OnRelaunched, ShowSettings, Quit);
+        SingleInstance.Listen(OnRelaunched, ShowSettings, Quit, ToggleDock, () => _dockWindow?.ToggleKeyboard());
 
         _tray = new TrayIcon(_menus);
         _tray.SettingsRequested += (_, _) => ShowSettings();
         _tray.ToggleRequested += (_, _) => ToggleDock();
         _tray.ExitRequested += (_, _) => Quit();
+
+        // Hide dock or Show dock acts on where the dock is, so it is worded from there, whatever
+        // moved it — auto-hide, a window in front filling the display, a dialog or the keyboard
+        // holding it up — and not only after the entry itself. From the start as well: a dock
+        // started behind a maximized window is on its way out before there is a tray to tell.
+        _tray.SetDockShown(_dockWindow.IsDockShown);
+        _dockWindow.DockShownChanged += (_, _) =>
+        {
+            if (_dockWindow is { } dock)
+            {
+                _tray?.SetDockShown(dock.IsDockShown);
+            }
+        };
 
         // Gives back what a dialog, a menu or a run of the wave leaves behind, once the dock
         // has gone quiet again. Without it the dock holds its busiest moment indefinitely.
@@ -120,9 +146,17 @@ public partial class App : Application
 
         // Lets a shortcut open the dialog straight away, rather than making the tray icon
         // the only route to it.
-        if (WantsSettings(e.Args))
+        if (request == LaunchRequest.Settings)
         {
             ShowSettings();
+        }
+
+        // And take the keyboard, once the dock is up to be used from it. --toggle asks nothing
+        // of a dock that has only just started: showing it is what starting it does.
+        if (request == LaunchRequest.Keyboard)
+        {
+            Dispatcher.BeginInvoke(
+                () => _dockWindow?.ToggleKeyboard(), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
 
         if (noGpuAdopted)
@@ -149,9 +183,6 @@ public partial class App : Application
             "ArtDock",
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
-
-    private static bool WantsSettings(string[] args) =>
-        args.Any(arg => arg.Equals("--settings", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// ArtDock was launched again while this copy is running.
@@ -255,7 +286,7 @@ public partial class App : Application
 
         if (_settingsWindow is { IsLoaded: true })
         {
-            _settingsWindow.Activate();
+            _settingsWindow.BringToFront();
             return;
         }
 
@@ -291,6 +322,18 @@ public partial class App : Application
 
         _settingsWindow.ItemLabelPreviewed += (_, label) => _dockWindow?.PreviewItemLabel(label);
 
+        // While a box on the Hotkeys page records, the dock lets its hotkeys go, or pressing
+        // the one being changed would fire it rather than reach the box.
+        _settingsWindow.HotkeyRecording += (_, recording) => _dockWindow?.SetHotkeyRecording(recording);
+
+        // And the page says which of them another program has — asked afresh, since one may
+        // have been let go of since the dock started.
+        if (_dockWindow is { } dock)
+        {
+            dock.RetryHotkeys();
+            _settingsWindow.ShowTakenHotkeys(dock.TakenHotkeys);
+        }
+
         _settingsWindow.ExitRequested += (_, _) => Quit();
 
         _dockWindow?.HoldRevealed(true);
@@ -316,6 +359,10 @@ public partial class App : Application
                 // ApplySettings rebuilds from the values as they were before the preview.
                 store.Save(restored);
             }
+
+            // A box closed while it was recording says nothing more, and the hotkeys in force —
+            // the ones just put back, if this was a cancel — are taken up again.
+            _dockWindow?.SetHotkeyRecording(false);
 
             _settingsWindow = null;
             _dockWindow?.PreviewMagnification(false);
@@ -369,8 +416,8 @@ public partial class App : Application
             return;
         }
 
+        // The tray's entry is reworded by the dock's DockShownChanged, as for any other move.
         _dockWindow.ToggleVisibility();
-        _tray?.SetDockShown(_dockWindow.IsDockShown);
     }
 
     protected override void OnExit(ExitEventArgs e)

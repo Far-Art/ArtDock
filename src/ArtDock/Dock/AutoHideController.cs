@@ -126,6 +126,12 @@ public sealed class AutoHideController
     /// </remarks>
     private int _holds;
 
+    /// <summary>
+    /// True while the holds have up a dock that had been put away from the tray, which goes
+    /// away again once the last of them lets go — see <see cref="HoldRevealed"/>.
+    /// </summary>
+    private bool _putBack;
+
     private DateTime _outsideSince = DateTime.MaxValue;
     private DateTime _atEdgeSince = DateTime.MaxValue;
 
@@ -179,13 +185,19 @@ public sealed class AutoHideController
 
     /// <summary>
     /// True while the dock is away because it was put away on purpose — hidden from the tray
-    /// while nothing was hiding it — which only the tray brings back.
+    /// while nothing was hiding it — which only the tray brings back for good.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Not the edge, and not a window in front going: a dock put away from the tray while a
     /// maximized window is in front would otherwise come back the moment that window did, or
     /// the moment the pointer brushed the bottom of the screen. Nor is it marked by the handle,
     /// which would be offering something the pointer cannot do.
+    /// </para>
+    /// <para>
+    /// Whatever holds the dock up — the settings dialog, for its preview — brings it back for
+    /// as long as it holds it, and no longer; see <see cref="HoldRevealed"/>.
+    /// </para>
     /// </remarks>
     public bool IsPutAway { get; private set; }
 
@@ -371,22 +383,79 @@ public sealed class AutoHideController
     /// hiding once nothing is.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Adjusting settings while the dock keeps sliding away is unworkable — you cannot see
     /// what a change did.
+    /// </para>
+    /// <para>
+    /// A dock put away from the tray comes up for it as well, the settings dialog's preview
+    /// being the point of the dialog, and goes away again when the last hold lets go — put
+    /// away, as it was, even with a window in front that hides it anyway, so that window going
+    /// does not bring it back. Not if the tray has said otherwise meanwhile
+    /// (<see cref="Choose"/>), nor once auto-hide has been turned on, which has the dock from
+    /// then on. Asked for on 2026-10-02: the dock used to stay up after the dialog closed,
+    /// with the tray's entry still offering to show it. The keyboard's hold is one of these
+    /// too, so a dialog opened from the dock's menu while it had the keys puts the dock away
+    /// when that dialog closes, rather than leaving it up.
+    /// </para>
     /// </remarks>
-    public void HoldRevealed(bool hold)
+    /// <param name="hold">True to take a hold, false to let one go.</param>
+    /// <param name="lingers">
+    /// Letting go: false sends a dock that hides straight back, rather than after the hide delay —
+    /// for a hold that turned out to be the start of something else, the Windows key and Ctrl
+    /// pressed on the way to another shortcut, where the delay would only leave the dock up over it.
+    /// </param>
+    public void HoldRevealed(bool hold, bool lingers = true)
     {
         _holds = Math.Max(0, _holds + (hold ? 1 : -1));
 
         if (_holds > 0)
         {
+            // Asked before the reveal, which ends the putting away.
+            _putBack |= IsPutAway;
             Reveal();
             return;
         }
 
+        if (_putBack)
+        {
+            _putBack = false;
+
+            if (!IsEnabled)
+            {
+                Hide(putAway: true);
+                return;
+            }
+        }
+
         // Released: start the hide timer from now rather than from whenever the pointer
-        // last wandered off, so the dock does not vanish the instant a dialog closes.
-        _outsideSince = DateTime.UtcNow;
+        // last wandered off, so the dock does not vanish the instant a dialog closes — or, not
+        // lingering, from long enough ago that the next look sends it away.
+        _outsideSince = lingers ? DateTime.UtcNow : DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// Hides the dock or brings it back because it was asked to in so many words — the tray's
+    /// entry, the hotkey, a second launch — rather than by anything that moves it of its own
+    /// accord.
+    /// </summary>
+    /// <remarks>
+    /// A choice, and kept: made while something holds the dock up, it is not undone when the
+    /// hold lets go. A dock put away, brought up for the settings dialog, then hidden from the
+    /// tray and shown again is not put away once more when the dialog closes.
+    /// </remarks>
+    public void Choose(bool shown)
+    {
+        _putBack = false;
+
+        if (shown)
+        {
+            Reveal();
+        }
+        else
+        {
+            Hide();
+        }
     }
 
     private void OnTick(object? sender, EventArgs e)
@@ -736,16 +805,21 @@ public sealed class AutoHideController
         && cursor.Y >= _shownTop
         && IsUnderDock(across);
 
-    public void Hide()
+    /// <summary>
+    /// Slides the dock away. Hidden with nothing hiding it, it is the tray's <em>Hide dock</em>:
+    /// put away on purpose.
+    /// </summary>
+    public void Hide() => Hide(putAway: !Hides);
+
+    private void Hide(bool putAway)
     {
         if (Visibility is DockVisibility.Hiding or DockVisibility.Hidden)
         {
             return;
         }
 
-        // Hidden with nothing hiding the dock is the tray's Hide dock: put away on purpose.
         // Before the change of visibility, which the handle hears about and asks this.
-        IsPutAway = !Hides;
+        IsPutAway = putAway;
 
         Visibility = DockVisibility.Hiding;
         _outsideSince = DateTime.MaxValue;
@@ -787,9 +861,11 @@ public sealed class AutoHideController
     /// </para>
     /// <para>
     /// With nothing hiding the dock — auto-hide off, and no window in front filling its
-    /// display — what reveals it is the tray, the settings dialog, auto-hide being turned off,
-    /// or such a window going; and nothing hides it again to let go. So it counts as a lift,
-    /// which is let go of like one, once the pointer has been away for the hide delay.
+    /// display — what reveals it is the tray, auto-hide being turned off, such a window going,
+    /// or something holding it up, as the settings dialog does — which puts a dock that had
+    /// been put away back away when it lets go (<see cref="HoldRevealed"/>); and nothing else
+    /// hides it again to let go. So it counts as a lift, which is let go of like one, once the
+    /// pointer has been away for the hide delay.
     /// </para>
     /// </remarks>
     public void Reveal()

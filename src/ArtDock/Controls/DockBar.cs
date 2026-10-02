@@ -532,6 +532,13 @@ public sealed class DockBar : Canvas
     /// <summary>Raised when an icon is activated by click.</summary>
     public event EventHandler<DockItem>? Activated;
 
+    /// <summary>
+    /// Raised on every look the dock takes at the pointer, some thirty times a second, whatever it
+    /// finds — for what else has to be looked at as often, without a timer of its own to wake the
+    /// machine: the keys the items' numbers wait for.
+    /// </summary>
+    public event EventHandler? Polled;
+
     /// <summary>Raised when a drag has moved an icon to a new position.</summary>
     public event EventHandler<(int From, int To)>? Reordered;
 
@@ -892,6 +899,7 @@ public sealed class DockBar : Canvas
 
         _items.Clear();
         _items.AddRange(next);
+        ApplyBadges();
 
         // The row that was just composed is the order to draw, so nothing is displaced.
         ResetDisplayOrder();
@@ -938,6 +946,46 @@ public sealed class DockBar : Canvas
         if (RefreshTooltipReserve() || countChanged)
         {
             RaisePreferredSizeChanged();
+        }
+    }
+
+    /// <summary>The places whose numbers are up, as bits — see <see cref="ShowBadges"/>.</summary>
+    private int _badgedPlaces;
+
+    /// <summary>
+    /// Puts each item's number for the hotkeys on its icon — its place, 1 to 9, counted without
+    /// the separators as the hotkeys count them — for the places whose bits are set in
+    /// <paramref name="places"/>, bit 1 for the first, and takes every other number down; 0 takes
+    /// them all down.
+    /// </summary>
+    /// <remarks>
+    /// Kept, and put on the row again whenever it is rebuilt, so an item added or moved while the
+    /// numbers are up is numbered where it now stands. A drop preview is not an item yet, and is
+    /// not counted.
+    /// </remarks>
+    public void ShowBadges(int places)
+    {
+        if (places == _badgedPlaces)
+        {
+            return;
+        }
+
+        _badgedPlaces = places;
+        ApplyBadges();
+    }
+
+    private void ApplyBadges()
+    {
+        var place = 0;
+        foreach (var visual in _items)
+        {
+            var counted = !visual.IsGhost && DockKeys.CanHold(visual.Item);
+            if (counted)
+            {
+                place++;
+            }
+
+            visual.Badge = counted && place <= 9 && (_badgedPlaces & (1 << place)) != 0 ? place : null;
         }
     }
 
@@ -1797,6 +1845,8 @@ public sealed class DockBar : Canvas
     /// <summary>Wakes the wave as soon as the cursor is over the dock.</summary>
     private void OnCursorWatchTick(object? sender, EventArgs e)
     {
+        Polled?.Invoke(this, EventArgs.Empty);
+
         // A drop preview holds the dock flat and drives its own redraws; waking the wave
         // here would only start a ramp the next tick immediately cancels.
         if (_renderingHooked || _ghostItems.Count > 0 || !TryGetLocalCursor(out var local))
@@ -1814,14 +1864,22 @@ public sealed class DockBar : Canvas
     /// Presses whichever icon the cursor is over.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Driven by the window procedure rather than by WPF's <c>MouseLeftButtonDown</c>, which
     /// never fires here: <c>WS_EX_NOACTIVATE</c> stops WPF routing mouse input to this window
-    /// at all. The messages still reach the HWND, and the hovered icon is already known from
-    /// the cursor poll, so this needs nothing WPF's routing would have supplied.
+    /// at all. The messages still reach the HWND, and the cursor is read here, so this needs
+    /// nothing WPF's routing would have supplied.
+    /// </para>
+    /// <para>
+    /// The icon is read afresh rather than taken from the last frame's hover, which stops
+    /// following the cursor while an item is held (<see cref="TrackCursor"/>). The keyboard holds
+    /// one, and lets go only as the press that ends it arrives — the hover from before that still
+    /// named the icon the keys were on, or none, and the click landed there. Not while something
+    /// else holds an item: that hold is in charge of what the dock shows, the hover included.
+    /// </para>
     /// </remarks>
     public void BeginPress()
     {
-        _pressedIndex = _hoveredIndex;
         _dragging = false;
         _dragIndex = -1;
         _dragTarget = -1;
@@ -1829,8 +1887,14 @@ public sealed class DockBar : Canvas
         if (TryGetLocalCursor(out var local))
         {
             _pressX = local.X;
+
+            if (_focusIndex < 0 || _focusIsPreview)
+            {
+                UpdateHovered(IsPointingAtDock(local) ? local : null);
+            }
         }
 
+        _pressedIndex = _hoveredIndex;
     }
 
     /// <summary>Releases a press, activating the icon if the cursor never left it.</summary>
@@ -2328,6 +2392,35 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public DockItem? ItemUnderCursor() =>
         TryGetLocalCursor(out var local) ? ItemAt(local) : null;
+
+    /// <summary>
+    /// Where an item is drawn at this moment — magnified, if the wave has it — in this element's
+    /// coordinates; null when the dock does not have it.
+    /// </summary>
+    /// <remarks>
+    /// For a menu opened from the keyboard, which is put where a right-click on the item would
+    /// have put it.
+    /// </remarks>
+    public Rect? ItemBounds(DockItem item)
+    {
+        var index = _items.FindIndex(visual => ReferenceEquals(visual.Item, item));
+        if (index < 0)
+        {
+            index = _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == item.Id);
+        }
+
+        if (index < 0 || index >= _sizes.Length)
+        {
+            return null;
+        }
+
+        var size = _sizes[index];
+        return new Rect(
+            _iconsLeft + _offsets[index] + SlotShift(index),
+            BarBottom - Metrics.PaddingY - size,
+            size,
+            size);
+    }
 
     /// <summary>
     /// The area that keeps the wave alive: the bar at this frame's amplitude, widened by

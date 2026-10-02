@@ -3,6 +3,22 @@ using ArtDock.Interop;
 
 namespace ArtDock.Services;
 
+/// <summary>What a launch of ArtDock asks of the dock, by the switch it was given.</summary>
+internal enum LaunchRequest
+{
+    /// <summary>No switch: the dock, or word of where it is.</summary>
+    Plain,
+
+    /// <summary><c>--settings</c>: the settings dialog.</summary>
+    Settings,
+
+    /// <summary><c>--toggle</c>: hide the dock, or show it, as its hotkey does.</summary>
+    Toggle,
+
+    /// <summary><c>--keyboard</c>: the dock takes the keyboard, or gives it back, as its hotkey does.</summary>
+    Keyboard
+}
+
 /// <summary>
 /// Keeps one ArtDock to a session, and tells the copy already running that it was launched
 /// again.
@@ -22,10 +38,12 @@ namespace ArtDock.Services;
 /// <para>
 /// What a second launch should do is the running instance's decision, because only it knows
 /// whether its dock can be seen. So the copy that loses the race does not act; it reports
-/// the launch and leaves. There are two reports: a plain launch, and one carrying
-/// <c>--settings</c>, which keeps the flag's meaning across the boundary — it asks for the
-/// dialog, and the dialog is opened by the copy that has one. A third comes from the
-/// uninstaller rather than a launch, and asks the dock to exit; see <see cref="CloseRunning"/>.
+/// the launch and leaves. There is a report for a plain launch, and one for each switch that
+/// asks something of the dock — <c>--settings</c>, which keeps the flag's meaning across the
+/// boundary, since the dialog is opened by the copy that has one; and <c>--toggle</c> and
+/// <c>--keyboard</c>, which do what the dock's hotkeys do, so a mouse button, a macro pad or a
+/// script can do it without a key registered. Another comes from the uninstaller rather than a
+/// launch, and asks the dock to exit; see <see cref="CloseRunning"/>.
 /// </para>
 /// <para>
 /// The reports are named events rather than window messages. A registered message broadcast
@@ -53,6 +71,10 @@ internal static class SingleInstance
     private const string ShowSettingsName = @"Local\ArtDock.ShowSettings";
 
     private const string ExitName = @"Local\ArtDock.Exit";
+
+    private const string ToggleName = @"Local\ArtDock.Toggle";
+
+    private const string KeyboardName = @"Local\ArtDock.Keyboard";
 
     private static Mutex? _claim;
 
@@ -86,7 +108,10 @@ internal static class SingleInstance
     /// <param name="onRelaunched">A plain second launch.</param>
     /// <param name="onShowSettings">A second launch with <c>--settings</c>.</param>
     /// <param name="onExitRequested">The uninstaller asking the dock to go; see <see cref="CloseRunning"/>.</param>
-    public static void Listen(Action onRelaunched, Action onShowSettings, Action onExitRequested)
+    /// <param name="onToggle">A second launch with <c>--toggle</c>.</param>
+    /// <param name="onKeyboard">A second launch with <c>--keyboard</c>.</param>
+    public static void Listen(
+        Action onRelaunched, Action onShowSettings, Action onExitRequested, Action onToggle, Action onKeyboard)
     {
         if (_claim is null || _listeners.Count > 0)
         {
@@ -98,6 +123,27 @@ internal static class SingleInstance
         Watch(RelaunchedName, onRelaunched, dispatcher);
         Watch(ShowSettingsName, onShowSettings, dispatcher);
         Watch(ExitName, onExitRequested, dispatcher);
+        Watch(ToggleName, onToggle, dispatcher);
+        Watch(KeyboardName, onKeyboard, dispatcher);
+    }
+
+    /// <summary>What a launch with these arguments asks for: the first switch there is, of the ones the dock knows.</summary>
+    public static LaunchRequest RequestOf(IEnumerable<string> args)
+    {
+        foreach (var arg in args)
+        {
+            switch (arg.ToLowerInvariant())
+            {
+                case "--settings":
+                    return LaunchRequest.Settings;
+                case "--toggle":
+                    return LaunchRequest.Toggle;
+                case "--keyboard":
+                    return LaunchRequest.Keyboard;
+            }
+        }
+
+        return LaunchRequest.Plain;
     }
 
     private static void Watch(string name, Action action, Dispatcher dispatcher)
@@ -116,11 +162,18 @@ internal static class SingleInstance
         _listeners.Add((wake, watch));
     }
 
-    /// <summary>Tells the instance already running that it was launched again.</summary>
-    /// <param name="showSettings">True when this launch asked for the settings dialog.</param>
-    public static void NotifyExisting(bool showSettings)
+    /// <summary>Tells the instance already running that it was launched again, and what for.</summary>
+    public static void NotifyExisting(LaunchRequest request)
     {
-        if (!EventWaitHandle.TryOpenExisting(showSettings ? ShowSettingsName : RelaunchedName, out var wake))
+        var name = request switch
+        {
+            LaunchRequest.Settings => ShowSettingsName,
+            LaunchRequest.Toggle => ToggleName,
+            LaunchRequest.Keyboard => KeyboardName,
+            _ => RelaunchedName
+        };
+
+        if (!EventWaitHandle.TryOpenExisting(name, out var wake))
         {
             // The claim is held by a copy that has not finished starting, or is on its way
             // out. Either way there is nothing to talk to, and this process is leaving.

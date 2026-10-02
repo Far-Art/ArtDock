@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -192,6 +193,7 @@ public sealed partial class DockWindow : Window
 
         _frontWatch.Tick += (_, _) => CheckFront();
         _onForeground = (_, _, _, _, _, _, _) => CheckFront(foregroundChanged: true);
+        _dock.Polled += (_, _) => WatchWinCtrl();
 
         _runningApps.Changed += OnRunningAppsChanged;
         _settings.Changed += (_, updated) => Dispatcher.Invoke(() => ApplySettings(updated));
@@ -205,6 +207,9 @@ public sealed partial class DockWindow : Window
         Closed += (_, _) =>
         {
             _closed = true;
+            EndKeyboard(giveBack: false);
+            _keys?.Close();
+            _hotkeys?.Dispose();
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _runningApps.Dispose();
@@ -216,7 +221,7 @@ public sealed partial class DockWindow : Window
         };
     }
 
-    /// <summary>Raised when the user asks for the settings dialog from the dock's own menu.</summary>
+    /// <summary>Raised when the user asks for the settings dialog from the dock's own menu, or by its hotkey.</summary>
     public event EventHandler? SettingsRequested;
 
     /// <summary>
@@ -227,6 +232,16 @@ public sealed partial class DockWindow : Window
 
     /// <summary>True when the dock is on screen rather than hidden at the edge.</summary>
     public bool IsDockShown => _autoHide?.Visibility is not (DockVisibility.Hidden or DockVisibility.Hiding);
+
+    /// <summary>
+    /// Raised when <see cref="IsDockShown"/> has changed, whatever changed it — the tray,
+    /// auto-hide, a window in front filling the display, a dialog or the keyboard holding the
+    /// dock up — as the dock starts to leave or to come back.
+    /// </summary>
+    public event EventHandler? DockShownChanged;
+
+    /// <summary>What <see cref="IsDockShown"/> was when <see cref="DockShownChanged"/> was last raised.</summary>
+    private bool _shownAnnounced = true;
 
     /// <summary>
     /// True when the dock has settled on screen: shown, and not sliding either way — what it
@@ -312,6 +327,14 @@ public sealed partial class DockWindow : Window
             {
                 SyncHandle();
             }
+
+            // As the dock starts to leave or to come back, not as it lands: IsDockShown counts a
+            // dock on its way as where it is going.
+            if (IsDockShown != _shownAnnounced)
+            {
+                _shownAnnounced = IsDockShown;
+                DockShownChanged?.Invoke(this, EventArgs.Empty);
+            }
         };
 
         // What is in front is watched for as long as the dock is up, whatever the settings: the
@@ -324,6 +347,10 @@ public sealed partial class DockWindow : Window
         // Before the first ApplySettings, which is where the bin's icon is first read: a
         // change landing between the two is then either in that read or announced after it.
         _binWatch = RecycleBinWatch.Start(source.Handle, WM_RECYCLEBINICON);
+
+        // Against this window, which is where WM_HOTKEY arrives; registered by ApplySettings.
+        _hotkeys = new HotkeyRegistry(source.Handle);
+        _hotkeys.TakenChanged += (_, _) => TakenHotkeysChanged?.Invoke(this, EventArgs.Empty);
 
         ApplySettings(_settings.Current);
 
@@ -352,11 +379,22 @@ public sealed partial class DockWindow : Window
             _items = ResolveItems(settings);
             _dock.SetItems(_items);
             RefreshRunningState();
+
+            // The keys go on along the items as they are now.
+            if (_keyboard)
+            {
+                ListKeys();
+            }
         }
 
         // Not in ApplyAppearance: that path is what a slider drag takes, and this is about
         // what the dock will let you do rather than about how it looks.
         _dock.ReorderEnabled = !settings.LockItemOrder;
+
+        // The hotkeys in force, which the settings dialog previews like everything else — so a
+        // new one can be tried before Save, and Cancel puts the old one back. Nothing is asked
+        // of Windows unless they have changed, which on a slider's tick they have not.
+        _hotkeys?.Apply(settings.HotkeysInForce());
 
         ApplyAppearance(settings);
         ApplyAlwaysOnTop(settings.AlwaysOnTop);
@@ -709,8 +747,24 @@ public sealed partial class DockWindow : Window
             return 0;
         }
 
+        // The pointer taking over from the keys: the keyboard goes back to where it was, and
+        // the press is the pointer's like any other.
+        if (_keyboard && msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONUP)
+        {
+            EndKeyboard(giveBack: true);
+        }
+
         switch (msg)
         {
+            case NativeMethods.WM_HOTKEY:
+                if (_hotkeys?.ActionFor(wParam) is { } action)
+                {
+                    OnHotkey(action);
+                    handled = true;
+                }
+
+                break;
+
             case NativeMethods.WM_LBUTTONDOWN:
                 _dock.BeginPress();
 
@@ -1080,9 +1134,20 @@ public sealed partial class DockWindow : Window
     /// beyond <em>Dock settings…</em>, and that is the way back.
     /// </para>
     /// </remarks>
-    private bool ShowMenuFor(DockItem? item)
+    /// <param name="at">
+    /// Where to open it, in physical pixels — above the item, for the keyboard, which opens it
+    /// with its first entry lit as Windows' own menus do — or null for at the cursor.
+    /// </param>
+    /// <param name="closed">Told, once the menu has gone, whether an entry was chosen from it.</param>
+    private bool ShowMenuFor(
+        DockItem? item, NativeMethods.NativePoint? at = null, Action<bool>? closed = null)
     {
-        if (!NativeMethods.GetCursorPos(out var cursor))
+        NativeMethods.NativePoint cursor;
+        if (at is { } point)
+        {
+            cursor = point;
+        }
+        else if (!NativeMethods.GetCursorPos(out cursor))
         {
             return false;
         }
@@ -1169,6 +1234,17 @@ public sealed partial class DockWindow : Window
         HoldRevealed(true);
         var claim = item is null ? 0 : _dock.FocusItem(item);
 
+        // Clicks on any entry, in a submenu as well, come up to the menu.
+        var chosen = false;
+        menu.AddHandler(MenuItem.ClickEvent, new RoutedEventHandler((_, _) => chosen = true));
+
+        if (at is not null)
+        {
+            menu.Opened += (_, _) => Dispatcher.InvokeAsync(
+                () => { menu.Items.OfType<MenuItem>().FirstOrDefault(entry => entry.IsEnabled)?.Focus(); },
+                DispatcherPriority.Input);
+        }
+
         menu.Closed += (_, _) =>
         {
             // By claim, because this runs after the entry's action has already taken the
@@ -1176,6 +1252,7 @@ public sealed partial class DockWindow : Window
             // no such care: whoever took the next hold has their own.
             _dock.ReleaseFocus(claim);
             HoldRevealed(false);
+            closed?.Invoke(chosen);
         };
 
         _menus.ShowMenu(menu, cursor.X, cursor.Y);
@@ -1659,6 +1736,22 @@ public sealed partial class DockWindow : Window
         && _foreground.FillingDisplay(_display) is { } program
         && FullscreenApps.Contains(apps, program);
 
+    /// <summary>
+    /// True while a program the dock stays down for is in front at all — whatever the size of
+    /// its window, and on either display — which is when the hotkeys are its own.
+    /// </summary>
+    /// <remarks>
+    /// Wider than <see cref="IsFullscreenAppInFront"/>, which is the edge's question: the edge
+    /// matters only over a window that reaches it, but a key goes to the window in front wherever
+    /// it is, and a game in a window, or on the other display, wants its keys as much. Asked on
+    /// 2026-10-02; until then the hotkeys stood down with the edge. The list in force, as there,
+    /// and nothing to resolve while it is empty.
+    /// </remarks>
+    private bool IsExcludedAppInFront() =>
+        _applied.NoRevealApps is { Count: > 0 } apps
+        && _foreground.InFront() is { } program
+        && FullscreenApps.Contains(apps, program);
+
     // ---- what is in front -----------------------------------------------------------------
 
     /// <summary>
@@ -1718,6 +1811,11 @@ public sealed partial class DockWindow : Window
         if (!ForegroundApp.IsPassingShellInFront())
         {
             var excluded = IsFullscreenAppInFront();
+
+            // The keys of a program the dock stays down for are its own, whether or not it fills
+            // the display: the hotkeys are let go of, not merely ignored, since a hotkey ignored
+            // is still a key the game never saw. Its own question — see IsExcludedAppInFront.
+            _hotkeys?.SetStandingDown(excluded || IsExcludedAppInFront());
 
             // The general test is not asked once the list has answered, which settles it: a
             // listed program counts only when it fills the display.
@@ -2042,23 +2140,569 @@ public sealed partial class DockWindow : Window
         return chrome.IsHiddenAt(points);
     }
 
-    /// <summary>Toggles the dock between shown and hidden, from the tray menu.</summary>
-    public void ToggleVisibility()
+    /// <summary>
+    /// Hides the dock or shows it, as the tray's entry, the hotkey or a second launch asks — a
+    /// choice, which a hold letting go does not undo (<see cref="AutoHideController.Choose"/>).
+    /// </summary>
+    /// <remarks>
+    /// While the Windows key and Ctrl have the dock up, by the dock as it was before they brought
+    /// it up: the hotkey, Win+Ctrl+H, is pressed with them, and they bring it up the moment they are
+    /// down — so the toggle would otherwise find it up every time, and never show a hidden dock.
+    /// </remarks>
+    public void ToggleVisibility() =>
+        _autoHide?.Choose(shown: !(_winCtrlRevealing ? _shownBeforeWinCtrl : IsDockShown));
+
+    // ---- the keyboard ---------------------------------------------------------
+
+    /// <summary>
+    /// The hotkeys as Windows has them — made with the window, since they are registered
+    /// against it.
+    /// </summary>
+    private HotkeyRegistry? _hotkeys;
+
+    private static readonly IReadOnlyDictionary<HotkeyAction, Hotkey> NoHotkeys =
+        new Dictionary<HotkeyAction, Hotkey>();
+
+    /// <summary>Raised by the hotkey that hides or shows the dock, which is the tray menu's toggle.</summary>
+    public event EventHandler? ShowHideRequested;
+
+    /// <summary>Raised when <see cref="TakenHotkeys"/> has changed.</summary>
+    public event EventHandler? TakenHotkeysChanged;
+
+    /// <summary>
+    /// The hotkeys in force that Windows would not register, another program having them — what
+    /// the settings dialog's Hotkeys page says beside them.
+    /// </summary>
+    public IReadOnlyDictionary<HotkeyAction, Hotkey> TakenHotkeys => _hotkeys?.Taken ?? NoHotkeys;
+
+    /// <summary>
+    /// Lets every hotkey go while the settings dialog records one, so the keys being pressed reach
+    /// the dialog rather than the dock, and takes them back after.
+    /// </summary>
+    public void SetHotkeyRecording(bool recording) => _hotkeys?.SetRecording(recording);
+
+    /// <summary>Asks Windows again for the hotkeys it would not give, as the settings dialog opens.</summary>
+    public void RetryHotkeys() => _hotkeys?.Retry();
+
+    private void OnHotkey(HotkeyAction action)
     {
-        if (_autoHide is not { } autoHide)
+        // A key pressed with the Windows key and Ctrl has done what their numbers were up for: they
+        // go on the next look, after this has acted. The toggle goes by the dock as it was before
+        // the two brought it up (ToggleVisibility).
+        _winCtrl.Spend();
+
+        switch (action)
+        {
+            case HotkeyAction.Keyboard:
+                ToggleKeyboard();
+                return;
+
+            case HotkeyAction.ShowHide:
+                // A dock in use from the keyboard is up, so this hides it, as the tray's entry
+                // would. Chosen before the keys let go: their letting go puts a dock that had been
+                // put away back away, and a toggle after that would bring it straight back.
+                ShowHideRequested?.Invoke(this, EventArgs.Empty);
+                EndKeyboard(giveBack: true);
+                return;
+
+            case HotkeyAction.Settings:
+                // The dialog takes the foreground, and with it the keyboard. Opened before the
+                // keys let go, for the same reason: the dialog holds the dock up for its preview,
+                // and the keys letting go first would start a dock that had been put away on its
+                // way back out, to be brought up again a moment later.
+                SettingsRequested?.Invoke(this, EventArgs.Empty);
+                EndKeyboard(giveBack: true);
+                return;
+        }
+
+        var index = DockKeys.Place(_items, HotkeyActions.Place(action));
+        if (index < 0 || _items[index].IsDisabled)
         {
             return;
         }
 
-        if (IsDockShown)
+        // The hotkey went to the dock, which may therefore pass the foreground on — to whatever
+        // a launch starts, as well as to a window it raises.
+        NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+        Open(_items[index]);
+        EndKeyboard(giveBack: true);
+    }
+
+    // ---- the Windows key and Ctrl held ----------------------------------------------------
+
+    /// <summary>Whether the Windows key and Ctrl count as held — see <see cref="WatchWinCtrl"/>.</summary>
+    private readonly WinCtrlHold _winCtrl = new();
+
+    /// <summary>The places whose numbers are up, as bits — bit 1 for place 1; 0 while none are.</summary>
+    private int _badges;
+
+    /// <summary>True while the hold has the dock up (<see cref="HoldRevealed"/>).</summary>
+    private bool _winCtrlRevealing;
+
+    /// <summary>Whether the dock was up as the hold brought it up — what a toggle pressed with the keys goes by.</summary>
+    private bool _shownBeforeWinCtrl;
+
+    /// <summary>
+    /// Looks at the Windows key and Ctrl, on each of the dock's looks at the pointer, and while they
+    /// are held — alone, from the moment they are down (<see cref="WinCtrlHold"/>) — puts each
+    /// item's number on its icon and brings the dock up, each if the settings say so
+    /// (<see cref="DockSettings.NumbersOnWinCtrl"/>, <see cref="DockSettings.RevealOnWinCtrl"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for on 2026-10-02, so the number of the key that opens an item can be read off the
+    /// dock — Win+Ctrl and that number on the keypad, to begin with. Numbered: the items whose
+    /// keys Windows has given the dock now — quick launch on, the item not turned off by itself,
+    /// its keys not another program's — and that are there to open, not one whose program is
+    /// missing, which its hotkey does not open either. Nothing at all while the hotkeys are let go
+    /// of: while a program on the Exclusions page is in front, whose keys are its own and which
+    /// the dock does not come up over, and while the settings dialog records a hotkey.
+    /// </para>
+    /// <para>
+    /// Up by the hold the settings dialog and the keyboard take, and back as they let it go: after
+    /// the hide delay, or put away again if it had been put away from the tray — and straight back,
+    /// without the delay, when another key ended the hold (<see cref="WinCtrlHold.CutShort"/>): the
+    /// two were the start of that key's shortcut, Win+Ctrl and an arrow switching desktops above
+    /// all. Not lifted over a window that covers a dock in sight, as the keyboard lifts it: that
+    /// wants the foreground, which keys held in another program do not give.
+    /// </para>
+    /// <para>
+    /// Ctrl asked of Windows thirty times a second, the Windows keys only while it is down, and
+    /// the few keys that end a hold only while both are (<see cref="HeldKeys"/>).
+    /// </para>
+    /// </remarks>
+    private void WatchWinCtrl()
+    {
+        if (_closed)
         {
-            autoHide.Hide();
+            return;
+        }
+
+        var down = HeldKeys.WinAndCtrl();
+        _winCtrl.Look(down, down && HeldKeys.AnythingElse());
+
+        var held = _winCtrl.IsHeld && _hotkeys is { IsLettingGo: false };
+        ShowBadges(held && _applied.NumbersOnWinCtrl ? BadgedPlaces() : 0);
+        RevealForWinCtrl(held && _applied.RevealOnWinCtrl, lingers: !_winCtrl.CutShort);
+    }
+
+    /// <summary>
+    /// The places to number, as bits: those with a key Windows has given the dock, first or
+    /// second, and an item there that its key would open.
+    /// </summary>
+    private int BadgedPlaces()
+    {
+        if (_hotkeys is not { } hotkeys)
+        {
+            return 0;
+        }
+
+        var places = 0;
+        for (var place = 1; place <= 9; place++)
+        {
+            if (!hotkeys.Registered.ContainsKey(HotkeyAction.Place1 + (place - 1))
+                && !hotkeys.Registered.ContainsKey(HotkeyAction.Place1Secondary + (place - 1)))
+            {
+                continue;
+            }
+
+            var index = DockKeys.Place(_items, place);
+            if (index >= 0 && !_items[index].IsDisabled)
+            {
+                places |= 1 << place;
+            }
+        }
+
+        return places;
+    }
+
+    private void ShowBadges(int places)
+    {
+        if (places == _badges)
+        {
+            return;
+        }
+
+        _badges = places;
+        _dock.ShowBadges(places);
+    }
+
+    private void RevealForWinCtrl(bool reveal, bool lingers)
+    {
+        if (reveal == _winCtrlRevealing)
+        {
+            return;
+        }
+
+        if (reveal)
+        {
+            _shownBeforeWinCtrl = IsDockShown;
+        }
+
+        _winCtrlRevealing = reveal;
+        _autoHide?.HoldRevealed(reveal, lingers);
+    }
+
+    /// <summary>The window that has the keys while the dock does; made the first time it is wanted.</summary>
+    private KeyboardHost? _keys;
+
+    /// <summary>True while the dock has the keyboard.</summary>
+    private bool _keyboard;
+
+    /// <summary>The item held up for the keys, and the claim it is held by — see <see cref="DockBar.FocusItem"/>.</summary>
+    private DockItem? _keyItem;
+
+    private int _keyClaim;
+
+    /// <summary>The window that had the foreground when the dock took the keyboard, to be given it back.</summary>
+    private nint _keyReturn;
+
+    /// <summary>Whether the dock was lifted over what covered it, and the window it was under, to go back under.</summary>
+    private bool _keyLifted;
+
+    private nint _keyLiftedOver;
+
+    /// <summary>
+    /// True while a menu opened from the keyboard is up, which has the keys for that time — its
+    /// taking the foreground is not the person leaving.
+    /// </summary>
+    private bool _keyMenu;
+
+    /// <summary>
+    /// The dock takes the keyboard, or gives it back if it has it: the hotkey, and
+    /// <c>--keyboard</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Up as the edge brings it — out from hiding, the tray's <em>Hide dock</em> included, and over
+    /// what covers it — with an item held up, magnified and labelled, as a menu holds one. The keys
+    /// are <see cref="DockKeys"/>'; Esc, the hotkey again, or the foreground going elsewhere hands
+    /// the keyboard back, the first two to the window that had it.
+    /// </para>
+    /// <para>
+    /// The keys go to a window of their own (<see cref="KeyboardHost"/>), since this one never
+    /// takes the foreground. It can take it now because the hotkey that asked was sent to this
+    /// process, which Windows counts as the last input being the dock's; so can a second launch
+    /// with <c>--keyboard</c>, which hands its own right on before it asks.
+    /// </para>
+    /// </remarks>
+    public void ToggleKeyboard()
+    {
+        if (_keyboard)
+        {
+            EndKeyboard(giveBack: true);
+            return;
+        }
+
+        TakeKeyboard();
+    }
+
+    private void TakeKeyboard()
+    {
+        if (_closed || _chrome is null || _autoHide is null)
+        {
+            return;
+        }
+
+        if (_keys is null)
+        {
+            _keys = new KeyboardHost();
+            _keys.Command += OnKeyCommand;
+            _keys.Typed += OnKeyTyped;
+            _keys.Lost += OnKeysLost;
+        }
+
+        var foreground = WindowsApi.GetForegroundWindow();
+        _keyReturn = IsKeysOrMenus(foreground) ? 0 : foreground;
+        _keyboard = true;
+        _keyMenu = false;
+        _keyItem = null;
+
+        HoldRevealed(true);
+
+        // Where the bar comes to rest, not where it is: a hidden dock is below the screen as this
+        // runs, and a list there would be read as off the screen.
+        if (!_keys.Open(_items, RestingBarWhenShown()))
+        {
+            // No key would reach it, so the dock is not left held up waiting for one.
+            EndKeyboard(giveBack: false);
+            return;
+        }
+
+        // Lifted as the edge lifts it, now that this process has the foreground: Windows does
+        // not let a background program's window over the one in front.
+        if (IsDockShown && IsCovered())
+        {
+            _keyLifted = true;
+            _keyLiftedOver = Raise();
+            if (IsCovered())
+            {
+                HoldAbove();
+            }
+        }
+
+        HoldKey(DockKeys.First(_items));
+    }
+
+    /// <summary>
+    /// Hands the keyboard back: to the window that had it, when <paramref name="giveBack"/> and
+    /// the foreground is still this process's to give — and otherwise to whatever has taken it
+    /// since, which is never taken back: an app raised from the dock, a dialog a menu opened, a
+    /// window clicked.
+    /// </summary>
+    /// <param name="giveBack">
+    /// False when the foreground is known to have gone, and with it any right to move it.
+    /// </param>
+    /// <remarks>
+    /// An app launched from the keys has not come up yet when this runs, so the window it came
+    /// from is given the keyboard meanwhile, and the app takes it from there as it arrives —
+    /// see <see cref="OpenFromKeys"/>. Left to Windows instead, the foreground would go to
+    /// whichever window it chose as the keys' window went.
+    /// </remarks>
+    private void EndKeyboard(bool giveBack)
+    {
+        if (!_keyboard)
+        {
+            return;
+        }
+
+        _keyboard = false;
+        _keyMenu = false;
+        _keyItem = null;
+        _dock.ReleaseFocus(_keyClaim);
+        _keyClaim = 0;
+
+        // Before the keys' window goes, while it still has the foreground to give.
+        if (giveBack && IsKeysOrMenus(WindowsApi.GetForegroundWindow())
+            && _keyReturn != 0 && WindowsApi.IsWindow(_keyReturn))
+        {
+            AppLauncher.Activate(_keyReturn);
+        }
+
+        _keyReturn = 0;
+        _keys?.Dismiss();
+
+        // Which puts a dock that had been put away from the tray away again, once nothing else
+        // holds it up: a dialog an entry of the item's menu opened holds it for itself, and
+        // puts it away as it closes (AutoHideController.HoldRevealed).
+        HoldRevealed(false);
+
+        if (_keyLifted)
+        {
+            _keyLifted = false;
+            Lower(_keyLiftedOver);
+        }
+
+        _keyLiftedOver = 0;
+    }
+
+    /// <summary>Holds up the item at an index for the keys, and has the list a screen reader reads follow.</summary>
+    private void HoldKey(int index)
+    {
+        if (!_keyboard || index < 0 || index >= _items.Count)
+        {
+            return;
+        }
+
+        _keyItem = _items[index];
+        _keyClaim = _dock.FocusItem(_keyItem);
+        _keys?.Select(_keyItem);
+    }
+
+    /// <summary>Lists the items again for the keys, after a change of contents, and finds the one held up.</summary>
+    private void ListKeys()
+    {
+        _keys?.List(_items);
+
+        var index = _keyItem is { } held ? IndexOf(held) : -1;
+        HoldKey(index >= 0 ? index : DockKeys.First(_items));
+    }
+
+    /// <summary>Where an item is among the dock's items: the same one, or, after a rebuild, the one with its id.</summary>
+    private int IndexOf(DockItem item)
+    {
+        for (var i = 0; i < _items.Count; i++)
+        {
+            if (ReferenceEquals(_items[i], item))
+            {
+                return i;
+            }
+        }
+
+        for (var i = 0; i < _items.Count; i++)
+        {
+            if (_items[i].Id == item.Id)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void OnKeyCommand(object? sender, DockKeyCommand command)
+    {
+        if (!_keyboard)
+        {
+            return;
+        }
+
+        var at = _keyItem is { } held ? IndexOf(held) : -1;
+        switch (command.Kind)
+        {
+            case DockKeyKind.Previous:
+                HoldKey(DockKeys.Step(_items, at, -1));
+                break;
+
+            case DockKeyKind.Next:
+                HoldKey(DockKeys.Step(_items, at, 1));
+                break;
+
+            case DockKeyKind.First:
+                HoldKey(DockKeys.First(_items));
+                break;
+
+            case DockKeyKind.Last:
+                HoldKey(DockKeys.Last(_items));
+                break;
+
+            case DockKeyKind.Open:
+                OpenFromKeys(at);
+                break;
+
+            case DockKeyKind.Place:
+                // Held up, not opened: Enter or Space opens it — asked on 2026-10-02.
+                HoldKey(DockKeys.Place(_items, command.Place));
+                break;
+
+            case DockKeyKind.Menu:
+                MenuFromKeys();
+                break;
+
+            case DockKeyKind.Back:
+                EndKeyboard(giveBack: true);
+                break;
+        }
+    }
+
+    /// <summary>Goes to the next item whose name starts with what was typed.</summary>
+    private void OnKeyTyped(object? sender, string text)
+    {
+        if (!_keyboard)
+        {
+            return;
+        }
+
+        var at = _keyItem is { } held ? IndexOf(held) : -1;
+        HoldKey(DockKeys.StartingWith(_items, at, text, CultureInfo.CurrentCulture));
+    }
+
+    /// <summary>Something else has taken the foreground: the keyboard is not the dock's any more.</summary>
+    private void OnKeysLost(object? sender, EventArgs e)
+    {
+        if (_keyboard && !_keyMenu)
+        {
+            EndKeyboard(giveBack: false);
+        }
+    }
+
+    /// <summary>Opens the item at an index, as a click on it would, and hands the keyboard to whatever that brings up.</summary>
+    /// <remarks>
+    /// A window raised has the foreground at once. An app launched is still starting, so the
+    /// foreground is handed on to anyone first: the window the keys came from has it meanwhile
+    /// (<see cref="EndKeyboard"/>), and the app takes it from that one as it comes up.
+    /// </remarks>
+    private void OpenFromKeys(int index)
+    {
+        if (index < 0 || index >= _items.Count || _items[index].IsSeparator || _items[index].IsDisabled)
+        {
+            return;
+        }
+
+        // Held up as it opens, so the launch's flash is on the item the keys chose.
+        HoldKey(index);
+        NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+        Open(_items[index]);
+        EndKeyboard(giveBack: true);
+    }
+
+    /// <summary>
+    /// Opens the held item's menu above it — or the dock's own, on an empty dock — as a
+    /// right-click there would.
+    /// </summary>
+    /// <remarks>
+    /// The menu has the keys while it is up. Closed on nothing — Esc — they come back to the dock,
+    /// on the item they were on, as Esc out of a menu anywhere goes back to what it was opened
+    /// from. Closed by an entry, or by a click elsewhere, the keyboard is the dock's no longer;
+    /// it goes back to the window it came from only if nothing has taken it since, as a dialog
+    /// the entry opened has.
+    /// </remarks>
+    private void MenuFromKeys()
+    {
+        if (TopOf(_keyItem) is not { } at)
+        {
+            return;
+        }
+
+        _keyMenu = true;
+        if (!ShowMenuFor(_keyItem, at, AfterKeyMenu))
+        {
+            _keyMenu = false;
+        }
+    }
+
+    private void AfterKeyMenu(bool chosen)
+    {
+        if (!_keyboard || !_keyMenu)
+        {
+            return;
+        }
+
+        _keyMenu = false;
+
+        var menusInFront = WindowsApi.GetForegroundWindow() == new WindowInteropHelper(_menus).Handle;
+
+        if (!chosen && menusInFront && _keys?.TakeForeground() == true)
+        {
+            HoldKey(_keyItem is { } held && IndexOf(held) is var index and >= 0 ? index : DockKeys.First(_items));
+            return;
+        }
+
+        EndKeyboard(giveBack: true);
+    }
+
+    /// <summary>
+    /// The top middle of an item as it is drawn, in physical pixels — or of the bar, for no item.
+    /// </summary>
+    private NativeMethods.NativePoint? TopOf(DockItem? item)
+    {
+        if (PresentationSource.FromVisual(_dock) is null)
+        {
+            return null;
+        }
+
+        Point top;
+        if (item is not null && _dock.ItemBounds(item) is { } bounds)
+        {
+            top = _dock.PointToScreen(new Point(bounds.Left + (bounds.Width / 2), bounds.Top));
+        }
+        else if (RestingBarOnScreen() is { IsEmpty: false } bar)
+        {
+            top = new Point(bar.Left + (bar.Width / 2), bar.Top);
         }
         else
         {
-            autoHide.Reveal();
+            return null;
         }
+
+        return new NativeMethods.NativePoint { X = (int)Math.Round(top.X), Y = (int)Math.Round(top.Y) };
     }
+
+    /// <summary>Whether a window is the keys' or the menus' — this process's windows that are never anyone's place to go back to.</summary>
+    private bool IsKeysOrMenus(nint window) =>
+        window != 0
+        && (window == new WindowInteropHelper(_menus).Handle
+            || (_keys is not null && window == new WindowInteropHelper(_keys).Handle));
 
     /// <summary>Turns stored pins into dock items with their icons resolved.</summary>
     private IReadOnlyList<DockItem> ResolveItems(DockSettings settings)
@@ -2068,16 +2712,19 @@ public sealed partial class DockWindow : Window
         return items;
     }
 
+    private void OnItemActivated(object? sender, DockItem item) => Open(item);
+
     /// <summary>
     /// Click behaviour: raise the app if it already has a window, otherwise start it.
     /// Clicking an app that is already in front moves to its next window.
     /// </summary>
-    private void OnItemActivated(object? sender, DockItem item)
+    /// <returns>True when a window was raised or something was started.</returns>
+    private bool Open(DockItem item)
     {
         var window = _runningApps.NextWindow(item.RunningTarget);
         if (window != 0 && AppLauncher.Activate(window))
         {
-            return;
+            return true;
         }
 
         // Flash only on a real launch. Raising a window that was already open is not
@@ -2085,7 +2732,10 @@ public sealed partial class DockWindow : Window
         if (AppLauncher.Launch(item))
         {
             _dock.FlashItem(item);
+            return true;
         }
+
+        return false;
     }
 
     /// <summary>Persists a drag that moved an icon to a new position.</summary>
@@ -2227,6 +2877,7 @@ public sealed partial class DockWindow : Window
         // bar left showing over the taskbar, for as long as it stayed hidden.
         var hidden = top + height + (int)Math.Round(HiddenGap * scale);
         _hiddenPlace = (left, hidden, width, height);
+        _shownTop = top;
 
         // A hidden dock is put where it hides as surely as a shown one where it shows, rather
         // than left where it happens to be — which is what kept that wrong place. One on its
@@ -2269,6 +2920,25 @@ public sealed partial class DockWindow : Window
     /// <see cref="KeepHiddenInPlace"/>.
     /// </summary>
     private (int X, int Y, int Width, int Height)? _hiddenPlace;
+
+    /// <summary>Where the window's top is when it is shown, in physical pixels, as it was last worked out.</summary>
+    private int? _shownTop;
+
+    /// <summary>
+    /// The bar at rest where it is when the dock is shown, in physical screen pixels — which, for
+    /// a dock still sliding up, or about to, is not where it is now.
+    /// </summary>
+    private Rect RestingBarWhenShown()
+    {
+        var bar = RestingBarOnScreen();
+        if (!bar.IsEmpty && _shownTop is { } shown && _chrome is { } chrome
+            && NativeMethods.GetWindowRect(chrome.Hwnd, out var actual))
+        {
+            bar.Offset(0, shown - actual.Top);
+        }
+
+        return bar;
+    }
 
     /// <summary>
     /// Puts a hidden dock back where it hides, if anything has moved it since.
