@@ -78,7 +78,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Magnifies** icons as the pointer approaches, on a cosine falloff, with neighbours lifting
   alongside the hovered one.
 - **Launches pinned apps**, or raises them if they already have a window. Clicking an app
-  that is already in front cycles through its windows. An app opened from the dock gets the
+  that is already in front cycles through its windows. **An app still closing** — its window
+  gone, its program not yet finished — has a hollow dot, and a click on it waits until it has
+  gone and then opens it, rather than starting a second copy into the one on its way out; Rider
+  refuses that with an error. A program that stays in the tray counts as closing for ten
+  seconds at most. An app opened from the dock gets the
   environment you signed in with, as from the taskbar, however the dock itself was started:
   a dock run from a terminal or an IDE does not hand that shell's variables to everything it
   opens.
@@ -1274,7 +1278,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and twenty tests cover the cosine falloff (peak, range boundary,
+Nine hundred and thirty-one tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1662,6 +1666,14 @@ something moving is seen at the quiet pace at worst; once it keeps still the rea
 again; a read that did not wait for a frame is held to one a frame, and a slower display is
 read every frame of its own. And the one that matters for the cost: a caret blinking under the
 handle does not keep it reading every frame, which reading fast after any change at all would.
+
+Eleven cover an app counting as closing — its last window gone, its process not — measured on
+Rider, whose process outlived its window by 5.2 s: that it is closing while any of its
+processes runs, and not when they had already gone; that it ends when every one has exited,
+not the first, when a window comes back, or at the ten-second limit, for a program that stays
+in the tray; that a click waits for it and is taken once, then, or when a window comes back;
+that a click on one not closing is not held; that a launcher stub's pin finds its program by
+file name, as the census does; and that clearing lets every process go and runs nothing.
 
 Five cover the dock taking the environment the user signed in with as it starts: that a
 variable of the shell that started it is taken out, one the shell changed is put back and one

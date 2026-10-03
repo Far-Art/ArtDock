@@ -125,9 +125,15 @@ public sealed class DockBar : Canvas
 
     private static readonly Pen ElevatedDotRimPen = FrozenPen(Color.FromRgb(0x7A, 0x4A, 0x00));
 
-    private static Pen FrozenPen(Color color)
+    /// <summary>The closing dot's white ring, a DIP wide, inside its rim.</summary>
+    private static readonly Pen ClosingRingPen = FrozenPen(Colors.White);
+
+    /// <summary>The closing dot's fine inner rim, round its hole.</summary>
+    private static readonly Pen ClosingInnerRimPen = FrozenPen(Color.FromArgb(0x8C, 0x1E, 0x23, 0x46), 0.5);
+
+    private static Pen FrozenPen(Color color, double width = DotRim)
     {
-        var pen = new Pen(Frozen(color), DotRim);
+        var pen = new Pen(Frozen(color), width);
         pen.Freeze();
         return pen;
     }
@@ -3190,15 +3196,22 @@ public sealed class DockBar : Canvas
 
         for (var i = 0; i < _items.Count; i++)
         {
-            if (!_items[i].Item.IsRunning)
+            var item = _items[i].Item;
+            if (!item.IsRunning && !item.IsClosing)
             {
                 continue;
             }
 
             var centreX = _iconsLeft + _offsets[i] + (_sizes[i] / 2) + SlotShift(i);
+            if (!item.IsRunning)
+            {
+                DrawClosingDot(drawingContext, new Point(centreX, y));
+                continue;
+            }
+
             // The rim's pen is centred on its circle, so the circle sits half a rim outside the
             // fill: the fill shows at its full radius, and the rim lies wholly outside it.
-            var elevated = _items[i].Item.IsElevated;
+            var elevated = item.IsElevated;
             var radius = DotRadius + (DotRim / 2);
             drawingContext.DrawEllipse(
                 elevated ? ElevatedDotBrush : DotBrush,
@@ -3207,6 +3220,18 @@ public sealed class DockBar : Canvas
                 radius,
                 radius);
         }
+    }
+
+    /// <summary>
+    /// The dot of an app that is closing — its windows gone, its process not yet: the running
+    /// dot's size and rim, hollowed. A white ring between a dark rim outside and a fine one
+    /// inside, so the hole reads on a pale bar as the dot does.
+    /// </summary>
+    private static void DrawClosingDot(DrawingContext drawingContext, Point centre)
+    {
+        drawingContext.DrawEllipse(null, DotRimPen, centre, DotRadius + (DotRim / 2), DotRadius + (DotRim / 2));
+        drawingContext.DrawEllipse(null, ClosingRingPen, centre, DotRadius - 0.5, DotRadius - 0.5);
+        drawingContext.DrawEllipse(null, ClosingInnerRimPen, centre, DotRadius - 1.25, DotRadius - 1.25);
     }
 
     /// <summary>

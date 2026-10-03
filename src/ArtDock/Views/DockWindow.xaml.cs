@@ -1208,11 +1208,12 @@ public sealed partial class DockWindow : Window
         // Run as administrator is offered on an item set to run that way already, too, and
         // greyed while the program is open: asked for, so the entry starts a program only when
         // there is none, rather than a second copy beside the one a click would bring forward.
+        // Greyed while it is closing too: a copy started then meets the one on its way out.
         // Greyed rather than absent, as the bin's entry is, since being open is a passing fact.
         if (item is { IsLaunchable: true, CanRunAsAdministrator: true })
         {
             var header = Localizer.Get("Menu.RunAsAdministrator");
-            menu.Items.Add(item.IsRunning
+            menu.Items.Add(item.IsRunning || item.IsClosing
                 ? MenuHost.Note(header, MenuGlyph.Administrator)
                 : MenuHost.Item(header, MenuGlyph.Administrator, () => OpenAsAdministrator(item)));
             menu.Items.Add(new Separator());
@@ -2911,6 +2912,24 @@ public sealed partial class DockWindow : Window
             return true;
         }
 
+        // Still closing — its window gone, its process not — so a copy started now would meet
+        // the one on its way out: Rider's lock, measured, stopped the new copy with an error.
+        // So the click waits for it, and is then taken again, which launches or, if a window
+        // has come back meanwhile, raises it. It bounces now, so the click is seen to count;
+        // more clicks while it waits do nothing, as the taskbar does nothing.
+        if (_waitingToOpen.Contains(item.Id))
+        {
+            return true;
+        }
+
+        var id = item.Id;
+        if (_runningApps.WhenClosed(item.RunningTarget, () => Dispatcher.BeginInvoke(() => OpenWhenClosed(id))))
+        {
+            _waitingToOpen.Add(id);
+            _dock.FlashItem(item);
+            return true;
+        }
+
         // Flash only on a real launch. Raising a window that was already open is not
         // something the dock needs to announce — and macOS does not bounce for it either.
         if (AppLauncher.Launch(item))
@@ -2920,6 +2939,24 @@ public sealed partial class DockWindow : Window
         }
 
         return false;
+    }
+
+    /// <summary>The items whose click is waiting for their program to finish closing, by id.</summary>
+    private readonly HashSet<string> _waitingToOpen = [];
+
+    /// <summary>
+    /// Takes a held click again, once its program has finished closing — on the item as it is
+    /// now, found by id: the items may have been rebuilt meanwhile, and the pin taken off.
+    /// </summary>
+    private void OpenWhenClosed(string id)
+    {
+        if (!_waitingToOpen.Remove(id) || _closed
+            || _items.FirstOrDefault(candidate => candidate.Id == id) is not { IsLaunchable: true } item)
+        {
+            return;
+        }
+
+        Open(item);
     }
 
     /// <summary>
@@ -2979,10 +3016,12 @@ public sealed partial class DockWindow : Window
         {
             var running = _runningApps.IsRunning(item.RunningTarget);
             var elevated = running && _runningApps.IsElevated(item.RunningTarget);
-            if (item.IsRunning != running || item.IsElevated != elevated)
+            var closing = !running && _runningApps.IsClosing(item.RunningTarget);
+            if (item.IsRunning != running || item.IsElevated != elevated || item.IsClosing != closing)
             {
                 item.IsRunning = running;
                 item.IsElevated = elevated;
+                item.IsClosing = closing;
                 changed = true;
             }
         }

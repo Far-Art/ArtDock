@@ -87,6 +87,24 @@ internal static class WindowsApi
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool CloseHandle(nint hObject);
 
+    /// <summary>
+    /// A handle to watch a process exit by, or 0 when it cannot be opened — gone already.
+    /// Limited information, which an elevated process allows too, and is all
+    /// <see cref="HasExited"/> needs. Held, it keeps the process id from being reused.
+    /// </summary>
+    internal static nint OpenToWatch(uint processId) =>
+        OpenProcess(ProcessQueryLimitedInformation, false, processId);
+
+    /// <summary>Whether a process watched by <see cref="OpenToWatch"/> has exited; true when that cannot be read.</summary>
+    internal static bool HasExited(nint process) =>
+        !GetExitCodeProcess(process, out var code) || code != StillActive;
+
+    private const uint StillActive = 259;
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetExitCodeProcess(nint process, out uint exitCode);
+
     // ---- activation ----------------------------------------------------------
 
     internal const int SW_RESTORE = 9;

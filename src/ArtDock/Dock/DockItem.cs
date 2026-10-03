@@ -109,6 +109,12 @@ public sealed class DockItem
     /// </summary>
     public bool IsElevated { get; set; }
 
+    /// <summary>
+    /// True while the app is closing: its windows have gone and its process has not, yet —
+    /// which hollows the dot, and holds a click until it has. Never with <see cref="IsRunning"/>.
+    /// </summary>
+    public bool IsClosing { get; set; }
+
     /// <summary>What the shell should resolve for the icon and for activation.</summary>
     public string ShellTarget =>
         Aumid is { Length: > 0 } aumid ? $@"shell:AppsFolder\{aumid}" : TargetPath ?? string.Empty;

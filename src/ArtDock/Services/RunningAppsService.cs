@@ -71,6 +71,25 @@ public sealed class RunningAppsService : IDisposable
         Interval = TimeSpan.FromMilliseconds(150)
     };
 
+    /// <summary>
+    /// The processes that own each program's windows, by image path, as of the last census —
+    /// what is still running under a program when its windows have all gone.
+    /// </summary>
+    private Dictionary<string, HashSet<uint>> _processesByPath = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The programs whose last window has gone and whose process has not: see <see cref="ClosingPrograms{T}"/>.</summary>
+    private readonly ClosingPrograms<nint> _closing = new(WindowsApi.HasExited, process => WindowsApi.CloseHandle(process));
+
+    /// <summary>
+    /// Looks at the closing programs ten times a second, while there are any. Not at Background
+    /// priority, which the frame loop starves while the pointer is on the dock — and the pointer
+    /// is on the dock, having just clicked.
+    /// </summary>
+    private readonly DispatcherTimer _closingWatch = new(DispatcherPriority.Normal)
+    {
+        Interval = TimeSpan.FromMilliseconds(100)
+    };
+
     /// <summary>Held as a field so the GC cannot collect the delegate the hook still calls.</summary>
     private readonly WindowsApi.WinEventProc _hookCallback;
 
@@ -92,6 +111,20 @@ public sealed class RunningAppsService : IDisposable
         {
             _debounce.Stop();
             Rescan();
+        };
+
+        _closingWatch.Tick += (_, _) =>
+        {
+            var ended = _closing.Check(DateTime.UtcNow);
+            if (!_closing.Any)
+            {
+                _closingWatch.Stop();
+            }
+
+            if (ended)
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
         };
     }
 
@@ -123,6 +156,19 @@ public sealed class RunningAppsService : IDisposable
     /// <c>DockItem.RunningTarget</c> gives them — has at least one open window.
     /// </summary>
     public bool IsRunning(string? target) => FindWindows(target).Count > 0;
+
+    /// <summary>
+    /// True when the program <paramref name="target"/> goes by is closing: its windows have gone
+    /// and its process has not, yet. See <see cref="ClosingPrograms{T}"/>.
+    /// </summary>
+    public bool IsClosing(string? target) => _closing.Find(target) is not null;
+
+    /// <summary>
+    /// Runs <paramref name="then"/> once the program <paramref name="target"/> goes by has
+    /// finished closing, if it is closing.
+    /// </summary>
+    /// <returns>True when it was held to wait; false, and nothing run, when it is not closing.</returns>
+    public bool WhenClosed(string? target, Action then) => _closing.WhenClosed(target, then);
 
     /// <summary>
     /// True when any open window of <paramref name="target"/> belongs to a program running as
@@ -320,6 +366,8 @@ public sealed class RunningAppsService : IDisposable
             }
         }
 
+        var closing = NoteClosing(fresh);
+
         // Asked whenever anything has changed — or has not, as far as the census can tell, when
         // a window went to another folder. A window just closed goes from its folder at once,
         // and one just opened joins its folder when Explorer has said which it is.
@@ -332,10 +380,44 @@ public sealed class RunningAppsService : IDisposable
             _tabs = [];
         }
 
-        if (SortFolders() || changed)
+        if (SortFolders() || changed || closing)
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>
+    /// Hands the closing programs what this census shows: a program that had windows and has
+    /// none, with its processes as they were, and every program that has windows now.
+    /// </summary>
+    /// <remarks>
+    /// Not File Explorer: its process is the shell's, and never exits, so the last folder window
+    /// closed would hold the File Explorer pin as closing for the whole of the limit.
+    /// </remarks>
+    /// <returns>True when what is closing changed.</returns>
+    private bool NoteClosing(Dictionary<string, List<nint>> fresh)
+    {
+        var lost = _processesByPath
+            .Where(entry => !fresh.ContainsKey(entry.Key)
+                && !System.IO.Path.GetFileName(entry.Key).Equals(ExplorerFileName, StringComparison.OrdinalIgnoreCase))
+            .Select(entry => (entry.Key, (IReadOnlyList<nint>)[.. entry.Value.Select(WindowsApi.OpenToWatch).Where(process => process != 0)]))
+            .ToList();
+
+        _processesByPath = fresh.ToDictionary(
+            entry => entry.Key,
+            entry => entry.Value
+                .Select(window => WindowsApi.GetWindowThreadProcessId(window, out var processId) == 0 ? 0u : processId)
+                .Where(processId => processId != 0)
+                .ToHashSet(),
+            StringComparer.OrdinalIgnoreCase);
+
+        var changed = _closing.Note(lost, fresh.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), DateTime.UtcNow);
+        if (_closing.Any)
+        {
+            _closingWatch.Start();
+        }
+
+        return changed;
     }
 
     /// <summary>
@@ -503,6 +585,8 @@ public sealed class RunningAppsService : IDisposable
 
         _disposed = true;
         _debounce.Stop();
+        _closingWatch.Stop();
+        _closing.Clear();
 
         // Wakes the reading thread to see it is over. The event is not disposed: the thread may
         // be inside a reading still, and waits on it once more after one.
