@@ -135,14 +135,51 @@ public class PinCreationTests : IDisposable
     }
 
     [Fact]
-    public void ADocument_NeverShowsARunningDot()
+    public void ADocument_IsLitByTheWindowsNamingIt_NotByItsProgram()
     {
-        // What opens a document is its editor, whose window belongs to whatever pin starts
-        // that. The census also matches on file name, so the question is not asked at all.
+        // Not by every window of its app, or one picture open would light every picture; and
+        // not by a program of its own name, which the census would find by file name.
         var pin = PinnedAppsService.CreatePin(File("Cover art.psd"));
         var item = PinnedAppsService.ToDockItem(pin!);
 
-        Assert.Null(item.RunningTarget);
+        Assert.NotNull(item.RunningTarget);
+        Assert.Equal("Cover art.psd", item.RunningTarget.Document);
+        Assert.Null(item.RunningTarget.Folder);
+    }
+
+    [Fact]
+    public void ADocument_KnowsTheAppThatOpensIt_AsTheShellNamesIt()
+    {
+        // .txt is Notepad's on every copy of Windows 11, and Notepad is a Store app: its
+        // windows carry the app's name, whatever the program's path.
+        var item = PinnedAppsService.ToDockItem(PinnedAppsService.CreatePin(File("notes.txt"))!);
+
+        Assert.Equal(ShellVerbs.HandlerAppId(".txt"), item.RunningTarget!.AppId);
+    }
+
+    [Fact]
+    public void ControlPanel_IsPinnedAsStartPinsIt_AndLitByItsWindowsAppId()
+    {
+        // Not control.exe, which hands over to Explorer and exits: the window is explorer.exe's
+        // and carries Control Panel's app id, which nothing ties to control.exe.
+        var pin = DockPresets.Create("control")!;
+        var item = PinnedAppsService.ToDockItem(pin);
+
+        Assert.Null(pin.TargetPath);
+        Assert.Equal(DockPresets.ControlPanelAumid, pin.Aumid);
+        Assert.Equal(DockPresets.ControlPanelAumid, item.RunningTarget!.AppId);
+        Assert.Equal(@"shell:AppsFolder\" + DockPresets.ControlPanelAumid, item.ShellTarget);
+    }
+
+    [Fact]
+    public void AStoreApp_IsLitByItsAppId()
+    {
+        // Its windows carry it; its program is in a package, or is a host every such app shares.
+        var item = PinnedAppsService.ToDockItem(DockPresets.Create("settings")!);
+
+        Assert.Equal(DockPresets.SettingsAumid, item.RunningTarget!.AppId);
+        Assert.Null(item.RunningTarget.Program);
+        Assert.Null(item.RunningTarget.Document);
     }
 
     [Fact]
@@ -155,7 +192,7 @@ public class PinCreationTests : IDisposable
             TargetPath = @"C:\Program Files\Thing\Thing.exe"
         };
 
-        Assert.Equal(@"C:\Program Files\Thing\Thing.exe", item.RunningTarget);
+        Assert.Equal(@"C:\Program Files\Thing\Thing.exe", item.RunningTarget!.Program);
     }
 
     [Fact]
@@ -166,10 +203,14 @@ public class PinCreationTests : IDisposable
             Id = "app",
             Label = "App",
             TargetPath = @"C:\Users\someone\Start Menu\Thing.lnk",
-            LinkTarget = @"C:\Program Files\Thing\Thing.exe"
+            LinkTarget = @"C:\Program Files\Thing\Thing.exe",
+            AppId = "Vendor.Thing"
         };
 
-        Assert.Equal(@"C:\Program Files\Thing\Thing.exe", item.RunningTarget);
+        Assert.Equal(@"C:\Program Files\Thing\Thing.exe", item.RunningTarget!.Program);
+
+        // And by the app ID it gives, which the program's windows carry.
+        Assert.Equal("Vendor.Thing", item.RunningTarget.AppId);
     }
 
     [Fact]
@@ -193,8 +234,8 @@ public class PinCreationTests : IDisposable
         var thisPc = PinnedAppsService.ToDockItem(DockPresets.Create("thispc")!);
         var explorer = PinnedAppsService.ToDockItem(DockPresets.Create("explorer")!);
 
-        Assert.Equal("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", thisPc.RunningTarget, ignoreCase: true);
-        Assert.Equal("explorer.exe", Path.GetFileName(explorer.RunningTarget), ignoreCase: true);
+        Assert.Equal("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", thisPc.RunningTarget?.Folder, ignoreCase: true);
+        Assert.Equal("explorer.exe", Path.GetFileName(explorer.RunningTarget?.Program), ignoreCase: true);
     }
 
     [Theory]
@@ -208,8 +249,8 @@ public class PinCreationTests : IDisposable
         var item = PinnedAppsService.ToDockItem(pin);
 
         Assert.NotNull(item.RunningTarget);
-        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget);
-        Assert.False(item.RunningTarget.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget.Folder);
+        Assert.Null(item.RunningTarget.Program);
     }
 
     [Fact]
@@ -219,7 +260,7 @@ public class PinCreationTests : IDisposable
         var item = PinnedAppsService.ToDockItem(PinnedAppsService.CreatePin(folder)!);
         var drive = Path.GetPathRoot(folder)!;
 
-        Assert.Equal(folder, item.RunningTarget, ignoreCase: true);
+        Assert.Equal(folder, item.RunningTarget?.Folder, ignoreCase: true);
         Assert.Equal(drive, PinnedAppsService.ExplorerFolder(drive, null), ignoreCase: true);
     }
 
@@ -239,12 +280,14 @@ public class PinCreationTests : IDisposable
     [Fact]
     public void AZip_IsAFileToOpen_NotAFolder()
     {
-        // A folder to the shell, and a file as well, which opens in whatever owns zips.
+        // A folder to the shell, and a file as well, which opens in whatever owns zips — so it
+        // is a document, lit by the window that names it.
         var folder = Directory.CreateDirectory(Path.Combine(_root, "Packed")).FullName;
         var zip = Path.Combine(_root, "Packed.zip");
         ZipFile.CreateFromDirectory(folder, zip);
 
         Assert.Null(PinnedAppsService.ExplorerFolder(zip, null));
+        Assert.Equal("Packed.zip", PinnedAppsService.DocumentTarget(zip, null)?.Document);
     }
 
     [Theory]
@@ -450,8 +493,8 @@ public class PinCreationTests : IDisposable
     [Fact]
     public void ACommandPin_ShowsNoRunningDot()
     {
-        // Nothing runs under it, and RunningTarget is what rules that out — see the .exe
-        // check there. A command with a dot under it would be claiming to be an open app.
+        // Nothing runs under it, and RunningTarget is what rules that out: it is neither a
+        // program nor a file. A command with a dot under it would be claiming to be an open app.
         var item = PinnedAppsService.ToDockItem(DockPresets.Create("start")!);
 
         Assert.Null(item.RunningTarget);

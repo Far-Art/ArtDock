@@ -104,6 +104,7 @@ public class ShellDropTests : IDisposable
 
         Assert.NotNull(pin);
         Assert.Equal(DockPresets.Create(preset)!.TargetPath, pin.TargetPath);
+        Assert.Equal(DockPresets.Create(preset)!.Aumid, pin.Aumid);
         Assert.Equal(DockPresets.Create(preset)!.Label, pin.Label);
     }
 
@@ -131,7 +132,7 @@ public class ShellDropTests : IDisposable
 
         // A folder to the shell, lit while a File Explorer window shows it.
         Assert.NotNull(item.RunningTarget);
-        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget);
+        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget.Folder);
     }
 
     [Theory]

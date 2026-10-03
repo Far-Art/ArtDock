@@ -86,6 +86,19 @@ public sealed class DockItem
     public string? LaunchedProgram { get; init; }
 
     /// <summary>
+    /// Windows' name for the app a shortcut starts, where the shortcut gives one
+    /// (<c>Interop.ShellLink.AppId</c>): the app's windows carry it, whatever their program's path.
+    /// </summary>
+    public string? AppId { get; init; }
+
+    /// <summary>
+    /// For a pin that opens a document, which windows are its: those whose title names it, among
+    /// the windows of the app that opens it. Read as the pin is read
+    /// (<c>PinnedAppsService.DocumentTarget</c>), since it asks the shell; null for anything else.
+    /// </summary>
+    public RunningTarget? Document { get; init; }
+
+    /// <summary>
     /// A spacer rather than an application: draws a divider and launches nothing.
     /// </summary>
     /// <remarks>
@@ -127,23 +140,29 @@ public sealed class DockItem
         Aumid is { Length: > 0 } aumid ? $@"shell:AppsFolder\{aumid}" : TargetPath ?? string.Empty;
 
     /// <summary>
-    /// The image path a process must be running under for this item to count as open — for a
-    /// folder, the folder a File Explorer window must be showing — or null for a pin that
-    /// cannot be running at all.
+    /// Which windows are this item's, for it to count as open — or null for a pin that cannot
+    /// be running at all: a web address, a command, a separator.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Not the same thing as what the item launches. A shortcut launches as itself — that is
     /// what carries its arguments and its icon — but the process it starts runs under the
     /// path the shortcut points at, so matching on the <c>.lnk</c> never lit the indicator
-    /// and clicking a running app pinned that way started a second copy.
+    /// and clicking a running app pinned that way started a second copy. Where the shortcut
+    /// gives the app ID its windows carry (<see cref="AppId"/>), it is matched by that as well.
     /// </para>
     /// <para>
-    /// Only an executable gets one, and a folder. A document or a web address has no process
-    /// of its own: what opens a document is its editor, whose window belongs to whatever pin
-    /// launches *that*. Asking the question at all would answer it eventually — the running
-    /// census falls back to matching on file name — so the dot is ruled out here rather than
-    /// left to the unlikeliness of a collision.
+    /// A Store app is matched by its <see cref="Aumid"/> alone, which is what its windows carry
+    /// (<see cref="Interop.AppIds"/>): its program is in a package, or is a host every such app
+    /// shares, and its pin names no program at all. Until 2026-10-03 such a pin had no running
+    /// target and could never light — Settings, and anything else pinned by its app ID.
+    /// </para>
+    /// <para>
+    /// A document is lit by the windows showing it (<see cref="Document"/>), by their titles —
+    /// not by every window of its app, or opening one picture would light every picture on the
+    /// dock. Until 2026-10-03 a document was never lit at all, on the reasoning that it has no
+    /// process of its own; but a folder has none either, and the user, opening a letter from the
+    /// dock in Word, saw it as Word not being recognised as running.
     /// </para>
     /// <para>
     /// A folder — anything File Explorer opens, This PC and the Recycle Bin included — is
@@ -161,13 +180,33 @@ public sealed class DockItem
     /// (<see cref="LaunchedProgram"/>): it has no window of its own to be matched by.
     /// </para>
     /// </remarks>
-    public string? RunningTarget =>
-        ExplorerFolder
-        ?? LaunchedProgram
-        ?? ((LinkTarget ?? TargetPath) is { Length: > 0 } target
-            && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                ? target
-                : null);
+    public RunningTarget? RunningTarget => field ??= FindRunningTarget();
+
+    private RunningTarget? FindRunningTarget()
+    {
+        if (ExplorerFolder is { } folder)
+        {
+            return new RunningTarget { Folder = folder };
+        }
+
+        if (Document is { } document)
+        {
+            return document;
+        }
+
+        if (Aumid is { Length: > 0 } aumid)
+        {
+            return new RunningTarget { AppId = aumid };
+        }
+
+        var program = LaunchedProgram
+            ?? ((LinkTarget ?? TargetPath) is { Length: > 0 } target
+                && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    ? target
+                    : null);
+
+        return program is null && AppId is null ? null : new RunningTarget { Program = program, AppId = AppId };
+    }
 
     /// <summary>True when clicking this item should do something.</summary>
     public bool IsLaunchable => !IsSeparator && !IsDisabled && ShellTarget.Length > 0;

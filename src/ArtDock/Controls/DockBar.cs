@@ -3286,23 +3286,43 @@ public sealed class DockBar : Canvas
             }
 
             var centreX = _iconsLeft + _offsets[i] + (_sizes[i] / 2) + SlotShift(i);
-            if (!item.IsRunning)
+            DrawDot(drawingContext, new Point(centreX, y), item);
+        }
+    }
+
+    /// <summary>
+    /// How far a dot reaches from its centre, rim and all, in DIPs: what anything drawing one
+    /// elsewhere — the overflow item's menu — must leave room for.
+    /// </summary>
+    public const double DotReach = DotRadius + DotRim;
+
+    /// <summary>
+    /// Draws an item's dot at <paramref name="centre"/>: running, running as administrator, or
+    /// closing — or nothing, for an item that is none of them. The one place a dot's look is
+    /// decided, for the bar's and for the overflow item's menu (<c>Views.RunningDot</c>).
+    /// </summary>
+    public static void DrawDot(DrawingContext drawingContext, Point centre, DockItem item)
+    {
+        if (!item.IsRunning)
+        {
+            if (item.IsClosing)
             {
-                DrawClosingDot(drawingContext, new Point(centreX, y));
-                continue;
+                DrawClosingDot(drawingContext, centre);
             }
 
-            // The rim's pen is centred on its circle, so the circle sits half a rim outside the
-            // fill: the fill shows at its full radius, and the rim lies wholly outside it.
-            var elevated = item.IsElevated;
-            var radius = DotRadius + (DotRim / 2);
-            drawingContext.DrawEllipse(
-                elevated ? ElevatedDotBrush : DotBrush,
-                elevated ? ElevatedDotRimPen : DotRimPen,
-                new Point(centreX, y),
-                radius,
-                radius);
+            return;
         }
+
+        // The rim's pen is centred on its circle, so the circle sits half a rim outside the
+        // fill: the fill shows at its full radius, and the rim lies wholly outside it.
+        var elevated = item.IsElevated;
+        var radius = DotRadius + (DotRim / 2);
+        drawingContext.DrawEllipse(
+            elevated ? ElevatedDotBrush : DotBrush,
+            elevated ? ElevatedDotRimPen : DotRimPen,
+            centre,
+            radius,
+            radius);
     }
 
     /// <summary>

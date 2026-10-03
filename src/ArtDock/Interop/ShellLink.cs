@@ -79,6 +79,43 @@ public static class ShellLink
         }
     }
 
+    /// <summary>
+    /// The app ID a shortcut gives what it starts — <see cref="AppIds"/> — or null for one that
+    /// gives none, which is most of them.
+    /// </summary>
+    /// <remarks>
+    /// What the taskbar matches a pinned shortcut's windows by, where it has one: the program's
+    /// windows carry the same name, whatever the program's path.
+    /// </remarks>
+    public static string? AppId(string linkPath)
+    {
+        if (string.IsNullOrWhiteSpace(linkPath))
+        {
+            return null;
+        }
+
+        object? link = null;
+        try
+        {
+            link = new ShellLinkCoClass();
+            ((IPersistFile)link).Load(linkPath, StgmRead);
+            return AppIds.OfShortcut((AppIds.IPropertyStore)link);
+        }
+        catch (Exception e) when (e is COMException or IOException or UnauthorizedAccessException
+            or InvalidCastException or ArgumentException)
+        {
+            // As for ResolveTarget: no answer, and the pin is matched by its program alone.
+            return null;
+        }
+        finally
+        {
+            if (link is not null)
+            {
+                Marshal.ReleaseComObject(link);
+            }
+        }
+    }
+
     [ComImport]
     [Guid("00021401-0000-0000-C000-000000000046")]
     private class ShellLinkCoClass

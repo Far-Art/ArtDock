@@ -962,14 +962,23 @@ the two agree in neither path nor file name. So a pin whose program is named `X 
 is lit by `X.exe` in the same folder when there is one — that and no wider, since lighting a
 pin by anything in its folder would light the wrong one wherever programs share a folder.
 
+**A window is known by its app, as Windows knows it, as well as by its program.** The taskbar
+groups windows by their AppUserModelID, and an app's program is often not the one its pin
+names: Word from the Store runs inside its package, Photos too, the Settings app's window
+belongs to a host every such app shares, and Control Panel's to `explorer.exe`. So the census
+reads each window's app id — the window's own, then its process's (`Interop/AppIds`) — and a
+pin is matched by its program and by an app id: a Store app's own, and a shortcut's where it
+gives one. The shell names a document's app by the same ids, which is how a document's
+window is told from another app's.
+
 **Anything that exists can be pinned, and the dock does not sort it into kinds.** A
 document launches through the same `ShellExecute` as an application, takes its icon from the
 same shell call — the shell has one for every registered type, and a generic sheet for the
-rest — and occupies the same slot. The single difference is the running dot, and that is
-ruled out where it is decided rather than by refusing the pin: `DockItem.RunningTarget` is
-null for anything that is not an executable, because what opens a document is its editor,
-whose window belongs to whatever pin starts *that*. A folder is the one other thing with a
-dot, and it is not matched to what opens it: every folder window is `explorer.exe`'s,
+rest — and occupies the same slot. Nor is either kind matched to the program that opens it.
+A document's dot is lit by the windows whose title names the file — with its extension, as a
+word of its own, in any window, or without it at the start of a window of the app that opens
+it — and not by every window of that app, or one photo open would light every picture on the
+dock. A folder is not matched to what opens it either: every folder window is `explorer.exe`'s,
 whichever folder it shows, so a folder is matched to the folders Explorer's windows show in
 their tabs. The dock asks Explorer for those on a thread of its own, since one of Explorer's
 windows hanging must not hang the dock, whenever a window comes, goes or changes its title —
@@ -1043,7 +1052,8 @@ tick away from the bar.
 Size page — *Dock size* — is the most the icons are. With more items than the display has room
 for at that size, the dock makes them smaller, in whole DIPs, as far as *Smallest icon size*
 (32 by default); past that the last items go behind an item at the end of the row, three dots
-on a tile, whose click lists them in a menu, each opening as its icon would; and once that holds
+on a tile, whose click lists them in a menu, each opening as its icon would, with the dock's
+own dot after the name of each that is running or closing; and once that holds
 thirty (`DockFit.OverflowLimit`) the dock takes no more — a drop says *The dock is full*, the
 Add menu says so in its place, and a search or the Items page refuses a batch that would not
 fit, whole. The bar is fitted against the work area of the display the dock is on, in that
@@ -1238,16 +1248,21 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 - **The window previews do not peek.** Resting on one of the taskbar's previews shows that
   window alone on the desktop; what does that is not public, and the dock does not use it. Nor
   are the pictures' corners rounded: DWM draws a thumbnail over everything in its rectangle.
-- **No previews for a Store app pinned by its app id**, which has no running dot either, and
-  none of windows on another virtual desktop, which Windows hides from the census.
+- **No previews of windows on another virtual desktop**, which Windows hides from the census.
+- **A document is known by its window's title.** An app that titles its windows otherwise — by
+  a document's own title rather than its file name, as a browser may for a PDF — leaves the
+  pin dark, and two files of the same name in different folders light each other's pins.
 - **A tab is chosen by its name.** Windows lets another program bring a File Explorer tab to
   the front only by its header, so of two tabs behind another with the same name — two folders
   called *Docs* — a click may bring the other one forward.
 - **A window that goes to another folder of the same name may keep the first one's dot** until
   something else changes on the desktop. The dock hears a window change folders by its title
   changing, and two folders called *Docs* give it the same title.
-- **The Add menu's Control Panel is never marked as open.** `control.exe` hands Control Panel to
-  File Explorer and exits, so nothing runs under it for long enough to be seen.
+- **A pin of `control.exe` is never marked as open.** It hands Control Panel to File Explorer
+  and exits; the window carries Control Panel's app id, `Microsoft.Windows.ControlPanel`, and
+  nothing ties `control.exe` to that id. The Add menu's Control Panel is pinned by that id, as
+  Start pins it, and is lit; a Control Panel pin made before that is `control.exe`, and wants
+  adding again.
 - **The bottom edge only.** The Position page has no choice of edge: the dock's geometry is
   written across the screen rather than down it, so a side dock is a change to the whole
   layout rather than a setting. Left and right used to be offered greyed out and were taken

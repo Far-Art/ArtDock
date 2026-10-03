@@ -56,7 +56,6 @@ public static class DockPresets
     private static (string Key, string Path, string Label)[] Targets =>
     [
         ("taskmgr", @"%WINDIR%\System32\Taskmgr.exe", Localization.Localizer.Get("Preset.TaskManager")),
-        ("control", @"%WINDIR%\System32\control.exe", Localization.Localizer.Get("Preset.ControlPanel")),
         ("explorer", @"%WINDIR%\explorer.exe", Localization.Localizer.Get("Preset.FileExplorer"))
     ];
 
@@ -64,9 +63,12 @@ public static class DockPresets
     public const string SettingsAumid =
         "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel";
 
+    /// <summary>Control Panel's app id: Start's entry for it, and what its windows carry.</summary>
+    public const string ControlPanelAumid = "Microsoft.Windows.ControlPanel";
+
     /// <summary>
-    /// Apps that ship with Windows as Store apps, in menu order: pinned by AUMID, since there
-    /// is no file to pin.
+    /// Apps that ship with Windows and are pinned by their app id, in menu order: there is no
+    /// file to pin, or the file is not what the app's windows are known by.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -76,13 +78,21 @@ public static class DockPresets
     /// document, the app as its gear.
     /// </para>
     /// <para>
-    /// Not existence-checked, like the places: Settings is part of Windows and cannot be
+    /// Control Panel was <c>control.exe</c> until 2026-10-03, and was never lit: it hands Control
+    /// Panel to File Explorer and exits, and the window, <c>explorer.exe</c>'s, carries
+    /// <see cref="ControlPanelAumid"/>, which nothing ties to <c>control.exe</c>. So it is pinned as
+    /// Start pins it, by that id, which opens it through <c>shell:AppsFolder</c> and lights it by
+    /// its windows. Decided with the user over learning the id from the window a click brings up.
+    /// </para>
+    /// <para>
+    /// Not existence-checked, like the places: both are part of Windows and cannot be
     /// uninstalled, and there is no file to ask about.
     /// </para>
     /// </remarks>
     private static (string Key, string Aumid, string Label)[] StoreApps =>
     [
-        ("settings", SettingsAumid, Localization.Localizer.Get("Preset.Settings"))
+        ("settings", SettingsAumid, Localization.Localizer.Get("Preset.Settings")),
+        ("control", ControlPanelAumid, Localization.Localizer.Get("Preset.ControlPanel"))
     ];
 
     /// <summary>
@@ -352,8 +362,8 @@ public static class DockPresets
     /// <remarks>
     /// Control Panel answers to three: the desktop shows the category view,
     /// <c>{26EE0668-…}</c>, under the desktop icon's own <c>{5399E694-…}</c>, and the all-items
-    /// view is <c>{21EC2020-…}</c>. All three are the preset's <c>control.exe</c>, which opens
-    /// whichever view was last used.
+    /// view is <c>{21EC2020-…}</c>. All three are the preset's, Control Panel by its app id
+    /// (<see cref="ControlPanelAumid"/>), which opens whichever view was last used.
     /// </remarks>
     private static readonly (string ParsingName, string Key)[] DroppedPlaces =
     [

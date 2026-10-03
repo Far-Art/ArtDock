@@ -50,6 +50,16 @@ public sealed class PinnedAppsService
     /// </remarks>
     private static readonly ConcurrentDictionary<string, string?> ExplorerFolderCache = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The app ID each pinned shortcut gives, keyed by the shortcut: see <see cref="ShortcutAppId"/>.</summary>
+    private static readonly ConcurrentDictionary<string, string?> ShortcutAppIdCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The app and the program that open each type of file, keyed by its extension: see
+    /// <see cref="DocumentTarget"/>. A registry read, so asked once, as <see cref="PictureTypes"/> is.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, (string? AppId, string? Program)> HandlerCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Pictures' thumbnails, keyed by the file's path, with when the file was written.
     /// </summary>
@@ -271,6 +281,7 @@ public sealed class PinnedAppsService
     public static DockItem ToDockItem(PinnedAppSetting app)
     {
         var linkTarget = ResolveLinkTarget(app.TargetPath);
+        var explorerFolder = ExplorerFolder(app.TargetPath, linkTarget);
         return new DockItem
         {
             Id = app.Id,
@@ -288,8 +299,10 @@ public sealed class PinnedAppsService
                 && app.Aumid is not { Length: > 0 }
                 && CanRunAsAdministrator(app.TargetPath, linkTarget),
             LinkTarget = linkTarget,
-            ExplorerFolder = ExplorerFolder(app.TargetPath, linkTarget),
+            ExplorerFolder = explorerFolder,
             LaunchedProgram = LaunchedProgram(app.TargetPath, linkTarget),
+            AppId = ShortcutAppId(app.TargetPath),
+            Document = explorerFolder is null && !app.IsSeparator ? DocumentTarget(app.TargetPath, linkTarget) : null,
             IsSeparator = app.IsSeparator
         };
     }
@@ -338,6 +351,50 @@ public sealed class PinnedAppsService
 
         var launched = Path.Combine(folder, stem + ".exe");
         return File.Exists(launched) ? launched : null;
+    }
+
+    /// <summary>
+    /// The app ID a pinned shortcut gives what it starts (<see cref="ShellLink.AppId"/>), or null
+    /// for a pin that is not a shortcut, or a shortcut that gives none.
+    /// </summary>
+    public static string? ShortcutAppId(string? target) =>
+        target is { Length: > 0 } path && Path.GetExtension(path).Equals(".lnk", StringComparison.OrdinalIgnoreCase)
+            ? ShortcutAppIdCache.GetOrAdd(path, ShellLink.AppId)
+            : null;
+
+    /// <summary>
+    /// Which windows are a document pin's: those whose title names the document, among the windows
+    /// of the app that opens it — see <see cref="DocumentWindows"/>. Null for a pin that opens no
+    /// document: a program, a folder, a command, a web address, or a file that is not there.
+    /// </summary>
+    /// <remarks>
+    /// The app is the shell's for the file's type, by its app ID where it has one and by its
+    /// program where the shell will say — Photoshop's <c>.psd</c> has neither, and is known by
+    /// its title alone. A shortcut opens what it points at, so it is asked about that.
+    /// </remarks>
+    /// <param name="target">The pin's target.</param>
+    /// <param name="linkTarget">Where it points, when it is a shortcut: see <see cref="ResolveLinkTarget"/>.</param>
+    public static RunningTarget? DocumentTarget(string? target, string? linkTarget)
+    {
+        var opens = string.Equals(Path.GetExtension(target), ".lnk", StringComparison.OrdinalIgnoreCase)
+            ? linkTarget
+            : target;
+
+        if (opens is not { Length: > 0 } path
+            || DockCommands.IsCommand(path)
+            || !Path.IsPathFullyQualified(path)
+            || Path.GetExtension(path) is not { Length: > 1 } extension
+            || extension.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".lnk", StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(path))
+        {
+            return null;
+        }
+
+        var (appId, program) = HandlerCache.GetOrAdd(
+            extension, type => (ShellVerbs.HandlerAppId(type), ShellVerbs.HandlerProgram(type)));
+
+        return new RunningTarget { Document = Path.GetFileName(path), AppId = appId, Program = program };
     }
 
     /// <summary>
@@ -641,7 +698,7 @@ public sealed class PinnedAppsService
 
     /// <summary>
     /// Forgets what has been read from the shell — icons, thumbnails, where shortcuts point and
-    /// which targets are folders — so a changed file on disk is picked up.
+    /// which targets are folders, and what opens a document — so a changed file on disk is picked up.
     /// </summary>
     public static void ClearIconCache()
     {
@@ -649,6 +706,8 @@ public sealed class PinnedAppsService
         ThumbnailCache.Clear();
         LinkTargetCache.Clear();
         ExplorerFolderCache.Clear();
+        ShortcutAppIdCache.Clear();
+        HandlerCache.Clear();
     }
 
     /// <summary>

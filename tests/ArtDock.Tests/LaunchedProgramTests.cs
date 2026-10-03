@@ -74,7 +74,7 @@ public class LaunchedProgramTests : IDisposable
 
         var item = PinnedAppsService.ToDockItem(new PinnedAppSetting { Id = "a", Label = "Battle.net", TargetPath = launcher });
 
-        Assert.Equal(program, item.RunningTarget);
+        Assert.Equal(program, item.RunningTarget?.Program);
         Assert.Equal(launcher, item.ShellTarget);
     }
 

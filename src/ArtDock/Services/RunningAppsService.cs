@@ -1,4 +1,5 @@
 using System.Windows.Threading;
+using ArtDock.Dock;
 using ArtDock.Interop;
 
 namespace ArtDock.Services;
@@ -27,6 +28,14 @@ namespace ArtDock.Services;
 /// hang the dock with it. Going to another folder or tab makes and destroys no window, but it
 /// does change the window's title, so an Explorer window's change of name is heard as well.
 /// </para>
+/// <para>
+/// A window is known by its program's path and by Windows' name for its app
+/// (<see cref="AppIds"/>), which is what a Store app's pin is matched by: its program is in a
+/// package, or is a host that every such app shares. A document is lit by the windows whose title
+/// names it (<see cref="DocumentWindows"/>), so a title's change is heard from every window in the
+/// census — but the dock is told only when that changes a document's answer, not every title's,
+/// or a console's spinner would have it look again several times a second.
+/// </para>
 /// </remarks>
 public sealed class RunningAppsService : IDisposable
 {
@@ -35,6 +44,31 @@ public sealed class RunningAppsService : IDisposable
 
     /// <summary>The program every File Explorer window belongs to, by file name.</summary>
     private const string ExplorerFileName = "explorer.exe";
+
+    /// <summary>A window in the census: its handle, its program's full path, and its app's name if it has one.</summary>
+    private readonly record struct CensusWindow(nint Window, string Path, string? AppId);
+
+    /// <summary>Every window in the census, in its order: front to back.</summary>
+    private List<CensusWindow> _census = [];
+
+    /// <summary>The census's windows' titles, as last read: what a document is found by.</summary>
+    private Dictionary<nint, string> _titles = [];
+
+    /// <summary>
+    /// The documents the dock has asked about, so a change of title is told of only when it
+    /// changes one of their answers.
+    /// </summary>
+    private readonly HashSet<RunningTarget> _documents = [];
+
+    /// <summary>
+    /// Reads the titles again once a window's has changed. Started by the first change and not
+    /// restarted by the rest, so a title changing all the time is read a few times a second —
+    /// a debounce, restarted by every change, would never read it at all.
+    /// </summary>
+    private readonly DispatcherTimer _titleWatch = new(DispatcherPriority.Normal)
+    {
+        Interval = TimeSpan.FromMilliseconds(150)
+    };
 
     /// <summary>Open windows keyed by their process's full image path.</summary>
     private readonly Dictionary<string, List<nint>> _windowsByPath = new(StringComparer.OrdinalIgnoreCase);
@@ -94,7 +128,7 @@ public sealed class RunningAppsService : IDisposable
     private readonly WindowsApi.WinEventProc _hookCallback;
 
     private readonly List<nint> _hooks = [];
-    private readonly Dictionary<string, int> _cycleIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<RunningTarget, int> _cycleIndex = [];
 
     /// <summary>When each open window was first seen, for <see cref="WindowsOf"/>.</summary>
     private readonly Dictionary<nint, long> _firstSeen = [];
@@ -111,6 +145,15 @@ public sealed class RunningAppsService : IDisposable
         {
             _debounce.Stop();
             Rescan();
+        };
+
+        _titleWatch.Tick += (_, _) =>
+        {
+            _titleWatch.Stop();
+            if (ReadTitles())
+            {
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
         };
 
         _closingWatch.Tick += (_, _) =>
@@ -151,24 +194,21 @@ public sealed class RunningAppsService : IDisposable
         Rescan();
     }
 
-    /// <summary>
-    /// True when <paramref name="target"/> — an executable's path, or a folder's name, as
-    /// <c>DockItem.RunningTarget</c> gives them — has at least one open window.
-    /// </summary>
-    public bool IsRunning(string? target) => FindWindows(target).Count > 0;
+    /// <summary>True when <paramref name="target"/>, as <c>DockItem.RunningTarget</c> gives it, has at least one open window.</summary>
+    public bool IsRunning(RunningTarget? target) => FindWindows(target).Count > 0;
 
     /// <summary>
     /// True when the program <paramref name="target"/> goes by is closing: its windows have gone
     /// and its process has not, yet. See <see cref="ClosingPrograms{T}"/>.
     /// </summary>
-    public bool IsClosing(string? target) => _closing.Find(target) is not null;
+    public bool IsClosing(RunningTarget? target) => _closing.Find(target?.Program) is not null;
 
     /// <summary>
     /// Runs <paramref name="then"/> once the program <paramref name="target"/> goes by has
     /// finished closing, if it is closing.
     /// </summary>
     /// <returns>True when it was held to wait; false, and nothing run, when it is not closing.</returns>
-    public bool WhenClosed(string? target, Action then) => _closing.WhenClosed(target, then);
+    public bool WhenClosed(RunningTarget? target, Action then) => _closing.WhenClosed(target?.Program, then);
 
     /// <summary>
     /// True when any open window of <paramref name="target"/> belongs to a program running as
@@ -178,49 +218,75 @@ public sealed class RunningAppsService : IDisposable
     /// Asked of the windows as they stand rather than kept with the census: a process's level is
     /// read from its token, a few calls per window, and only for the pins that are running.
     /// </remarks>
-    public bool IsElevated(string? target) => FindWindows(target).Any(WindowsApi.IsElevated);
+    public bool IsElevated(RunningTarget? target) => FindWindows(target).Any(WindowsApi.IsElevated);
 
     /// <summary>
     /// The open windows of a pinned target, in the order they were first seen — the order the
     /// window previews show them in, which does not change as the user moves between them.
     /// </summary>
     /// <remarks>A copy: the census replaces its lists, but a caller may hold this one.</remarks>
-    public IReadOnlyList<nint> WindowsOf(string? target) =>
+    public IReadOnlyList<nint> WindowsOf(RunningTarget? target) =>
         WindowOrder.Arrange(FindWindows(target), _firstSeen);
 
     /// <summary>
-    /// Open windows for a pinned target: an exact image-path match if there is one, otherwise
-    /// a match on executable file name to cover Windows' launcher stubs — or, for a folder,
-    /// the File Explorer windows showing it.
+    /// Open windows for a pinned target: for a folder, the File Explorer windows showing it; for
+    /// a document, the windows whose title names it; for anything else, its program's and its
+    /// app's. Its program's are an exact image-path match if there is one, otherwise a match on
+    /// executable file name to cover Windows' launcher stubs.
     /// </summary>
-    private IReadOnlyList<nint> FindWindows(string? target)
+    private IReadOnlyList<nint> FindWindows(RunningTarget? target)
     {
-        if (target is not { Length: > 0 } path)
+        if (target is null)
         {
             return [];
         }
 
-        // Anything but an executable is a folder, by the shell's name for it: nothing else is
-        // given a running target.
-        if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        if (target.Folder is { } folder)
         {
-            return _windowsByFolder.TryGetValue(path, out var showing) ? showing : [];
+            return _windowsByFolder.TryGetValue(folder, out var showing) ? showing : [];
         }
 
-        if (_windowsByPath.TryGetValue(path, out var exact))
+        if (target.Document is not null)
         {
-            return exact;
+            _documents.Add(target);
+            return [.. _census.Where(window => Shows(window, target, _titles)).Select(window => window.Window)];
         }
 
-        var fileName = System.IO.Path.GetFileName(path);
-        return _windowsByFileName.TryGetValue(fileName, out var byName) ? byName : [];
+        IReadOnlyList<nint> program = target.Program is not { Length: > 0 } path ? []
+            : _windowsByPath.TryGetValue(path, out var exact) ? exact
+            : _windowsByFileName.TryGetValue(System.IO.Path.GetFileName(path), out var byName) ? byName
+            : [];
+
+        if (target.AppId is not { Length: > 0 } appId)
+        {
+            return program;
+        }
+
+        // In the census's order, the program's windows and the app's together, each once.
+        return
+        [
+            .. _census
+                .Where(window => string.Equals(window.AppId, appId, StringComparison.OrdinalIgnoreCase)
+                    || program.Contains(window.Window))
+                .Select(window => window.Window)
+        ];
     }
+
+    /// <summary>Whether a window in the census shows a document, by the titles given.</summary>
+    private static bool Shows(CensusWindow window, RunningTarget document, Dictionary<nint, string> titles) =>
+        titles.TryGetValue(window.Window, out var title)
+        && DocumentWindows.Shows(title, document.Document, byItsApp: IsItsApp(window, document));
+
+    /// <summary>Whether a window belongs to the app that opens a document, by the app's name or by its program.</summary>
+    private static bool IsItsApp(CensusWindow window, RunningTarget document) =>
+        (document.AppId is { Length: > 0 } appId && string.Equals(window.AppId, appId, StringComparison.OrdinalIgnoreCase))
+        || (document.Program is { Length: > 0 } program && string.Equals(window.Path, program, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// The window to raise for this app. Repeat calls cycle through its windows, so clicking
     /// a multi-window app in the dock walks them rather than re-raising the same one.
     /// </summary>
-    public nint NextWindow(string? target)
+    public nint NextWindow(RunningTarget? target)
     {
         var windows = FindWindows(target);
         if (windows.Count == 0)
@@ -228,8 +294,8 @@ public sealed class RunningAppsService : IDisposable
             return 0;
         }
 
-        var path = target!;
-        _cycleIndex.TryGetValue(path, out var index);
+        var key = target!;
+        _cycleIndex.TryGetValue(key, out var index);
 
         // A second click on an app that is already in front moves to its next window.
         var foreground = WindowsApi.GetForegroundWindow();
@@ -242,7 +308,7 @@ public sealed class RunningAppsService : IDisposable
             index = 0;
         }
 
-        _cycleIndex[path] = index;
+        _cycleIndex[key] = index;
         return windows[index];
     }
 
@@ -285,12 +351,25 @@ public sealed class RunningAppsService : IDisposable
             return;
         }
 
-        // Titles change all the time, everywhere. Only a File Explorer window's says that it
-        // may have gone to another folder, or another tab.
-        if (eventType == WindowsApi.EVENT_OBJECT_NAMECHANGE
-            && (idChild != WindowsApi.CHILDID_SELF || WindowsApi.GetWindowClass(hwnd) != ExplorerWindowClass))
+        // Titles change all the time, everywhere. A File Explorer window's says that it may have
+        // gone to another folder, or another tab; any other in the census's, that it may show
+        // another document — which wants the titles read again, not a census.
+        if (eventType == WindowsApi.EVENT_OBJECT_NAMECHANGE)
         {
-            return;
+            if (idChild != WindowsApi.CHILDID_SELF)
+            {
+                return;
+            }
+
+            if (WindowsApi.GetWindowClass(hwnd) != ExplorerWindowClass)
+            {
+                if (_titles.ContainsKey(hwnd) && !_titleWatch.IsEnabled)
+                {
+                    _titleWatch.Start();
+                }
+
+                return;
+            }
         }
 
         _debounce.Stop();
@@ -304,12 +383,13 @@ public sealed class RunningAppsService : IDisposable
     /// Taken afresh rather than from a running watch: the settings dialog asks once, when it
     /// offers the programs that are open, and it has no dock of its own to ask.
     /// </remarks>
-    public static IReadOnlyList<string> WithWindows() => [.. Census().Keys];
+    public static IReadOnlyList<string> WithWindows() =>
+        [.. Census().Select(window => window.Path).Distinct(StringComparer.OrdinalIgnoreCase)];
 
-    /// <summary>Every open window a user would call one, grouped by the program it belongs to.</summary>
-    private static Dictionary<string, List<nint>> Census()
+    /// <summary>Every open window a user would call one, front to back.</summary>
+    private static List<CensusWindow> Census()
     {
-        var census = new Dictionary<string, List<nint>>(StringComparer.OrdinalIgnoreCase);
+        var census = new List<CensusWindow>();
 
         WindowsApi.EnumWindows(
             (hwnd, _) =>
@@ -325,13 +405,7 @@ public sealed class RunningAppsService : IDisposable
                     return true;
                 }
 
-                if (!census.TryGetValue(path, out var windows))
-                {
-                    windows = [];
-                    census[path] = windows;
-                }
-
-                windows.Add(hwnd);
+                census.Add(new CensusWindow(hwnd, path, AppIds.OfWindow(hwnd, processId)));
                 return true;
             },
             0);
@@ -342,10 +416,29 @@ public sealed class RunningAppsService : IDisposable
     /// <summary>Rebuilds the window census from scratch.</summary>
     private void Rescan()
     {
-        var fresh = Census();
-        _nextSeen = WindowOrder.Note(_firstSeen, [.. fresh.Values.SelectMany(windows => windows)], _nextSeen);
+        var census = Census();
+        _nextSeen = WindowOrder.Note(_firstSeen, [.. census.Select(window => window.Window)], _nextSeen);
 
-        var changed = !SameAsBefore(fresh);
+        var fresh = new Dictionary<string, List<nint>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var window in census)
+        {
+            if (!fresh.TryGetValue(window.Path, out var windows))
+            {
+                windows = [];
+                fresh[window.Path] = windows;
+            }
+
+            windows.Add(window.Window);
+        }
+
+        // A window may be given its app's name after it is made, so that changes the census too.
+        var changed = !SameAsBefore(fresh) || !SameApps(census, _census);
+        _census = census;
+        if (ReadTitles())
+        {
+            changed = true;
+        }
+
         if (changed)
         {
             _windowsByPath.Clear();
@@ -384,6 +477,35 @@ public sealed class RunningAppsService : IDisposable
         {
             Changed?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    /// <summary>Reads the census's windows' titles again.</summary>
+    /// <returns>Whether that changes which windows show any document the dock has asked about.</returns>
+    private bool ReadTitles()
+    {
+        var titles = new Dictionary<nint, string>(_census.Count);
+        foreach (var window in _census)
+        {
+            titles[window.Window] = WindowsApi.GetWindowTitle(window.Window);
+        }
+
+        var old = _titles;
+        _titles = titles;
+        return _documents.Any(document => _census.Any(window =>
+            Shows(window, document, old) != Shows(window, document, titles)));
+    }
+
+    /// <summary>Whether every window of a census has the app it had in the one before.</summary>
+    private static bool SameApps(List<CensusWindow> fresh, List<CensusWindow> old)
+    {
+        var apps = new Dictionary<nint, string?>(old.Count);
+        foreach (var window in old)
+        {
+            apps[window.Window] = window.AppId;
+        }
+
+        return fresh.All(window => apps.TryGetValue(window.Window, out var appId)
+            && string.Equals(appId, window.AppId, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -469,13 +591,14 @@ public sealed class RunningAppsService : IDisposable
     /// the one in front, if that is one — or null for anything else.
     /// </summary>
     /// <param name="window">A window of the pin's, as <see cref="NextWindow"/> gives one.</param>
-    /// <param name="target">The pin's running target: a folder's, or an executable's, which has no tabs.</param>
-    public ExplorerTab? TabShowing(nint window, string? target)
+    /// <param name="target">The pin's running target: a folder's, or anything else's, which has no tabs.</param>
+    public ExplorerTab? TabShowing(nint window, RunningTarget? target)
     {
+        var folder = target?.Folder;
         ExplorerTab? showing = null;
         foreach (var tab in _tabs)
         {
-            if (tab.Window != window || !string.Equals(tab.Folder, target, StringComparison.OrdinalIgnoreCase))
+            if (folder is null || tab.Window != window || !string.Equals(tab.Folder, folder, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -585,6 +708,7 @@ public sealed class RunningAppsService : IDisposable
 
         _disposed = true;
         _debounce.Stop();
+        _titleWatch.Stop();
         _closingWatch.Stop();
         _closing.Clear();
 

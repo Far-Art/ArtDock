@@ -746,6 +746,8 @@ public sealed partial class DockWindow : Window
                 NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
                 Open(item);
             });
+            entry.Header = RunningDot.Header(item);
+            System.Windows.Automation.AutomationProperties.SetName(entry, item.Label);
             entry.IsEnabled = item.IsLaunchable;
             menu.Items.Add(entry);
         }
@@ -3332,7 +3334,7 @@ public sealed partial class DockWindow : Window
     /// Brings forward a window of a pinned target's — a folder's on the tab showing it, which may
     /// be behind another (<see cref="ExplorerWindows.Activate"/>).
     /// </summary>
-    private bool Raise(nint window, string? target) =>
+    private bool Raise(nint window, RunningTarget? target) =>
         _runningApps.TabShowing(window, target) is { } tab
             ? ExplorerWindows.Activate(tab, Dispatcher)
             : AppLauncher.Activate(window);
