@@ -81,7 +81,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   that is already in front cycles through its windows. **An app still closing** — its window
   gone, its program not yet finished — has a hollow dot, and a click on it waits until it has
   gone and then opens it, rather than starting a second copy into the one on its way out; Rider
-  refuses that with an error. A program that stays in the tray counts as closing for ten
+  refuses that with an error. A program that stays in the tray counts as closing for six
   seconds at most. An app opened from the dock gets the
   environment you signed in with, as from the taskbar, however the dock itself was started:
   a dock run from a terminal or an IDE does not hand that shell's variables to everything it
@@ -538,7 +538,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the larger. An app keeps the name the Start menu gives it. A row with any of its programs
   pinned already — by its whole path, since a pin opens one file — is shown *On the dock*.
 - **Both scans put the likeliest first, and can be filtered**: *Most likely first* ranks a
-  program that is open now above everything, then one whose name is its game's, then one with
+  program that is open now above everything — a launcher counted open while the program it
+  starts is, as on the dock — then one whose name is its game's, then one with
   an icon of its own — every game here has one and not one of the crash handlers and
   uploaders beside them does — then one that describes itself, then the largest in its game;
   Windows' own tools sit below installed apps. *By name* is there for someone who knows what
@@ -1278,7 +1279,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and thirty-one tests cover the cosine falloff (peak, range boundary,
+Nine hundred and thirty-two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1383,10 +1384,11 @@ takes free text — and that nothing near it is mistaken for it. A false positiv
 *Empty Recycle Bin* entry offered on the wrong item, which is an offer to delete permanently
 made about something else.
 
-Eleven cover a launcher's pin being lit by the program it starts: `X Launcher.exe` by `X.exe`
+Twelve cover a launcher's pin being lit by the program it starts: `X Launcher.exe` by `X.exe`
 beside it, written with a space, a hyphen, an underscore or nothing, and through a shortcut;
 not when that program is not there, nor for `Launcher.exe` alone or a name that only starts
-with the word; and the pin still launching the launcher.
+with the word; the pin still launching the launcher; and a scan's row of the launcher shown
+open while the program is.
 
 Sixteen cover which pins can be run as administrator, asked of the machine's associations as
 the dock asks them: a program, a batch file and a console, by path or by a bare name on the
@@ -1670,7 +1672,7 @@ handle does not keep it reading every frame, which reading fast after any change
 Eleven cover an app counting as closing — its last window gone, its process not — measured on
 Rider, whose process outlived its window by 5.2 s: that it is closing while any of its
 processes runs, and not when they had already gone; that it ends when every one has exited,
-not the first, when a window comes back, or at the ten-second limit, for a program that stays
+not the first, when a window comes back, or at the six-second limit, for a program that stays
 in the tray; that a click waits for it and is taken once, then, or when a window comes back;
 that a click on one not closing is not held; that a launcher stub's pin finds its program by
 file name, as the census does; and that clearing lets every process go and runs nothing.

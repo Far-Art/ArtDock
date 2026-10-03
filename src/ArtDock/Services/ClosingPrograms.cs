@@ -31,8 +31,13 @@ namespace ArtDock.Services;
 public sealed class ClosingPrograms<TProcess>(Func<TProcess, bool> hasExited, Action<TProcess> release)
 {
     /// <summary>How long a program can be closing, from when its last window went.</summary>
-    /// <remarks>Rider took 5.2 s with a small solution open; a large one saves more.</remarks>
-    public static readonly TimeSpan Limit = TimeSpan.FromSeconds(10);
+    /// <remarks>
+    /// Six seconds, asked for 2026-10-03 to shorten the wait on a program that stays in the tray;
+    /// it was ten. Rider took 5.2 s with a small solution open, so this is 0.8 s over it: a
+    /// program slower to close than that — Rider with a large solution, which saves more — is
+    /// launched at the limit into the copy still on its way out, as before any of this.
+    /// </remarks>
+    public static readonly TimeSpan Limit = TimeSpan.FromSeconds(6);
 
     private readonly Dictionary<string, (List<TProcess> Processes, DateTime Until)> _closing =
         new(StringComparer.OrdinalIgnoreCase);
