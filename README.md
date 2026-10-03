@@ -81,7 +81,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   that is already in front cycles through its windows. **An app still closing** — its window
   gone, its program not yet finished — has a hollow dot, and a click on it waits until it has
   gone and then opens it, rather than starting a second copy into the one on its way out; Rider
-  refuses that with an error. A program that stays in the tray counts as closing for six
+  refuses that with an error. A program that stays in the tray counts as closing for eight
   seconds at most. An app opened from the dock gets the
   environment you signed in with, as from the taskbar, however the dock itself was started:
   a dock run from a terminal or an IDE does not hand that shell's variables to everything it
@@ -1672,7 +1672,7 @@ handle does not keep it reading every frame, which reading fast after any change
 Eleven cover an app counting as closing — its last window gone, its process not — measured on
 Rider, whose process outlived its window by 5.2 s: that it is closing while any of its
 processes runs, and not when they had already gone; that it ends when every one has exited,
-not the first, when a window comes back, or at the six-second limit, for a program that stays
+not the first, when a window comes back, or at the eight-second limit, for a program that stays
 in the tray; that a click waits for it and is taken once, then, or when a window comes back;
 that a click on one not closing is not held; that a launcher stub's pin finds its program by
 file name, as the census does; and that clearing lets every process go and runs nothing.

@@ -32,12 +32,13 @@ public sealed class ClosingPrograms<TProcess>(Func<TProcess, bool> hasExited, Ac
 {
     /// <summary>How long a program can be closing, from when its last window went.</summary>
     /// <remarks>
-    /// Six seconds, asked for 2026-10-03 to shorten the wait on a program that stays in the tray;
-    /// it was ten. Rider took 5.2 s with a small solution open, so this is 0.8 s over it: a
-    /// program slower to close than that — Rider with a large solution, which saves more — is
-    /// launched at the limit into the copy still on its way out, as before any of this.
+    /// Eight seconds, set 2026-10-03: ten made a program that stays in the tray wait too long,
+    /// and six, tried in between, left too little over the 5.2 s Rider took with a small
+    /// solution open — Rider is heavy, and saves more with a large one. A program slower to
+    /// close than this is launched at the limit into the copy still on its way out, as before
+    /// any of this.
     /// </remarks>
-    public static readonly TimeSpan Limit = TimeSpan.FromSeconds(6);
+    public static readonly TimeSpan Limit = TimeSpan.FromSeconds(8);
 
     private readonly Dictionary<string, (List<TProcess> Processes, DateTime Until)> _closing =
         new(StringComparer.OrdinalIgnoreCase);
