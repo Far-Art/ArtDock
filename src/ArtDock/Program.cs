@@ -26,6 +26,10 @@ public static class Program
             .OnBeforeUninstallFastCallback(AppUpdater.OnUninstalling)
             .Run();
 
+        // Before anything can be launched, and after Velopack's own launches have gone: what the
+        // dock opens gets the user's environment, not whatever shell started the dock.
+        Interop.SignInEnvironment.Adopt();
+
         var app = new App();
         app.InitializeComponent();
         app.Run();

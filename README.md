@@ -78,7 +78,10 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Magnifies** icons as the pointer approaches, on a cosine falloff, with neighbours lifting
   alongside the hovered one.
 - **Launches pinned apps**, or raises them if they already have a window. Clicking an app
-  that is already in front cycles through its windows.
+  that is already in front cycles through its windows. An app opened from the dock gets the
+  environment you signed in with, as from the taskbar, however the dock itself was started:
+  a dock run from a terminal or an IDE does not hand that shell's variables to everything it
+  opens.
 - **Shows an app's windows, live, above its icon**: rest the pointer on a running app for the
   *Preview delay* (250 ms unless changed), and a panel of cards comes up over it, a picture of each window
   under its title — Windows' own thumbnails, which cost the dock nothing however fast the
@@ -1271,7 +1274,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and fifteen tests cover the cosine falloff (peak, range boundary,
+Nine hundred and twenty tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1659,6 +1662,13 @@ something moving is seen at the quiet pace at worst; once it keeps still the rea
 again; a read that did not wait for a frame is held to one a frame, and a slower display is
 read every frame of its own. And the one that matters for the cost: a caret blinking under the
 handle does not keep it reading every frame, which reading fast after any change at all would.
+
+Five cover the dock taking the environment the user signed in with as it starts: that a
+variable of the shell that started it is taken out, one the shell changed is put back and one
+it lacked added; that names compare without case, as Windows compares them; that a drive's
+current directory (`=C:`), which is the process's own, is left alone; and that the
+environment Windows builds is this user's. None adopts it — that would change the test
+host's own.
 
 Four cover what the project file tells the updater. The one that matters is that the folder
 Velopack installs into is not the one the settings live in: Velopack treats its folder as its
