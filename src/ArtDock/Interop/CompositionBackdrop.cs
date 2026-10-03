@@ -57,6 +57,7 @@ internal sealed class CompositionBackdrop : IDisposable
     private readonly CompositionColorBrush[] _ringBrushes;
 
     /// <summary>Holds the blur and its wash, sized to the bar and clipped to its shape.</summary>
+    private readonly InsetClip _span;
     private readonly ContainerVisual _sheet;
     private readonly CompositionRoundedRectangleGeometry _shape;
     private readonly SpriteVisual _blur;
@@ -76,6 +77,11 @@ internal sealed class CompositionBackdrop : IDisposable
 
         _root = compositor.CreateContainerVisual();
         _root.RelativeSizeAdjustment = Vector2.One;
+
+        // What reaches past the display's sides is cut off there, as the dock's own drawing is:
+        // see SetSpan.
+        _span = compositor.CreateInsetClip();
+        _root.Clip = _span;
 
         // The shadow, the rings stacked as the dock stacks them. Nothing punches the bar out of
         // them here: the blur laid over the bar next is opaque, and hides whatever is under it.
@@ -202,6 +208,18 @@ internal sealed class CompositionBackdrop : IDisposable
         }
     }
 
+    /// <summary>
+    /// Cuts everything off outside <paramref name="left"/> to <paramref name="right"/> across
+    /// the window, in device pixels — the part of it on the dock's display, so a bar whose wave
+    /// reaches past the display's side is not drawn on the display next door.
+    /// </summary>
+    /// <param name="width">The window's width, which the right inset is measured from.</param>
+    public void SetSpan(double left, double right, double width)
+    {
+        _span.LeftInset = (float)Math.Max(0, left);
+        _span.RightInset = (float)Math.Max(0, width - right);
+    }
+
     /// <summary>The bar's fill, at its opacity, and its rim.</summary>
     public void SetColors(Color fill, Color rim)
     {
@@ -252,6 +270,8 @@ internal sealed class CompositionBackdrop : IDisposable
         }
 
         _shadow.Dispose();
+        _root.Clip = null;
+        _span.Dispose();
         _root.Dispose();
         _target.Dispose();
         _compositor.Dispose();

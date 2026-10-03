@@ -116,6 +116,15 @@ public partial class App : Application
                 _settingsWindow.RefreshRecycleBinRows();
             }
         };
+
+        // And whether it has had to shrink to stay on its display, under the dock's size.
+        _dockWindow.FitChanged += (_, _) =>
+        {
+            if (_settingsWindow is { IsLoaded: true } && _dockWindow is { } dock)
+            {
+                _settingsWindow.ShowFit(dock.Fit);
+            }
+        };
         _dockWindow.Show();
 
         // Now that there is a dock to ask about, a later launch has somewhere to be sent — and
@@ -332,7 +341,11 @@ public partial class App : Application
         {
             dock.RetryHotkeys();
             _settingsWindow.ShowTakenHotkeys(dock.TakenHotkeys);
+            _settingsWindow.ShowFit(dock.Fit);
         }
+
+        // The Items page adds no more than the dock has room for on its display.
+        _settingsWindow.RoomFor = count => _dockWindow?.RoomFor(count) ?? int.MaxValue;
 
         _settingsWindow.ExitRequested += (_, _) => Quit();
 

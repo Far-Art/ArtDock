@@ -164,6 +164,32 @@ public sealed partial class SettingsWindow : Window
     /// <summary>The id <see cref="ItemSelected"/> was last raised with, so each change is raised once.</summary>
     private string? _selectedItemId;
 
+    /// <summary>
+    /// How many more items the dock takes, holding a given number — asked of the dock, whose
+    /// display decides it (<c>DockWindow.RoomFor</c>), before the Items page adds any. Null takes
+    /// any number.
+    /// </summary>
+    public Func<int, int>? RoomFor { get; set; }
+
+    /// <summary>
+    /// Says under the dock's size whether the dock has had to shrink its icons, or put some
+    /// behind its overflow item, to stay on its display — or nothing, when it has not.
+    /// </summary>
+    public void ShowFit(DockFitResult? fit)
+    {
+        if (fit is null || (!fit.Shrunk && !fit.Overflows))
+        {
+            FitHint.Visibility = Visibility.Collapsed;
+            FitHint.Text = string.Empty;
+            return;
+        }
+
+        FitHint.Text = fit.Overflows
+            ? Localizer.Format("Settings.Size.IconSize.Overflowing", fit.Hidden, fit.IconSize)
+            : Localizer.Format("Settings.Size.IconSize.Shrunk", fit.IconSize);
+        FitHint.Visibility = Visibility.Visible;
+    }
+
     /// <summary>Raised by the About page's Exit.</summary>
     /// <remarks>
     /// Asked for rather than done here: exiting has to close this dialog while the dock it
@@ -294,6 +320,7 @@ public sealed partial class SettingsWindow : Window
         _loading = true;
 
         BaseSizeSlider.Value = settings.BaseSize;
+        MinIconSizeSlider.Value = settings.MinIconSize;
         MaxScaleSlider.Value = settings.MaxScale;
         InfluenceSlider.Value = settings.Neighbours;
         GapSlider.Value = settings.GapFraction;
@@ -361,7 +388,7 @@ public sealed partial class SettingsWindow : Window
     {
         foreach (var slider in new[]
                  {
-                     BaseSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
+                     BaseSizeSlider, MinIconSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
                      OpacitySlider, RoundnessSlider, LabelSizeSlider, HideDelaySlider,
                      RevealDelaySlider, PreviewDelaySlider, HandleWidthSlider
                  })
@@ -591,6 +618,7 @@ public sealed partial class SettingsWindow : Window
         new()
         {
             BaseSize = BaseSizeSlider.Value,
+            MinIconSize = MinIconSizeSlider.Value,
             MaxScale = MaxScaleSlider.Value,
             InfluenceIcons = InfluenceSlider.Value,
             GapRatio = GapSlider.Value,
@@ -977,12 +1005,25 @@ public sealed partial class SettingsWindow : Window
             return;
         }
 
+        // As the dock refuses them: all or nothing, against the room its display leaves.
+        var room = RoomFor?.Invoke(_pinned.Count) ?? int.MaxValue;
+        if (pins.Count > room)
+        {
+            MessageBox.Show(
+                this, Localizer.Format("Overflow.Full", room, pins.Count),
+                "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         // After the selection when there is one, so a run of additions stays in order and
         // lands where the user was looking. The last of them is selected, so the next lands
         // after it.
+        // Each stamped as it is added, for the row's New mark (PinnedAppSetting.AddedAt).
         var index = PinnedList.SelectedIndex < 0 ? _pinned.Count : PinnedList.SelectedIndex + 1;
+        var now = DateTimeOffset.UtcNow;
         for (var i = 0; i < pins.Count; i++)
         {
+            pins[i].AddedAt = now;
             _pinned.Insert(index + i, pins[i]);
         }
 
@@ -1085,7 +1126,10 @@ public sealed partial class SettingsWindow : Window
             FolderText = editor.EditedFolderText,
             FolderSymbolTone = editor.EditedFolderSymbolTone,
             RunAsAdministrator = editor.EditedRunAsAdministrator,
-            IsSeparator = source.IsSeparator
+            IsSeparator = source.IsSeparator,
+
+            // Edited is not added: a pin stays as new, or as old, as it was.
+            AddedAt = source.AddedAt
         };
 
     /// <summary>
@@ -1861,6 +1905,7 @@ public sealed partial class SettingsWindow : Window
 
         _loading = true;
         BaseSizeSlider.Value = defaults.BaseSize;
+        MinIconSizeSlider.Value = defaults.MinIconSize;
         MaxScaleSlider.Value = defaults.MaxScale;
         InfluenceSlider.Value = defaults.Neighbours;
         GapSlider.Value = defaults.GapFraction;

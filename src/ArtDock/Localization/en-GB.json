@@ -14,7 +14,7 @@
   "strings": {
     "Settings.Page.Behaviour": "Behaviour",
 
-    "Settings.Size.Influence.Hint": "How many icons either side of the pointer lift with it. Counted in icons, so changing the icon size does not change the wave.",
+    "Settings.Size.Influence.Hint": "How many icons either side of the pointer lift with it. Counted in icons, so changing the dock size does not change the wave.",
 
     "Settings.Appearance.Colour": "Colour",
     "Settings.Appearance.MatchTaskbar.Hint": "Takes the colour Windows tints the taskbar with, and keeps following it when the accent changes or the system switches between light and dark. The colour chosen below is kept, and comes back when this is turned off.",

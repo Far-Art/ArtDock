@@ -107,6 +107,31 @@ public sealed class PinnedAppSetting
 
     /// <summary>A divider rather than an application; launches nothing.</summary>
     public bool IsSeparator { get; set; }
+
+    /// <summary>
+    /// When the pin was put on the dock, in UTC — what the settings dialog's Items page marks a
+    /// recently added row by (<see cref="IsRecent"/>). Null for a pin from before this was kept,
+    /// and for the set a new dock starts with, which nobody added.
+    /// </summary>
+    /// <remarks>
+    /// Stamped where a pin is added — a drop, the dock's Add menu, the Items page — and not where
+    /// one is made: pins are made for the drop preview and the starter set too.
+    /// </remarks>
+    public DateTimeOffset? AddedAt { get; set; }
+
+    /// <summary>How long a pin counts as recently added: a day, asked for on 2026-10-03.</summary>
+    public static readonly TimeSpan RecentFor = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// Whether the pin was added within <see cref="RecentFor"/> of <paramref name="now"/>. Not one
+    /// stamped more than a minute ahead of it, so a clock put back does not leave a pin new for
+    /// as long as it takes to catch up.
+    /// </summary>
+    public bool IsRecent(DateTimeOffset now) =>
+        !IsSeparator
+        && AddedAt is { } added
+        && added <= now + TimeSpan.FromMinutes(1)
+        && now - added < RecentFor;
 }
 
 /// <summary>
@@ -172,8 +197,34 @@ public sealed class DockSettings
 
     public const double DefaultInfluenceIcons = 3;
 
-    /// <summary>Resting icon size in DIPs.</summary>
+    /// <summary>
+    /// Resting icon size in DIPs — the most it is: the settings dialog calls it the dock's size.
+    /// </summary>
+    /// <remarks>
+    /// A dock with more items than its display has room for at this size shrinks them, as far as
+    /// <see cref="MinIconSize"/>, and grows them back as items go — see <c>Dock.DockFit</c>.
+    /// </remarks>
     public double BaseSize { get; set; } = 50;
+
+    /// <summary>The smallest a full dock shrinks its icons to, before the last go behind a "more" item.</summary>
+    public const double DefaultMinIconSize = 32;
+
+    /// <summary>
+    /// How small the icons may be made to fit the display, in DIPs, before the last items go
+    /// behind the overflow item. Never above <see cref="BaseSize"/>: see <see cref="IconFloor"/>.
+    /// </summary>
+    public double MinIconSize { get; set; } = DefaultMinIconSize;
+
+    /// <summary>The size a full dock stops shrinking at: <see cref="MinIconSize"/>, but never more than the dock's own size.</summary>
+    [JsonIgnore]
+    public double IconFloor =>
+        Math.Min(
+            Math.Clamp(double.IsFinite(MinIconSize) ? MinIconSize : DefaultMinIconSize, IconSizeMin, IconSizeMax),
+            IconSize);
+
+    /// <summary>The dock's own size as the dock uses it, held to the slider's range.</summary>
+    [JsonIgnore]
+    public double IconSize => Math.Clamp(double.IsFinite(BaseSize) ? BaseSize : 50, IconSizeMin, IconSizeMax);
 
     /// <summary>Peak magnification, as a multiple of <see cref="BaseSize"/>.</summary>
     public double MaxScale { get; set; } = 1.4;
@@ -1004,27 +1055,31 @@ public sealed class DockSettings
 
     /// <summary>Projects the tuning values into the geometry the dock actually uses.</summary>
     [JsonIgnore]
-    public DockMetrics Metrics
+    public DockMetrics Metrics => MetricsAt(IconSize);
+
+    /// <summary>
+    /// The geometry the dock uses with its icons at <paramref name="size"/> rather than at
+    /// <see cref="BaseSize"/> — what a dock shrunk to fit its display is drawn with
+    /// (<c>Dock.DockFit</c>). Everything scales with the size, as it does with the setting.
+    /// </summary>
+    public DockMetrics MetricsAt(double size)
     {
-        get
+        size = Math.Clamp(double.IsFinite(size) ? size : IconSize, IconSizeMin, IconSizeMax);
+        var gap = size * GapFraction;
+
+        return new DockMetrics
         {
-            var size = Math.Clamp(BaseSize, IconSizeMin, IconSizeMax);
-            var gap = size * GapFraction;
+            BaseSize = size,
+            MaxSize = size * Math.Clamp(MaxScale, ScaleMin, ScaleMax),
 
-            return new DockMetrics
-            {
-                BaseSize = size,
-                MaxSize = size * Math.Clamp(MaxScale, ScaleMin, ScaleMax),
-
-                // Multiplied out here, from a count of icons. Everything about the wave is
-                // therefore a multiple of the icon size — its height through MaxScale, its
-                // width through this — so changing the icon size scales the whole effect
-                // rather than reshaping it.
-                InfluenceRange = Neighbours * (size + gap),
-                Gap = gap,
-                Roundness = Math.Clamp(BarRoundness, 0, 1)
-            };
-        }
+            // Multiplied out here, from a count of icons. Everything about the wave is
+            // therefore a multiple of the icon size — its height through MaxScale, its
+            // width through this — so changing the icon size scales the whole effect
+            // rather than reshaping it.
+            InfluenceRange = Neighbours * (size + gap),
+            Gap = gap,
+            Roundness = Math.Clamp(BarRoundness, 0, 1)
+        };
     }
 
 
@@ -1032,6 +1087,7 @@ public sealed class DockSettings
     {
         Version = Version,
         BaseSize = BaseSize,
+        MinIconSize = MinIconSize,
         MaxScale = MaxScale,
         InfluenceRange = InfluenceRange,
         InfluenceIcons = InfluenceIcons,
@@ -1094,7 +1150,8 @@ public sealed class DockSettings
 
             // Not the pin's lettering, which is only ever read from an older file and is moved
             // to the dock's as it is read — see AdoptPinLettering.
-            IsSeparator = app.IsSeparator
+            IsSeparator = app.IsSeparator,
+            AddedAt = app.AddedAt
         })]
     };
 }

@@ -826,7 +826,34 @@ public sealed class DockBar : Canvas
     /// <summary>Where a resting row of the given width starts, in this element's coordinates.</summary>
     private double RowLeft(double restingWidth) =>
         _layout.RestingLeft(
-            restingWidth, HorizontalSlack, ActualWidth - (2 * HorizontalSlack), RowAlignment);
+            restingWidth, HorizontalSlack, ActualWidth - (2 * HorizontalSlack), RowAlignment, RowRoom);
+
+    /// <summary>
+    /// How wide the resting row may be, in DIPs: the display's width less the margin the bar
+    /// keeps from its sides. Unlimited until <c>DockWindow</c> says.
+    /// </summary>
+    /// <remarks>
+    /// A dock fitted to its display (<see cref="DockFit"/>) all but fills this, and the room
+    /// <see cref="DockLayout.RestingLeft"/> keeps for the wave at each end then gives way, so a
+    /// dock moved to an end of its edge still rests on the display.
+    /// </remarks>
+    public double RowRoom
+    {
+        get;
+        set
+        {
+            var room = double.IsNaN(value) ? double.PositiveInfinity : Math.Max(0, value);
+            if (room == field)
+            {
+                return;
+            }
+
+            field = room;
+            PinFocusPointer(claim: false);
+            LayoutAtRest();
+            InvalidateVisual();
+        }
+    } = double.PositiveInfinity;
 
     /// <summary>
     /// The part of this element that is on the screen, left to right, in its own coordinates.
@@ -836,6 +863,11 @@ public sealed class DockBar : Canvas
     /// for as long as the dock was centred; one moved to the end of its edge has its window
     /// reaching past the side of the screen by the slack beside the bar, and a long name on
     /// the end icon was drawn partly off the screen — or onto the display next door.
+    /// <para>
+    /// Everything else is cut off at it too (<see cref="ClipToScreen"/>): the wave at the end of
+    /// a dock that fills its display, and a drop preview's slot on a full one, reach past it, and
+    /// nothing of the dock is drawn on the display next door — nor answers the pointer there.
+    /// </para>
     /// </remarks>
     public (double Left, double Right) OnScreen
     {
@@ -848,9 +880,44 @@ public sealed class DockBar : Canvas
             }
 
             field = value;
+            ClipToScreen();
             InvalidateVisual();
         }
     } = (double.NegativeInfinity, double.PositiveInfinity);
+
+    /// <summary>
+    /// Cuts everything the dock draws — bar, icons, labels, and the all-but-clear stand-in that
+    /// takes the bar's clicks — at the sides of <see cref="OnScreen"/>.
+    /// </summary>
+    /// <remarks>
+    /// The window is hit-tested by alpha, so where nothing is drawn a click goes through to the
+    /// display next door, as it should. Vertically the clip reaches well past the element, so
+    /// it never cuts a label or a shadow there.
+    /// </remarks>
+    private void ClipToScreen()
+    {
+        var (left, right) = OnScreen;
+        if (!double.IsFinite(left) && !double.IsFinite(right))
+        {
+            Clip = null;
+            return;
+        }
+
+        left = double.IsFinite(left) ? left : -1e5;
+        right = double.IsFinite(right) ? right : 1e5;
+        var clip = new Rect(left, -1e5, Math.Max(0, right - left), 2e5);
+        if (Clip is RectangleGeometry { Rect: var current } && current == clip)
+        {
+            return;
+        }
+
+        var geometry = new RectangleGeometry(clip);
+        geometry.Freeze();
+        Clip = geometry;
+    }
+
+    /// <summary>Whether a point across the element lies on the screen — see <see cref="OnScreen"/>.</summary>
+    private bool IsOnScreen(double x) => x >= OnScreen.Left && x < OnScreen.Right;
 
     /// <summary>
     /// Where a bubble <paramref name="width"/> wide goes to be centred on
@@ -1058,7 +1125,7 @@ public sealed class DockBar : Canvas
         var place = 0;
         foreach (var visual in _items)
         {
-            var counted = !visual.IsGhost && DockKeys.CanHold(visual.Item);
+            var counted = !visual.IsGhost && !visual.Item.IsOverflow && DockKeys.CanHold(visual.Item);
             if (counted)
             {
                 place++;
@@ -1744,12 +1811,19 @@ public sealed class DockBar : Canvas
         {
             if (local.X < _iconsLeft + _offsets[i] + (_sizes[i] / 2))
             {
-                return i;
+                return Math.Min(i, MovableCount);
             }
         }
 
-        return _items.Count;
+        return MovableCount;
     }
+
+    /// <summary>
+    /// How many slots, from the start of the row, things can be moved into and dropped among —
+    /// all of them, but for an overflow item at the end, which stays the last.
+    /// </summary>
+    private int MovableCount =>
+        _items.Count > 0 && _items[^1].Item.IsOverflow ? _items.Count - 1 : _items.Count;
 
     /// <summary>
     /// Shows what a drop would add, at the slot it would land in.
@@ -2067,7 +2141,8 @@ public sealed class DockBar : Canvas
     /// </summary>
     private void UpdateDrag(Point local)
     {
-        if (_pressedIndex < 0 || !ReorderEnabled)
+        if (_pressedIndex < 0 || !ReorderEnabled
+            || (_pressedIndex < _items.Count && _items[_pressedIndex].Item.IsOverflow))
         {
             return;
         }
@@ -2098,13 +2173,14 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private int SlotAt(double localX)
     {
-        var count = _items.Count;
+        // Never the overflow item's: it stays at the end, and nothing is moved past it.
+        var count = MovableCount;
         if (count == 0)
         {
             return 0;
         }
 
-        if (_slotOffsets.Length != count)
+        if (_slotOffsets.Length != _items.Count)
         {
             var resting = (int)Math.Floor(
                 (localX - RestingBarLeft() - Metrics.PaddingX) / Metrics.Pitch);
@@ -2568,6 +2644,13 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private bool IsInsideHoverZone(Point local)
     {
+        // What is cut off at the display's side is not there to point at: a pointer on the
+        // display next door is on that display.
+        if (!IsOnScreen(local.X))
+        {
+            return false;
+        }
+
         if (_items.Count == 0)
         {
             // The empty bar is a target like any other — it is what a drop or a right-click

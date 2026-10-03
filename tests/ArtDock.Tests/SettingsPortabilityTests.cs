@@ -271,6 +271,12 @@ public class SettingsPortabilityTests : IDisposable
             return (current as string ?? string.Empty) + "~";
         }
 
+        if (type == typeof(DateTimeOffset?))
+        {
+            return (current as DateTimeOffset? ?? new DateTimeOffset(2026, 10, 3, 12, 0, 0, TimeSpan.Zero))
+                + TimeSpan.FromMinutes(7);
+        }
+
         if (type == typeof(List<string>))
         {
             return new List<string> { "#010203" };

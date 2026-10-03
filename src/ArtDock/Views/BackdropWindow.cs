@@ -251,14 +251,34 @@ public sealed class BackdropWindow : IDisposable
             var topLeft = ToWindow(bar.TopLeft);
             var bottomRight = ToWindow(bar.BottomRight);
 
+            // Cut off at the display's sides, as the dock is: the part of the window that is on
+            // the screen, in the window's device pixels.
+            var (onLeft, onRight) = dock.OnScreen;
+            var spanLeft = double.IsFinite(onLeft) ? ToWindow(new Point(onLeft, 0)).X : 0;
+            var spanRight = double.IsFinite(onRight) ? ToWindow(new Point(onRight, 0)).X : width;
+
             Place(frame.Left, frame.Top, width, height);
             Paint(dock.BarFill, DockBar.BarBorder);
+            Span(spanLeft, spanRight, width);
             Shape(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y, radius * scale, scale);
             return true;
         }
 
         // The fallback cannot be shaped, so a rectangle of blur has to be kept inside the bar
-        // instead — which costs a sliver of blur under each rounded end.
+        // instead — which costs a sliver of blur under each rounded end. Nor clipped, so it is
+        // kept on the display by being placed only there.
+        var (screenLeft, screenRight) = dock.OnScreen;
+        var onScreen = new Rect(
+            double.IsFinite(screenLeft) ? screenLeft : bar.Left, bar.Top,
+            Math.Max(0, (double.IsFinite(screenRight) ? screenRight : bar.Right)
+                - (double.IsFinite(screenLeft) ? screenLeft : bar.Left)),
+            bar.Height);
+        bar.Intersect(onScreen);
+        if (bar.IsEmpty)
+        {
+            return false;
+        }
+
         var (insetX, insetY) = Inset(bar, radius);
         bar.Inflate(-insetX, -insetY);
         if (bar.Width <= 0 || bar.Height <= 0)
@@ -307,8 +327,9 @@ public sealed class BackdropWindow : IDisposable
             NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER);
 
         // The composition visual is rebuilt with the window, so a shape set before this
-        // move cannot be assumed to have survived it.
+        // move cannot be assumed to have survived it. Nor the span it is cut to.
         _shaped = false;
+        _span = null;
     }
 
     /// <summary>The bar last drawn, so an unchanged one is not drawn again.</summary>
@@ -346,6 +367,21 @@ public sealed class BackdropWindow : IDisposable
         _shape = (x, y, width, height, radius, scale);
         _shaped = true;
         _composition?.SetShape(x, y, width, height, radius, scale);
+    }
+
+    /// <summary>The span last cut to, so an unchanged one is not set again.</summary>
+    private (double Left, double Right, double Width)? _span;
+
+    /// <summary>Cuts the sheet off outside a span across its window, in device pixels — see <see cref="CompositionBackdrop.SetSpan"/>.</summary>
+    private void Span(double left, double right, double width)
+    {
+        if (_span is { } last && Same(last.Left, left) && Same(last.Right, right) && Same(last.Width, width))
+        {
+            return;
+        }
+
+        _span = (left, right, width);
+        _composition?.SetSpan(left, right, width);
     }
 
     /// <summary>The colours last painted, so unchanged ones are not painted again.</summary>

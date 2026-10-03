@@ -36,6 +36,8 @@
 
         <views:ItemRowIconConverter x:Key="ItemRowIcon" />
         <views:FolderRowMarkConverter x:Key="FolderRowMark" />
+        <views:RecentRowMarkConverter x:Key="RecentRowMark" />
+        <views:RecentRowMarkConverter x:Key="RecentRowStatus" AsStatus="True" />
 
         <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource TextBase}">
             <Setter Property="FontSize" Value="22" />
@@ -353,10 +355,20 @@
                                     <ColumnDefinition Width="220" />
                                     <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Size.IconSize}" />
+                                <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Size.IconSize}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Size.IconSize.Hint}" />
+                                    <TextBlock
+                                        x:Name="FitHint"
+                                        Style="{StaticResource CardHint}"
+                                        Visibility="Collapsed" />
+                                </StackPanel>
                                 <Slider
                                     x:Name="BaseSizeSlider"
                                     AutomationProperties.Name="{DynamicResource Settings.Size.IconSize}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Size.IconSize.Hint}"
                                     Grid.Column="1"
                                     Style="{StaticResource RowSlider}"
                                     Maximum="96"
@@ -367,6 +379,36 @@
                                     Style="{StaticResource RowValue}"
                                     loc:Localized.Key="Settings.Size.IconSize.Value"
                                     loc:Localized.Value="{Binding ElementName=BaseSizeSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Size.MinIconSize}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Size.MinIconSize.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="MinIconSizeSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Size.MinIconSize}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Size.MinIconSize.Hint}"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="96"
+                                    Minimum="20"
+                                    TickFrequency="1" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Size.IconSize.Value"
+                                    loc:Localized.Value="{Binding ElementName=MinIconSizeSlider, Path=Value}" />
                             </Grid>
                         </Border>
 
@@ -1096,6 +1138,7 @@
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                                     <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+                                    <Setter Property="AutomationProperties.ItemStatus" Value="{Binding Converter={StaticResource RecentRowStatus}}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsSeparator}" Value="True">
                                             <Setter Property="AutomationProperties.Name" Value="{DynamicResource Preset.Separator}" />
@@ -1110,6 +1153,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <!-- Faded while the order is locked. The grip is the
@@ -1168,9 +1212,29 @@
                                              the theme's symbol font and at the size of the menus'
                                              glyphs; the right margin is the separator rule's, so
                                              the two end in line. -->
+                                        <!-- A pin added in the last day says so, in the accent,
+                                             as the Start menu marks what has just been
+                                             installed — before the folder mark, which keeps the
+                                             far end. -->
+                                        <Border
+                                            x:Name="RecentMark"
+                                            Grid.Column="3"
+                                            Margin="12,0,0,0"
+                                            Padding="6,1,6,2"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                            CornerRadius="8"
+                                            Visibility="{Binding Converter={StaticResource RecentRowMark}}">
+                                            <TextBlock
+                                                FontSize="11"
+                                                FontWeight="SemiBold"
+                                                Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}"
+                                                Text="{DynamicResource Settings.Items.New}" />
+                                        </Border>
+
                                         <TextBlock
                                             x:Name="FolderMark"
-                                            Grid.Column="3"
+                                            Grid.Column="4"
                                             Margin="12,0,8,0"
                                             VerticalAlignment="Center"
                                             FontFamily="{DynamicResource SymbolThemeFontFamily}"

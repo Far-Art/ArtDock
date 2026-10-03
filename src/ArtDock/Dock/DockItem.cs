@@ -97,6 +97,13 @@ public sealed class DockItem
     /// </remarks>
     public bool IsSeparator { get; init; }
 
+    /// <summary>
+    /// The item at the end of a dock too full for its display, standing for the items that did
+    /// not fit (<see cref="DockFit"/>): a click lists them. Never a pin, never saved, and never
+    /// moved — nothing is dragged past it or onto it.
+    /// </summary>
+    public bool IsOverflow { get; init; }
+
     /// <summary>Dimmed and non-activating; kept so a pin can outlive an uninstall.</summary>
     public bool IsDisabled { get; set; }
 

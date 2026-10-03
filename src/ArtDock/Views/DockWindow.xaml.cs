@@ -44,7 +44,17 @@ public sealed partial class DockWindow : Window
     private readonly RunningAppsService _runningApps = new();
     private readonly DockBar _dock;
 
+    /// <summary>
+    /// What the dock shows: the pins that fit on it, and the overflow item after them when some
+    /// do not (<see cref="FitToDisplay"/>). What the keys go along, as the pointer does.
+    /// </summary>
     private IReadOnlyList<DockItem> _items = [];
+
+    /// <summary>
+    /// Every pin, the ones behind the overflow item included — what an item is looked for in by
+    /// its id or its place, and what is running is asked of.
+    /// </summary>
+    private IReadOnlyList<DockItem> _pins = [];
 
     /// <summary>
     /// The icon set the items are drawn from, or null for their own icons. Looked up when the
@@ -401,15 +411,11 @@ public sealed partial class DockWindow : Window
         {
             _itemsSignature = signature;
             _iconSet = IconSetLibrary.Installed.Find(settings.IconSet);
-            _items = ResolveItems(settings);
-            _dock.SetItems(_items);
-            RefreshRunningState();
+            _pins = ResolveItems(settings);
 
-            // The keys go on along the items as they are now.
-            if (_keyboard)
-            {
-                ListKeys();
-            }
+            // Fitted to the display, which is what puts them on the dock.
+            FitToDisplay(settings);
+            RefreshRunningState();
         }
 
         // Not in ApplyAppearance: that path is what a slider drag takes, and this is about
@@ -474,7 +480,9 @@ public sealed partial class DockWindow : Window
         _holdBackdrop = true;
         try
         {
-            _dock.UpdateMetrics(settings.Metrics);
+            // The icons at the size that fits the display, and as many of them as fit there —
+            // which a change of display, of the work area or of the icons' size can each change.
+            FitToDisplay(settings);
             _dock.RowAlignment = settings.EdgeAlignment;
             // The colour, the opacity and the blur as they are in force, which No GPU overrides,
             // and not as they are stored underneath it.
@@ -507,6 +515,271 @@ public sealed partial class DockWindow : Window
         // The handle's width can follow the icon size, and its colour follows the bar's.
         SyncHandle();
     }
+
+    // ---- fitting the display -------------------------------------------------------------
+
+    /// <summary>How the dock fits its display now — see <see cref="FitToDisplay"/>. Null before it first has.</summary>
+    public DockFitResult? Fit { get; private set; }
+
+    /// <summary>Raised when <see cref="Fit"/> has changed: the icons shrunk or grown, or items gone behind the overflow item or come out.</summary>
+    public event EventHandler? FitChanged;
+
+    /// <summary>The pins <see cref="_items"/> was last made from, so a fit that changes nothing leaves the row alone.</summary>
+    private IReadOnlyList<DockItem>? _fittedPins;
+
+    /// <summary>The overflow item on the dock now, or null while everything fits.</summary>
+    private DockItem? _overflow;
+
+    /// <summary>The item the settings dialog's Items page has selected, by id — see <see cref="PreviewItem"/>.</summary>
+    private string? _previewId;
+
+    /// <summary>
+    /// Keeps the resting bar on its display: the icons at the size the settings give, or smaller,
+    /// as far as <see cref="DockSettings.IconFloor"/>, to fit; and past that the last items
+    /// behind an overflow item at the end of the row (<see cref="DockFit"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for on 2026-10-03: nothing kept a dock with many items, or large ones, from running
+    /// off its display and onto the one next to it. The size the user sets is the most the icons
+    /// are, and the dock goes back to it as items go.
+    /// </para>
+    /// <para>
+    /// Measured against the display the dock is being sent to, in that display's own scale —
+    /// unlike <see cref="SizeToDock"/>, which sizes the window in the scale it has now. The fit
+    /// is about how the bar will rest once it is there, and a dock on its way there is fitted
+    /// again when its scale changes (<see cref="OnDpiChanged"/> re-applies).
+    /// </para>
+    /// <para>
+    /// Changes nothing that has not changed — the appearance path runs on every slider tick —
+    /// and is given the settings in force, never the stored ones.
+    /// </para>
+    /// </remarks>
+    private void FitToDisplay(DockSettings settings)
+    {
+        var fit = DockFit.Compute(
+            _pins.Count, settings.IconSize, settings.IconFloor, settings.GapFraction,
+            settings.Metrics.PaddingX, RowRoomOn(settings), WaveFractionOf(settings));
+
+        _dock.UpdateMetrics(settings.MetricsAt(fit.IconSize));
+
+        var changed = fit != Fit;
+        Fit = fit;
+
+        // Its name says how many it holds, in the language in force, which can change alone.
+        var visible = Math.Min(fit.Visible, _pins.Count);
+        var label = visible < _pins.Count ? Localizer.Format("Overflow.Items", _pins.Count - visible) : null;
+
+        if (!changed && ReferenceEquals(_fittedPins, _pins) && _overflow?.Label == label)
+        {
+            return;
+        }
+
+        _fittedPins = _pins;
+        var shown = new List<DockItem>(visible + 1);
+        for (var i = 0; i < visible; i++)
+        {
+            shown.Add(_pins[i]);
+        }
+
+        _overflow = null;
+        if (label is not null)
+        {
+            _overflow = new DockItem
+            {
+                Id = OverflowId,
+                Label = label,
+                IsOverflow = true,
+                Icon = OverflowArt.Picture
+            };
+            shown.Add(_overflow);
+        }
+
+        _items = shown;
+        UpdateOverflowState();
+        _dock.SetItems(_items);
+        _dock.PreviewItem(ShownId(_previewId));
+
+        // The keys go on along the items as they are now.
+        if (_keyboard)
+        {
+            ListKeys();
+        }
+
+        if (changed)
+        {
+            FitChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The overflow item's id, which no pin's can be.</summary>
+    private const string OverflowId = "\u001foverflow";
+
+    /// <summary>
+    /// How wide the resting bar may be on the display the settings put the dock on, in that
+    /// display's DIPs: its work area, less the bottom margin at each side.
+    /// </summary>
+    private static double RowRoomOn(DockSettings settings)
+    {
+        var screen = Screens.Resolve(settings.ScreenDeviceName, settings.ScreenDevicePath);
+        if (screen.WorkArea.IsEmpty || screen.WorkArea.Width <= 0)
+        {
+            return double.PositiveInfinity;
+        }
+
+        var scale = MonitorDpi.ScaleAt(
+            (int)(screen.Bounds.Left + (screen.Bounds.Width / 2)),
+            (int)(screen.Bounds.Top + (screen.Bounds.Height / 2)));
+
+        return (screen.WorkArea.Width / scale) - (2 * Math.Max(0, settings.BottomMargin));
+    }
+
+    /// <summary>
+    /// How many more items the dock takes, holding <paramref name="count"/>: as many as fit, and
+    /// <see cref="DockFit.OverflowLimit"/> behind the overflow item. What every way of adding one
+    /// asks first — the settings dialog's Items page as well, through <c>App</c>.
+    /// </summary>
+    public int RoomFor(int count) =>
+        DockFit.RoomFor(
+            count, _applied.IconFloor, _applied.GapFraction, _applied.Metrics.PaddingX, RowRoomOn(_applied),
+            WaveFractionOf(_applied));
+
+    /// <summary>
+    /// The room the fit keeps beside the bar for its wave (<see cref="DockFit.WaveRoom"/>), as a
+    /// fraction of the icon size — so the icons at its ends stay whole on the display when the
+    /// pointer is on them. Nothing while the dock does not magnify.
+    /// </summary>
+    /// <remarks>
+    /// The wave is in proportion to the size — the magnification is a multiple of it and the
+    /// influence a count of icons — so it is worked out once, at the dock's own size. The margin
+    /// is not, and is worth less beside a bigger icon, so this errs towards more room for a dock
+    /// shrunk below its size, never less.
+    /// </remarks>
+    private static double WaveFractionOf(DockSettings settings)
+    {
+        if (settings.ReduceMotion || !SystemParameters.ClientAreaAnimation)
+        {
+            return 0;
+        }
+
+        var size = settings.IconSize;
+        return DockFit.WaveRoom(new DockLayout(settings.MetricsAt(size)), settings.BottomMargin) / size;
+    }
+
+    /// <summary>Whether an item is behind the overflow item rather than on the dock.</summary>
+    private bool IsHidden(string? id) =>
+        id is not null && _overflow is not null && !_items.Any(item => item.Id == id)
+        && _pins.Any(pin => pin.Id == id);
+
+    /// <summary>The id the dock shows an item under: its own, or the overflow item's while it is behind it.</summary>
+    private string? ShownId(string? id) => IsHidden(id) ? OverflowId : id;
+
+    /// <summary>The item the dock shows for an item: itself, or the overflow item while it is behind it.</summary>
+    private DockItem Shown(DockItem item) => IsHidden(item.Id) && _overflow is { } overflow ? overflow : item;
+
+    /// <summary>The pins behind the overflow item, in their order.</summary>
+    private IEnumerable<DockItem> HiddenPins() =>
+        _overflow is null ? [] : _pins.Skip(_items.Count - 1);
+
+    /// <summary>
+    /// The overflow item's dot: lit while anything behind it runs, hollow while anything is
+    /// closing and nothing runs.
+    /// </summary>
+    /// <returns>True when it changed.</returns>
+    private bool UpdateOverflowState()
+    {
+        if (_overflow is not { } overflow)
+        {
+            return false;
+        }
+
+        var hidden = HiddenPins().ToList();
+        var running = hidden.Any(pin => pin.IsRunning);
+        var elevated = running && hidden.Any(pin => pin.IsElevated);
+        var closing = !running && hidden.Any(pin => pin.IsClosing);
+        if (overflow.IsRunning == running && overflow.IsElevated == elevated && overflow.IsClosing == closing)
+        {
+            return false;
+        }
+
+        overflow.IsRunning = running;
+        overflow.IsElevated = elevated;
+        overflow.IsClosing = closing;
+        return true;
+    }
+
+    /// <summary>
+    /// Lists the items behind the overflow item in a menu above it, each opening as a click on
+    /// its icon would.
+    /// </summary>
+    /// <remarks>
+    /// Only opening: what an item's own menu offers — editing it, taking it off, running it as
+    /// administrator — is the settings dialog's Items page's for these, which lists every item.
+    /// </remarks>
+    /// <param name="at">Where to open it, in physical pixels; null for above the overflow item.</param>
+    /// <param name="closed">Told, once the menu has gone, whether an entry was chosen from it.</param>
+    private bool ShowOverflowMenu(NativeMethods.NativePoint? at = null, Action<bool>? closed = null)
+    {
+        if (_overflow is not { } overflow || (at ?? TopOf(overflow)) is not { } point)
+        {
+            return false;
+        }
+
+        var menu = new ContextMenu();
+        foreach (var pin in HiddenPins())
+        {
+            if (pin.IsSeparator)
+            {
+                // Two in a row, or one at either end, would only be a gap.
+                if (menu.Items.Count > 0 && menu.Items[^1] is not Separator)
+                {
+                    menu.Items.Add(new Separator());
+                }
+
+                continue;
+            }
+
+            var item = pin;
+            var entry = MenuHost.Item(item.Label, MenuIcons.Picture(item.Icon), () =>
+            {
+                _previews?.Dismiss();
+                NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+                Open(item);
+            });
+            entry.IsEnabled = item.IsLaunchable;
+            menu.Items.Add(entry);
+        }
+
+        if (menu.Items.Count > 0 && menu.Items[^1] is Separator trailing)
+        {
+            menu.Items.Remove(trailing);
+        }
+
+        _previews?.Dismiss();
+        HoldRevealed(true);
+        var claim = _dock.FocusItem(overflow);
+
+        var chosen = false;
+        menu.AddHandler(MenuItem.ClickEvent, new RoutedEventHandler((_, _) => chosen = true));
+        menu.Opened += (_, _) => Dispatcher.InvokeAsync(
+            () => { menu.Items.OfType<MenuItem>().FirstOrDefault(entry => entry.IsEnabled)?.Focus(); },
+            DispatcherPriority.Input);
+        menu.Closed += (_, _) =>
+        {
+            _dock.ReleaseFocus(claim);
+            HoldRevealed(false);
+            closed?.Invoke(chosen);
+        };
+
+        _menus.ShowMenu(menu, point.X, point.Y);
+        return true;
+    }
+
+    /// <summary>
+    /// Said when the dock will take no more: it is as full as its display allows, and the
+    /// overflow item holds as many as it lists.
+    /// </summary>
+    private static string FullNotice => Localizer.Get("Drop.Full");
 
     /// <summary>
     /// Set while the dock is being moved in more than one step, so the sheet behind it is
@@ -871,7 +1144,7 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private void RefreshRecycleBinIcon()
     {
-        foreach (var item in _items.Where(pin => DockPresets.IsRecycleBin(pin.TargetPath)))
+        foreach (var item in _pins.Where(pin => DockPresets.IsRecycleBin(pin.TargetPath)))
         {
             item.Icon = PinnedAppsService.LoadIcon(item, _iconSet);
             _dock.RefreshIcon(item);
@@ -990,8 +1263,11 @@ public sealed partial class DockWindow : Window
         var settings = ContentsToSave();
         index = Math.Clamp(index, 0, settings.PinnedApps.Count);
 
+        // Stamped as they land, for the settings dialog's New mark (PinnedAppSetting.AddedAt).
+        var now = DateTimeOffset.UtcNow;
         foreach (var pin in pins)
         {
+            pin.AddedAt = now;
             settings.PinnedApps.Insert(index, pin);
             index++;
         }
@@ -1104,7 +1380,7 @@ public sealed partial class DockWindow : Window
         // What the dock is showing, not what is stored. With the settings dialog open the
         // two differ, and it is the shown one the drop is being aimed at.
         var pinned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in _items)
+        foreach (var item in _pins)
         {
             if (PinnedAppsService.TargetKey(item.TargetPath) is { } existing)
             {
@@ -1129,6 +1405,13 @@ public sealed partial class DockWindow : Window
             }
 
             pins.Add(pin);
+        }
+
+        // All or nothing: a drop that pinned some of what it holds would leave the rest to be
+        // found missing later.
+        if (pins.Count > RoomFor(_pins.Count))
+        {
+            return ([], FullNotice);
         }
 
         if (pins.Count > 0)
@@ -1183,6 +1466,13 @@ public sealed partial class DockWindow : Window
     private bool ShowMenuFor(
         DockItem? item, NativeMethods.NativePoint? at = null, Action<bool>? closed = null)
     {
+        // The overflow item is no item to edit or take off: right-clicked, it is the dock's own
+        // menu, as the bar between icons is.
+        if (item is { IsOverflow: true })
+        {
+            item = null;
+        }
+
         NativeMethods.NativePoint cursor;
         if (at is { } point)
         {
@@ -1260,8 +1550,15 @@ public sealed partial class DockWindow : Window
                 Header = Localizer.Get("Menu.Add"),
                 Icon = MenuIcons.Glyph(MenuGlyph.Add)
             };
+
+            // A dock that takes no more says so where its Add menu would be, as the lock does.
+            if (RoomFor(_pins.Count) <= 0)
+            {
+                add = MenuHost.Note(Localizer.Get("Menu.Full"), MenuGlyph.Add);
+            }
+
             var insertAt = InsertIndexAfter(item);
-            foreach (var group in DockPresets.Menu())
+            foreach (var group in add.IsEnabled ? DockPresets.Menu() : Array.Empty<IReadOnlyList<DockPreset>>())
             {
                 if (add.Items.Count > 0)
                 {
@@ -1372,7 +1669,7 @@ public sealed partial class DockWindow : Window
         }
 
         HoldRevealed(true);
-        _dock.FocusItem(item);
+        _dock.FocusItem(Shown(item));
     }
 
     /// <summary>Shows a name being typed on the held label.</summary>
@@ -1408,6 +1705,23 @@ public sealed partial class DockWindow : Window
         if (pins.Count == 0)
         {
             return;
+        }
+
+        // The menu offers nothing to add to a full dock, but a search can find more than the dock
+        // has room left for — and is refused whole, as a drop is, rather than cut short.
+        var room = RoomFor(_pins.Count);
+        if (pins.Count > room)
+        {
+            MessageBox.Show(
+                Localizer.Format("Overflow.Full", room, pins.Count),
+                "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var pin in pins)
+        {
+            pin.AddedAt = now;
         }
 
         var settings = ContentsToSave();
@@ -1674,7 +1988,12 @@ public sealed partial class DockWindow : Window
     /// demonstration.
     /// </summary>
     /// <param name="id">The pin's id, or null when no row is selected or the page is not open.</param>
-    public void PreviewItem(string? id) => _dock.PreviewItem(id);
+    /// <remarks>An item behind the overflow item holds that, which is where it is on the dock.</remarks>
+    public void PreviewItem(string? id)
+    {
+        _previewId = id;
+        _dock.PreviewItem(ShownId(id));
+    }
 
     /// <summary>
     /// Lifts the dock, and the sheet behind it, above whatever is covering it.
@@ -2168,10 +2487,11 @@ public sealed partial class DockWindow : Window
         // and on its way there or back, and neither is anything to the handle, which sits on the
         // work area. The width comes through the same conversion as the sheet's, so a handle as
         // wide as the dock is exactly as wide as the bar the sheet is cut to.
+        // And no wider than the display: the bar is cut off at its sides (DockBar.OnScreen).
         var bar = _dock.RestingBarRect;
         var bounds = DockHandle.Place(
-            _dock.PointToScreen(bar.TopLeft).X,
-            _dock.PointToScreen(bar.TopRight).X,
+            Math.Max(_dock.PointToScreen(bar.TopLeft).X, _workArea.Left),
+            Math.Min(_dock.PointToScreen(bar.TopRight).X, _workArea.Right),
             _workArea.Bottom,
             _handleScale,
             _applied.HandleMatchesDock,
@@ -2356,8 +2676,9 @@ public sealed partial class DockWindow : Window
                 return;
         }
 
-        var index = DockKeys.Place(_items, HotkeyActions.Place(action));
-        if (index < 0 || _items[index].IsDisabled)
+        // By its place among all the pins: one behind the overflow item has its key all the same.
+        var index = DockKeys.Place(_pins, HotkeyActions.Place(action));
+        if (index < 0 || _pins[index].IsDisabled)
         {
             return;
         }
@@ -2365,7 +2686,7 @@ public sealed partial class DockWindow : Window
         // The hotkey went to the dock, which may therefore pass the foreground on — to whatever
         // a launch starts, as well as to a window it raises.
         NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
-        Open(_items[index]);
+        Open(_pins[index]);
         EndKeyboard(giveBack: true);
     }
 
@@ -2447,8 +2768,9 @@ public sealed partial class DockWindow : Window
                 continue;
             }
 
+            // Among the items on the dock: one behind the overflow item has no icon to number.
             var index = DockKeys.Place(_items, place);
-            if (index >= 0 && !_items[index].IsDisabled)
+            if (index >= 0 && !_items[index].IsDisabled && !_items[index].IsOverflow)
             {
                 places |= 1 << place;
             }
@@ -2762,6 +3084,21 @@ public sealed partial class DockWindow : Window
             return;
         }
 
+        // The overflow item opens its list, and the keys go into it, as into an item's menu.
+        if (_items[index].IsOverflow)
+        {
+            if (TopOf(_items[index]) is { } top)
+            {
+                _keyMenu = true;
+                if (!ShowOverflowMenu(top, AfterKeyMenu))
+                {
+                    _keyMenu = false;
+                }
+            }
+
+            return;
+        }
+
         // Held up as it opens, so the launch's flash is on the item the keys chose.
         HoldKey(index);
         NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
@@ -2860,6 +3197,18 @@ public sealed partial class DockWindow : Window
         // The click goes on cycling the app's windows, as it did before there were previews;
         // the previews are for choosing, and close for the window the click brings up.
         _previews?.Dismiss();
+
+
+        // Once the click is over, not from inside it: this runs on the button coming up, while the
+        // dock still holds the mouse, and the capture let go of straight after closed a menu
+        // opened here as it came up — seen on 2026-10-03, the list never appeared. A right-click's
+        // menu opens on its button-up with no capture held, which is why that one never minded.
+        if (item.IsOverflow)
+        {
+            Dispatcher.BeginInvoke(() => ShowOverflowMenu(), DispatcherPriority.Input);
+            return;
+        }
+
         Open(item);
     }
 
@@ -2929,11 +3278,12 @@ public sealed partial class DockWindow : Window
             return true;
         }
 
+        // An item behind the overflow item flashes that, which is where it is on the dock.
         var id = item.Id;
         if (_runningApps.WhenClosed(item.RunningTarget, () => Dispatcher.BeginInvoke(() => OpenWhenClosed(id))))
         {
             _waitingToOpen.Add(id);
-            _dock.FlashItem(item);
+            _dock.FlashItem(Shown(item));
             return true;
         }
 
@@ -2941,7 +3291,7 @@ public sealed partial class DockWindow : Window
         // something the dock needs to announce — and macOS does not bounce for it either.
         if (AppLauncher.Launch(item))
         {
-            _dock.FlashItem(item);
+            _dock.FlashItem(Shown(item));
             return true;
         }
 
@@ -2958,7 +3308,7 @@ public sealed partial class DockWindow : Window
     private void OpenWhenClosed(string id)
     {
         if (!_waitingToOpen.Remove(id) || _closed
-            || _items.FirstOrDefault(candidate => candidate.Id == id) is not { IsLaunchable: true } item)
+            || _pins.FirstOrDefault(candidate => candidate.Id == id) is not { IsLaunchable: true } item)
         {
             return;
         }
@@ -3019,7 +3369,7 @@ public sealed partial class DockWindow : Window
     private void RefreshRunningState()
     {
         var changed = false;
-        foreach (var item in _items)
+        foreach (var item in _pins)
         {
             var running = _runningApps.IsRunning(item.RunningTarget);
             var elevated = running && _runningApps.IsElevated(item.RunningTarget);
@@ -3031,6 +3381,12 @@ public sealed partial class DockWindow : Window
                 item.IsClosing = closing;
                 changed = true;
             }
+        }
+
+        // The overflow item's dot stands for the items behind it.
+        if (UpdateOverflowState())
+        {
+            changed = true;
         }
 
         if (changed)
@@ -3098,6 +3454,11 @@ public sealed partial class DockWindow : Window
         var width = (int)Math.Round(wanted.Width * scale);
         var height = (int)Math.Round(wanted.Height * scale);
 
+        // The width the resting row may take, in the window's own units — so a row that all but
+        // fills it (FitToDisplay) gives up the room it keeps for the wave at the ends rather than
+        // rest off the display. The window is placed the same way either way: see RowLeft.
+        _dock.RowRoom = (screen.WorkArea.Width / scale) - (2 * Math.Max(0, settings.BottomMargin));
+
         // Position by where the bar appears, not by the window's bounds: the window extends
         // below the bar to give its shadow somewhere to fall, and that slack should not read
         // as extra margin above the screen edge.
@@ -3142,14 +3503,16 @@ public sealed partial class DockWindow : Window
             _ => top
         };
 
-        Place(left, y, width, height);
-
         // At either end that leaves the window reaching past the side of the screen by the
         // slack beside the bar, which is transparent — but a label is not, and it is kept
-        // inside the window. So the dock is told which part of it is actually on the screen.
+        // inside the window. So the dock is told which part of it is actually on the screen,
+        // and cuts off whatever reaches past it: a full dock's wave, the slot a drop opens on
+        // one. Before the window moves, which the sheet follows, cut to the same.
         _dock.OnScreen = (
             (screen.WorkArea.Left - left) / scale,
             (screen.WorkArea.Right - left) / scale);
+
+        Place(left, y, width, height);
 
         // Auto-hide works in the window's own units, which are the target display's once it
         // has arrived there — all but across, where the edge answers under the bar, which is

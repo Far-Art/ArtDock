@@ -269,6 +269,65 @@ public class DockAlongEdgeTests
         }
     });
 
+    // ---- a row that all but fills its room -------------------------------------------
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.2)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    public void ARowThatAllButFillsItsRoom_RestsInsideItWhereverItIsPushed(double alignment) => OnStaThread(() =>
+    {
+        // A dock fitted to its display (DockFit) leaves less room beside it than the wave keeps
+        // at the ends. The reach gives way, so the resting row stays on the display — the wave
+        // is cut off at its edge instead — and the row still lands in the same place whatever
+        // size the window is, wider than the display included.
+        var layout = Layout();
+        const double workLeft = -3840;
+        const double workWidth = 2560;
+        const double margin = 12;
+        var slack = DockBar.SideInset;
+        var side = margin - slack;
+        var room = workWidth - (2 * margin);
+
+        foreach (var spare in new[] { 0.0, 10, layout.WaveReach, (2 * layout.WaveReach) - 1 })
+        {
+            var resting = room - spare;
+            var direct = layout.RestingLeft(resting, workLeft + margin, room, alignment, room);
+
+            Assert.InRange(direct, workLeft + margin - 1e-6, workLeft + workWidth - margin - resting + 1e-6);
+
+            foreach (var windowWidth in new[] { resting + 100, workWidth, workWidth + 300 })
+            {
+                var windowLeft = DockLayout.Align(
+                    workLeft + side, workWidth - (2 * side), windowWidth, alignment);
+                var rowLeft = windowLeft
+                    + layout.RestingLeft(resting, slack, windowWidth - (2 * slack), alignment, room);
+
+                Assert.Equal(direct, rowLeft, 6);
+            }
+        }
+    });
+
+    [Fact]
+    public void WithRoomToSpare_TheReachIsTheWholeWave()
+    {
+        // A dock with room for its wave at both ends is placed as it always was.
+        var layout = Layout();
+        var resting = layout.RestingWidth(7);
+
+        foreach (var alignment in new[] { 0.0, 0.5, 1.0 })
+        {
+            Assert.Equal(
+                layout.RestingLeft(resting, SpanStart, SpanLength, alignment),
+                layout.RestingLeft(resting, SpanStart, SpanLength, alignment, SpanLength),
+                6);
+        }
+
+        Assert.Equal(layout.WaveReach, layout.ReachWithin(resting, SpanLength), 6);
+        Assert.Equal(0, layout.ReachWithin(SpanLength + 50, SpanLength), 6);
+    }
+
     // ---- the dock itself ------------------------------------------------------------
 
     [Theory]

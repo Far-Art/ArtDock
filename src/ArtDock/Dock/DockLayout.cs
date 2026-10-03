@@ -343,6 +343,38 @@ public sealed class DockLayout(DockMetrics metrics)
     }
 
     /// <summary>
+    /// How much a full wave widens the bar with the pointer on the icon at one end of a row long
+    /// enough to hold it — less than twice <see cref="WaveReach"/>, since the end icon has
+    /// neighbours to lift on one side only.
+    /// </summary>
+    /// <remarks>
+    /// The bar grows about its middle, so half of this is how far past its resting end the bar
+    /// goes while that end's icon is the one being pointed at — what has to stay on the display
+    /// for the icon to be whole when it is clicked (<see cref="DockFit.WaveRoom"/>).
+    /// </remarks>
+    public double EndLift
+    {
+        get
+        {
+            var pitch = Metrics.Pitch;
+            if (pitch <= 0)
+            {
+                return 0;
+            }
+
+            var count = (2 * (int)Math.Ceiling(Metrics.EffectiveInfluenceRange / pitch)) + 2;
+            var sizes = Sizes(count, RestingCentre(0));
+            var total = 0d;
+            foreach (var size in sizes)
+            {
+                total += size;
+            }
+
+            return Math.Max(0, total - (count * Metrics.BaseSize));
+        }
+    }
+
+    /// <summary>
     /// Where something <paramref name="width"/> wide starts when it is placed
     /// <paramref name="alignment"/> of the way across the free room in a span.
     /// </summary>
@@ -380,10 +412,32 @@ public sealed class DockLayout(DockMetrics metrics)
     /// aligned. A dock pushed all the way along therefore rests the reach short of the end,
     /// and its widest wave just meets it.
     /// </para>
+    /// <para>
+    /// Unless that would take the resting row out of its <paramref name="room"/> — the width the
+    /// display leaves the bar, which a dock fitted to it (<see cref="DockFit"/>) all but fills.
+    /// The reach then gives way, as far as nothing: the resting row is what must stay on the
+    /// display, and the wave is cut off at its edge. It is given way at both ends alike, so
+    /// placing the row within the window and the window within the screen still composes.
+    /// </para>
     /// </remarks>
-    public double RestingLeft(double restingWidth, double start, double length, double alignment)
+    /// <param name="room">
+    /// How wide the resting row may be, in the same units — unlimited when not given.
+    /// </param>
+    public double RestingLeft(
+        double restingWidth, double start, double length, double alignment,
+        double room = double.PositiveInfinity)
     {
-        var reach = WaveReach;
+        var reach = ReachWithin(restingWidth, room);
         return Align(start, length, restingWidth + (2 * reach), alignment) + reach;
     }
+
+    /// <summary>
+    /// The room kept at each end for the wave, for a resting row of
+    /// <paramref name="restingWidth"/> that must stay inside <paramref name="room"/>:
+    /// <see cref="WaveReach"/>, or as much of it as the room leaves.
+    /// </summary>
+    public double ReachWithin(double restingWidth, double room) =>
+        double.IsNaN(room)
+            ? WaveReach
+            : Math.Clamp((room - restingWidth) / 2, 0, WaveReach);
 }

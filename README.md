@@ -214,8 +214,13 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   folder is marked at the row's far end with Windows' folder outline, since
   a folder drawn in a colour or by an icon set does not always look like one. The mark is on
   exactly the items the editor offers *Customize* for: a folder on disk, `shell:Downloads`
-  included, and not This PC or the Recycle Bin. **Selecting a row holds that item up on the
-  dock**, magnified and labelled as if the pointer were on it, and the wave travels from one
+  included, and not This PC or the Recycle Bin. **An item added in the last day carries a
+  *New* pill** in the accent colour, before the folder mark — however it was added: dropped,
+  from the dock's Add menu or a search, or on this page — and a screen reader hears it as
+  *Recently added*. Each pin keeps when it was added (`PinnedAppSetting.AddedAt`); the ones from
+  before that was kept, and the set a new dock starts with, carry none. **Selecting a row
+  holds that item up on the dock**, magnified and labelled as if the pointer were on it, and
+  the wave travels from one
   item to the next as the selection moves down the list; the item stays held as the list is
   reordered, and one just added is held as soon as it is on the dock. Only while the Items page
   is open — the other pages go back to the middle icon, or to the sweep, but for the Icons page,
@@ -560,9 +565,14 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   meaning: launched with it, the running dock opens its settings instead. Two docks would
   overlap on the same edge, race each other for the settings file, and put two identical
   icons in the tray.
-- **Configurable** live: icon size, magnification, influence range, gap, bar opacity, bar
-  colour (hex, a colour wheel, a stock swatch, one you have saved, or whatever Windows is
-  tinting the taskbar with), corner roundness, the blurred backdrop, which display the dock
+- **Stays on its display.** Too many items for the display at the size set, and the icons are
+  made smaller to fit, down to a smallest size of your choosing; past that the last ones go
+  behind a "more" item at the end of the dock, which lists them; and past thirty of those the
+  dock takes no more. Nothing of it is drawn on the display next door.
+- **Configurable** live: dock size and the smallest the icons may be made to fit,
+  magnification, influence range, gap, bar opacity, bar colour (hex, a colour wheel, a stock
+  swatch, one you have saved, or whatever Windows is tinting the taskbar with), corner
+  roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
   displays — and where along its edge, always-on-top, hide/reveal delays, the excluded apps
   the edge and the hotkeys stand down for, pinned apps, the icon set, the icons' shadow, the
@@ -1023,11 +1033,33 @@ are kept on the screen as well as in the window (`DockBar.OnScreen`), or a long 
 end icon is drawn across the edge, onto the display next door if there is one. Auto-hide's
 reveal zone followed from it too while it was the window's width and more; it is the bar's
 now, which the placement keeps on the screen, and is clipped to the dock's own display all the
-same, for a bar with more icons than the display is wide — a cursor on the display next door
+same, for a wave that reaches past the display's side — a cursor on the display next door
 cannot summon it. Separately, because a move along the edge
 shifts both the row inside the window and the window itself, the acrylic sheet is placed
 once per settings change rather than after each: between the two it would be a whole slider
 tick away from the bar.
+
+**The resting bar never leaves its display** (`Dock/DockFit`, since 2026-10-03). The size on the
+Size page — *Dock size* — is the most the icons are. With more items than the display has room
+for at that size, the dock makes them smaller, in whole DIPs, as far as *Smallest icon size*
+(32 by default); past that the last items go behind an item at the end of the row, three dots
+on a tile, whose click lists them in a menu, each opening as its icon would; and once that holds
+thirty (`DockFit.OverflowLimit`) the dock takes no more — a drop says *The dock is full*, the
+Add menu says so in its place, and a search or the Items page refuses a batch that would not
+fit, whole. The bar is fitted against the work area of the display the dock is on, in that
+display's own scale, less the bottom margin at each side, with room beside it for its wave
+(`DockFit.WaveRoom`): enough that the bar keeps its margin while the icon at either end is
+pointed at, so that icon is whole and easy to click, and that the widest wave — the pointer in
+the middle — never takes the bar off the display, the margin taking up the rest. Fitted at rest
+alone, a full dock's wave carried its end icons past the display's sides, cut off; fitted with
+the whole wave's room, it shrank more than it had to — both reported the same day. With the wave
+turned off no room is kept for it. The room the row keeps for the wave at the ends gives way
+only when the row fills its room
+(`DockLayout.ReachWithin`) — equally at both ends, so placing the row and the window still
+composes — and whatever then reaches past the display's side, the slot a drop opens on a full
+dock above all, is cut off there: the dock is clipped to `DockBar.OnScreen`, the acrylic sheet to
+the same span, the handle to the work area, and the pointer is not on the dock over there. The
+settings dialog says under *Dock size* when the dock has shrunk or overflowed.
 
 **The icons are outside WPF's hit-test.** They have to be. The window never takes focus, so
 WPF routes no mouse input to it at all — clicks are read from the window procedure and the
@@ -1279,7 +1311,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and thirty-two tests cover the cosine falloff (peak, range boundary,
+Nine hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1636,6 +1668,26 @@ turned off; is never drawn over a fullscreen window — a listed program among t
 hidden dock or with the settings dialog open; marks a dock hidden for a maximized window and
 not one hidden for a fullscreen one; and shows under a dock in plain sight while that dialog is
 open.
+
+Fourteen cover the Items page's *New* mark (`RecentPinTests`): a pin is new for a day after it
+was added and not a minute longer, never with no stamp, nor one stamped ahead of the clock,
+nor a separator; the stamp survives a clone, the file and its absence from an older one, and
+the set a new dock starts with carries none.
+
+Thirty-five cover fitting the display (`DockFitTests`): what fits stays at the dock's size; what
+does not is made the largest whole size that fits, never below the floor, which is never above
+the dock's size; past the floor the bar holds what fits beside the overflow item and not one
+more, everything is still counted, and the overflow item holds thirty at most — a dock already
+past that, moved to a smaller display, is left whole and takes no more. With the wave's room
+kept beside the bar, the widest bar fits and a pixel more would not, the layout leaves the row its
+whole reach at each end at the size fitted, and with no wave the fit is the resting one. At
+the room the dock keeps, at magnifications from the stock one to the strongest, the bar keeps its
+margin while either end icon is pointed at and stays on the display with the widest wave, at
+every alignment; that room is less than the whole wave's; and the wave spans the neighbours set,
+not one more, at every icon size and count of neighbours. Five
+more hold the row that all but fills its room to it at every alignment, its place still the
+same whatever the window's width, wider than the display included, and a row with room to
+spare placed as it always was.
 
 Eleven cover where across the screen the edge brings the dock up, and the strip below a dock
 that is up keeps it there (`AutoHideController.IsUnderDock`), in physical pixels on both

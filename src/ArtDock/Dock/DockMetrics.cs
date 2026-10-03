@@ -82,6 +82,13 @@ public sealed record DockMetrics
     /// up keeps at least the requested reach, and a wider wave is the one that reads as
     /// natural.
     /// </remarks>
+    /// <remarks>
+    /// Rounded up with a hair's tolerance. The settings give the range as a whole number of
+    /// pitches multiplied out, and dividing it back by the pitch does not always come back whole:
+    /// 6 × (45 + 7.2) ÷ 52.2 is 6.000000000000001, which rounded straight up is 7 — a wave
+    /// reaching an icon further at some icon sizes than at others. Found on 2026-10-03, when a
+    /// dock shrunk to 45 to fit its display waved wider than the room kept for it.
+    /// </remarks>
     public double EffectiveInfluenceRange =>
-        Pitch <= 0 ? 0 : Math.Max(1, Math.Ceiling(InfluenceRange / Pitch)) * Pitch;
+        Pitch <= 0 ? 0 : Math.Max(1, Math.Ceiling((InfluenceRange / Pitch) - 1e-9)) * Pitch;
 }
