@@ -234,8 +234,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock lets go with it; the buttons beside the list keep it, since they act on it, and so
   do the gaps between rows, where a click is a near miss rather than a choice of neither. Those
   buttons carry the glyphs the dock's menus draw for the same commands — *Remove* the menu's
-  unpin, *Item settings…* its pencil, *Add* its plus — with arrows for the moves and a broom
-  for *Clear all*.
+  unpin, *Item settings…* its pencil, *Add* its plus — with arrows for the moves, a pin for
+  *Add from taskbar*, and a broom for *Clear all*.
 - **Reorder from either side**: dragging a row in the settings dialog lifts it out under the
   pointer, reorders the list around it as it moves, and moves the icon on the dock at the same
   time; dragging an icon on the dock reorders the dialog's list to match, while it is open.
@@ -246,7 +246,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   not simply do nothing.
 - **Lock modification**, the other half of that, on the same page: the dock closes to
   changes, and nothing can be added to it, taken off it or edited. *Item settings…*, *Add*,
-  *Remove* and *Clear all* grey out in the dialog, and double-clicking a row no longer opens
+  *Add from taskbar*, *Remove*, *Add defaults* and *Clear all* grey out in the dialog, and double-clicking a row no longer opens
   the editor either. On the dock itself the right-click menu drops its commands altogether
   rather than greying five of them, and says why: one greyed **Locked** where they were,
   then *Dock settings…* — which is never taken away, so the lock is always one right-click
@@ -438,9 +438,23 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   user's own apps are left to the user, rather than guessed at from what Windows happens to
   ship. The separator sets the bin off at the end, where a Mac keeps the Trash. Only that
   first run — or on purpose: **Reset all pages to defaults**, on the About page, puts the
-  dock back to the same set.
+  dock back to the same set. The Items page's **Add defaults** adds back whichever of them are
+  missing and leaves everything else on the dock as it is: each goes after the defaults before it
+  that are still there, or at the front, and the Recycle Bin at the end behind a separator.
   The Items page's **Clear all** empties the list for good, and a cleared dock stays cleared
   across restarts instead of being restocked.
+- **Brings the taskbar's apps along, if asked**: the same first run asks whether to add what is
+  pinned to Windows' taskbar, listing it, and on a yes puts it after the places and before the
+  Recycle Bin's separator, behind a separator of its own. **Add from taskbar** on the Items page
+  does the same at any time, adding after the selected row whatever the dock does not have yet.
+  The taskbar is only read — it keeps every pin. The list is the taskbar's own, in its order
+  (`Interop/TaskbarFavorites`), so Store apps come too, by their app id; an app uninstalled
+  since it was pinned is passed over. A taskbar shortcut is not pinned where it lies, since
+  Windows deletes it when the app is unpinned from the taskbar: the Start menu's shortcut to the
+  same program, and the same app id, is pinned instead, under its name — and where there is none,
+  a copy kept in `%LOCALAPPDATA%\ArtDock\Shortcuts`. File Explorer becomes the Add menu's File
+  Explorer. An app already on the dock is matched by the program it opens, so Chrome pinned as
+  `chrome.exe` is not added again as the Start menu's *Google Chrome* (`Services/TaskbarPins`).
 - **Starts when you sign in, unless told not to**: the same first run registers the dock to
   start at sign-in, and so does the setup, so *Start ArtDock when I sign in* on the System
   page comes up checked. The first run leaves alone an entry some other copy already made;
@@ -1326,7 +1340,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
+One thousand and thirty-two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1409,7 +1423,13 @@ stored by name rather than as paths and the separator before the Recycle Bin —
 already has pins is left alone. And two cover *Search apps…* and *Search games…*: that they come
 straight after *Browse…*, and that `DockPresets.Create` makes nothing for them, the caller doing
 the asking; and that a pin made from what a search found goes by the name the search showed, with
-a program gone since left out.
+a program gone since left out. Nine cover the taskbar's pins: its `Favorites` value read through
+to the shell's names, and the reading stopping at whatever does not read; the Start menu's
+shortcut chosen by program and app id; an app already on the dock found whatever path it is
+pinned by; and where a new dock puts what the taskbar gave it. Five cover *Add defaults*: an
+empty list made a new dock's, a full one left alone, the user's own items kept in place with the
+missing defaults among those kept, the Recycle Bin's separator added only when needed, and a
+renamed default still counted as there.
 
 Twenty-five cover dropping those places, which Explorer drags as a shell ID list and no
 paths. One takes the data object the desktop itself hands to a drag of This PC and the Recycle

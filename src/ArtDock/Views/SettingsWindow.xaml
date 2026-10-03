@@ -1284,6 +1284,18 @@
                             views:MenuIcons.Glyph="Add"
                             Content="{DynamicResource Settings.Items.Add}" />
 
+                        <!-- Everything pinned to Windows' taskbar that the dock does not have
+                             yet, in the taskbar's order. Reads the taskbar and leaves it as it
+                             is. -->
+                        <Button
+                            x:Name="AddFromTaskbarButton"
+                            Margin="0,0,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="Taskbar"
+                            Content="{DynamicResource Settings.Items.AddFromTaskbar}"
+                            ToolTip="{DynamicResource Settings.Items.AddFromTaskbar.Tip}" />
+
                         <!-- Add works on the list; everything below it works on whichever
                              item is selected, and is dead until one is. Ruled apart so the
                              one button that is always available does not read as the odd
@@ -1321,13 +1333,19 @@
                             views:MenuIcons.Glyph="MoveDown"
                             Content="{DynamicResource Settings.Items.MoveDown}" />
 
-                        <!-- Not a page reset like the other pages carry. What a page reset
-                             would offer here is the starting set, and that comes back with the
-                             whole-application reset on About; this page's own offer is starting
-                             again from nothing. -->
+                        <!-- What a new dock is given, added back where it is missing without
+                             touching the rest; and starting again from nothing. Neither is
+                             written until Save. -->
+                        <Button
+                            x:Name="AddDefaultsButton"
+                            Margin="0,20,0,8"
+                            MinWidth="132"
+                            Style="{StaticResource GlyphButton}"
+                            views:MenuIcons.Glyph="Defaults"
+                            Content="{DynamicResource Settings.Items.AddDefaults}"
+                            ToolTip="{DynamicResource Settings.Items.AddDefaults.Tip}" />
                         <Button
                             x:Name="ClearItemsButton"
-                            Margin="0,20,0,0"
                             MinWidth="132"
                             Style="{StaticResource DangerGlyphButton}"
                             views:MenuIcons.Glyph="ClearAll"

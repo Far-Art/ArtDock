@@ -109,6 +109,13 @@
     "Settings.Items.MoveUp": "Move up",
     "Settings.Items.MoveDown": "Move down",
     "Settings.Items.ClearAll": "Clear all",
+    "Settings.Items.AddDefaults": "Add defaults",
+    "Settings.Items.AddDefaults.Tip": "Adds whichever of the items a new dock starts with are missing — Start, This PC, your folder, Downloads, Settings and the Recycle Bin. The items already on the dock stay as they are.",
+    "Settings.Items.AddDefaults.AllThere": "All of the default items are on the dock already.",
+    "Settings.Items.AddFromTaskbar": "Add from taskbar",
+    "Settings.Items.AddFromTaskbar.Tip": "Adds the apps pinned to the Windows taskbar that are not on the dock yet. The taskbar keeps its pins.",
+    "Settings.Items.AddFromTaskbar.None": "Nothing is pinned to the taskbar that the dock could add.",
+    "Settings.Items.AddFromTaskbar.AllThere": "Everything pinned to the taskbar is on the dock already.",
     "Settings.Items.LockOrder": "Lock the order",
     "Settings.Items.LockOrder.Tip": "Stops a drag from rearranging the items, here or on the dock. Adding, removing and editing are unaffected.",
     "Settings.Items.LockContents": "Lock modification",
@@ -440,6 +447,7 @@
     "Tray.Settings": "Settings…",
 
     "FirstRun.NoGpu": "ArtDock found no graphics card to draw with on this computer, so it has turned on No GPU: the dock is drawn by the processor alone, with a solid bar and no blur behind it.\n\nIf this computer does have one, or you would rather have the full dock, turn No GPU off in Settings, on the System page.",
+    "FirstRun.TaskbarPins": "Add the apps pinned to your taskbar to the dock?\n\n{0}\n\nThey stay on the taskbar as well. You can add them later from Settings, on the Items page.",
 
     "AlreadyRunning.Heading": "ArtDock is already running",
     "AlreadyRunning.ShowDock": "Show dock",

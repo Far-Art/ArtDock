@@ -36,6 +36,12 @@ public enum MenuGlyph
     MoveDown,
     ClearAll,
 
+    /// <summary>A pin, for what adds the taskbar's pins.</summary>
+    Taskbar,
+
+    /// <summary>The defaults, added back.</summary>
+    Defaults,
+
     /// <summary>The symbol font's <em>Admin</em>, for what starts a program as administrator.</summary>
     Administrator
 }
@@ -146,6 +152,8 @@ public static class MenuIcons
         MenuGlyph.MoveUp => "",
         MenuGlyph.MoveDown => "",
         MenuGlyph.ClearAll => "",
+        MenuGlyph.Taskbar => "",
+        MenuGlyph.Defaults => "",
         MenuGlyph.Administrator => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };

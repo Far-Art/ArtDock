@@ -120,10 +120,35 @@ public static class ShellIdList
     }
 
     /// <summary>
+    /// One absolute ID list on its own, as the taskbar keeps its pins — see
+    /// <see cref="TaskbarFavorites"/>. Null for bytes that are not a well-formed ID list, or one
+    /// the shell will not name either way.
+    /// </summary>
+    public static Item? ReadOne(byte[] idList)
+    {
+        if (!IsIdList(idList, 0))
+        {
+            return null;
+        }
+
+        var block = Marshal.AllocHGlobal(idList.Length);
+        try
+        {
+            Marshal.Copy(idList, 0, block, idList.Length);
+            var item = new Item(NameOf(block, SigdnFileSysPath), NameOf(block, SigdnDesktopAbsoluteParsing));
+            return item.Path is null && item.ParsingName is null ? null : item;
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(block);
+        }
+    }
+
+    /// <summary>
     /// Whether an ID list starts at <paramref name="offset"/> and ends inside the block: a run
     /// of items, each led by its own size, closed by a size of zero.
     /// </summary>
-    private static bool IsIdList(byte[] block, uint offset)
+    internal static bool IsIdList(byte[] block, uint offset)
     {
         var at = (long)offset;
         while (at + sizeof(ushort) <= block.Length)

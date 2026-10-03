@@ -44,6 +44,9 @@ public sealed class SettingsStore
     /// <summary>Where the settings file lives, for the "open folder" affordance.</summary>
     public static string Location => FilePath;
 
+    /// <summary>The folder the settings file is in.</summary>
+    public static string Folder => Directory;
+
     /// <summary>
     /// Whether <see cref="Load"/> read settings from disk, rather than starting from defaults.
     /// </summary>

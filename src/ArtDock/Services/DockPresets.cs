@@ -190,6 +190,66 @@ public static class DockPresets
     public static List<PinnedAppSetting> CreateDefaults() =>
         [.. DefaultKeys.Select(Create).OfType<PinnedAppSetting>()];
 
+    /// <summary>
+    /// <paramref name="pins"/> with whichever of a new dock's items it lacks added — the Items
+    /// page's <em>Add defaults</em> — and the ones added, for stamping and counting. Nothing
+    /// already on the list is moved or taken off.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each missing item goes after the last of the defaults before it that the list has, or at
+    /// the front when it has none of them — so Start, the places and Settings come back in their
+    /// order wherever the user has moved the ones they kept. The Recycle Bin, missing, goes at
+    /// the end behind a separator, as on a new dock, unless the list already ends with one.
+    /// </para>
+    /// <para>
+    /// An item is on the list by what it opens (<see cref="TaskbarPins.KeyOf"/>), so a renamed
+    /// Downloads is still Downloads. The separator is never added on its own: whether the list
+    /// has "the" separator cannot be told, and the Recycle Bin is what it is there for.
+    /// </para>
+    /// </remarks>
+    public static (List<PinnedAppSetting> Pins, List<PinnedAppSetting> Added) WithDefaults(IReadOnlyList<PinnedAppSetting> pins)
+    {
+        var merged = pins.ToList();
+        var added = new List<PinnedAppSetting>();
+        var at = 0;
+        foreach (var pin in CreateDefaults())
+        {
+            if (pin.IsSeparator)
+            {
+                continue;
+            }
+
+            var key = TaskbarPins.KeyOf(pin);
+            var found = merged.FindIndex(
+                existing => string.Equals(TaskbarPins.KeyOf(existing), key, StringComparison.OrdinalIgnoreCase));
+
+            if (found >= 0)
+            {
+                at = found + 1;
+                continue;
+            }
+
+            if (IsRecycleBin(pin.TargetPath))
+            {
+                if (merged.Count > 0 && !merged[^1].IsSeparator)
+                {
+                    merged.Add(CreateSeparator());
+                }
+
+                merged.Add(pin);
+            }
+            else
+            {
+                merged.Insert(at++, pin);
+            }
+
+            added.Add(pin);
+        }
+
+        return (merged, added);
+    }
+
     /// <summary>Whether a pin points at the Recycle Bin.</summary>
     /// <remarks>
     /// By target rather than by preset key, because the key is not stored: a pin remembers

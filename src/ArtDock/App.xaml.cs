@@ -168,12 +168,71 @@ public partial class App : Application
                 () => _dockWindow?.ToggleKeyboard(), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
 
-        if (noGpuAdopted)
+        if (firstRun)
         {
-            // Once the dock is up and drawn, so that what the notice describes is there to be
-            // seen behind it.
-            Dispatcher.BeginInvoke(ShowNoGpuNotice, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Once the dock is up and drawn, so that what the notices describe is there to be
+            // seen behind them. One after the other from one call: a message box runs the
+            // dispatcher while it waits, and two queued apart would come up on top of each other.
+            Dispatcher.BeginInvoke(
+                () =>
+                {
+                    if (noGpuAdopted)
+                    {
+                        ShowNoGpuNotice();
+                    }
+
+                    OfferTaskbarPins();
+                },
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         }
+    }
+
+    /// <summary>
+    /// Asks a new dock's owner whether to add what is pinned to Windows' taskbar, and adds it on
+    /// a yes — after the places, before the Recycle Bin (<see cref="TaskbarPins.IntoNewDock"/>).
+    /// The taskbar keeps its pins either way.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// "On installation" is a first run, as for No GPU: Velopack's install hook has seconds and no
+    /// window, so the question is asked by the first dock to start with no settings file. A
+    /// reinstall that kept its settings is not asked again; the Items page's <em>Add from
+    /// taskbar</em> is there for it, and for anyone who said no.
+    /// </para>
+    /// <para>
+    /// Not while the settings dialog is open — a first launch with <c>--settings</c> — since the
+    /// dialog holds a copy of the pins of its own and its Save would put back the list without them.
+    /// </para>
+    /// </remarks>
+    private void OfferTaskbarPins()
+    {
+        if (_settings is not { } store || _settingsWindow is { IsLoaded: true })
+        {
+            return;
+        }
+
+        var found = TaskbarPins.Find(store.Current.PinnedApps);
+        if (found.Pins.Count == 0)
+        {
+            return;
+        }
+
+        var names = string.Join("\n", found.Pins.Select(pin => "•  " + pin.Label));
+        var answer = MessageBox.Show(
+            Localizer.Format("FirstRun.TaskbarPins", names),
+            "ArtDock",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.Yes);
+
+        if (answer != MessageBoxResult.Yes || _settingsWindow is { IsLoaded: true })
+        {
+            return;
+        }
+
+        var updated = store.Current.Clone();
+        updated.PinnedApps = TaskbarPins.IntoNewDock(updated.PinnedApps, found.Pins);
+        store.Save(updated);
     }
 
     /// <summary>

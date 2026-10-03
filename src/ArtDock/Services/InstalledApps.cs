@@ -108,6 +108,14 @@ public static class InstalledApps
         name.Split([' ', '-', '_', '.'], StringSplitOptions.RemoveEmptyEntries)
             .Any(word => UninstallWords.Contains(word, StringComparer.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Every shortcut this looks through — the Start menu's, everyone's and the user's own, then
+    /// the desktop's — unfiltered, for finding the Start menu's shortcut to a taskbar pin
+    /// (<see cref="TaskbarPins.Equivalent"/>).
+    /// </summary>
+    public static IEnumerable<string> ShortcutFiles() =>
+        Places().SelectMany(place => Shortcuts(place.Folder, place.Deep));
+
     private static IEnumerable<(string Folder, bool Deep)> Places() =>
     [
         (Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), true),

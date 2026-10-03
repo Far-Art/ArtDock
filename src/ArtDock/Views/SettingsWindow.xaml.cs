@@ -559,6 +559,8 @@ public sealed partial class SettingsWindow : Window
         ResetAppearanceButton.Click += (_, _) => ResetAppearancePage();
         ResetIconsButton.Click += (_, _) => ResetIconsPage();
         ClearItemsButton.Click += (_, _) => ClearItems();
+        AddDefaultsButton.Click += (_, _) => AddDefaults();
+        AddFromTaskbarButton.Click += (_, _) => AddFromTaskbar();
         ResetBehaviourButton.Click += (_, _) => ResetBehaviourPage();
         ResetHotkeysButton.Click += (_, _) => ResetHotkeysPage();
         QuickLaunchCheck.Checked += (_, _) => OnHotkeysEdited();
@@ -1000,6 +1002,34 @@ public sealed partial class SettingsWindow : Window
             _ => DockPresets.Create(key) is { } preset ? [preset] : []
         };
 
+        AddPins(pins);
+    }
+
+    /// <summary>
+    /// Adds what is pinned to Windows' taskbar and not on the dock yet, in the taskbar's order —
+    /// or says why there is nothing to add. The taskbar keeps its pins: see <see cref="TaskbarPins"/>.
+    /// </summary>
+    private void AddFromTaskbar()
+    {
+        var found = TaskbarPins.Find(_pinned);
+        if (found.Pins.Count == 0)
+        {
+            MessageBox.Show(
+                this,
+                Localizer.Get(found.OnTaskbar == 0 ? "Settings.Items.AddFromTaskbar.None" : "Settings.Items.AddFromTaskbar.AllThere"),
+                "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        AddPins(found.Pins);
+    }
+
+    /// <summary>
+    /// Adds pins to the list after the selected row, or at the end — all of them, or none if the
+    /// dock has no room for them on its display.
+    /// </summary>
+    private void AddPins(IReadOnlyList<PinnedAppSetting> pins)
+    {
         if (pins.Count == 0)
         {
             return;
@@ -1152,6 +1182,8 @@ public sealed partial class SettingsWindow : Window
         ItemSettingsButton.IsEnabled = !ContentsLocked && selected is { IsSeparator: false };
 
         AddButton.IsEnabled = !ContentsLocked;
+        AddFromTaskbarButton.IsEnabled = !ContentsLocked;
+        AddDefaultsButton.IsEnabled = !ContentsLocked;
         RemoveButton.IsEnabled = !ContentsLocked && selected is not null;
         MoveUpButton.IsEnabled = !OrderLocked && index > 0;
         MoveDownButton.IsEnabled = !OrderLocked && index >= 0 && index < _pinned.Count - 1;
@@ -1986,6 +2018,70 @@ public sealed partial class SettingsWindow : Window
 
         _pinned.Clear();
         PinnedList.SelectedIndex = -1;
+
+        _pinsEdited = true;
+        UpdateItemButtons();
+        Preview();
+    }
+
+    /// <summary>
+    /// Adds whichever of the items a new dock starts with the list lacks, each where it goes
+    /// among them (<see cref="DockPresets.WithDefaults"/>) — or says they are all there.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for on 2026-10-03, first as a <em>Restore defaults</em> that replaced the list, then
+    /// the same day as this: nothing on the list is taken off or moved. The page once had a reset
+    /// to the starting set and lost it to <em>Clear all</em>, on the reasoning that nobody wants
+    /// the machine's stock apps back; the set now is Start, the places and the Recycle Bin, which
+    /// are worth getting back.
+    /// </para>
+    /// <para>
+    /// Stamped as added, as anything the Add menu adds is, and all or nothing against the room on
+    /// the display, as the Add menu's are. Nothing is written until Save.
+    /// </para>
+    /// </remarks>
+    private void AddDefaults()
+    {
+        if (ContentsLocked)
+        {
+            return;
+        }
+
+        var (pins, added) = DockPresets.WithDefaults(_pinned);
+        if (added.Count == 0)
+        {
+            MessageBox.Show(
+                this, Localizer.Get("Settings.Items.AddDefaults.AllThere"),
+                "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // A separator brought in with the Recycle Bin counts against the room as well.
+        var room = RoomFor?.Invoke(_pinned.Count) ?? int.MaxValue;
+        if (pins.Count - _pinned.Count > room)
+        {
+            MessageBox.Show(
+                this, Localizer.Format("Overflow.Full", room, pins.Count - _pinned.Count),
+                "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Inserted one by one rather than the list replaced, so the rows already there keep
+        // their selection and their place in it.
+        var now = DateTimeOffset.UtcNow;
+        for (var i = 0; i < pins.Count; i++)
+        {
+            if (i >= _pinned.Count || !ReferenceEquals(_pinned[i], pins[i]))
+            {
+                if (added.Contains(pins[i]))
+                {
+                    pins[i].AddedAt = now;
+                }
+
+                _pinned.Insert(i, pins[i]);
+            }
+        }
 
         _pinsEdited = true;
         UpdateItemButtons();
