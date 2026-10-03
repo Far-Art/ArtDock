@@ -99,6 +99,14 @@ public sealed class DockBar : Canvas
     private static readonly Brush StandInBrush = Frozen(Color.FromArgb(0x01, 0x00, 0x00, 0x00));
     private static readonly Brush DotBrush = Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));
 
+    /// <summary>
+    /// The dot under an app running as administrator: amber, the yellow of Windows' own UAC
+    /// shield, at the white dot's opacity — a colour that reads on a light bar and a dark one.
+    /// </summary>
+    public static Color ElevatedDot { get; } = Color.FromArgb(0xE6, 0xFF, 0xB9, 0x00);
+
+    private static readonly Brush ElevatedDotBrush = Frozen(ElevatedDot);
+
     /// <summary>The label bubble. Keep it all but opaque: the labels are ClearType, which
     /// is blended against this colour, and any of the desktop showing through would show
     /// through with coloured fringes.</summary>
@@ -3163,7 +3171,8 @@ public sealed class DockBar : Canvas
             }
 
             var centreX = _iconsLeft + _offsets[i] + (_sizes[i] / 2) + SlotShift(i);
-            drawingContext.DrawEllipse(DotBrush, pen: null, new Point(centreX, y), 2, 2);
+            var brush = _items[i].Item.IsElevated ? ElevatedDotBrush : DotBrush;
+            drawingContext.DrawEllipse(brush, pen: null, new Point(centreX, y), 2, 2);
         }
     }
 

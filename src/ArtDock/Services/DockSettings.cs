@@ -75,6 +75,17 @@ public sealed class PinnedAppSetting
     public string? FolderSymbolTone { get; set; }
 
     /// <summary>
+    /// Start the program as administrator when the pin is clicked, as Windows' own
+    /// <em>Run this program as an administrator</em> does — Windows asks every time.
+    /// </summary>
+    /// <remarks>
+    /// Off by default, and means nothing for a pin that cannot be started that way: see
+    /// <c>DockItem.CanRunAsAdministrator</c>. Only a launch is elevated — a click on a pin whose
+    /// program is already open brings its window forward, as for any other.
+    /// </remarks>
+    public bool RunAsAdministrator { get; set; }
+
+    /// <summary>
     /// The label's typeface, as files written before the lettering was the dock's carry it.
     /// </summary>
     /// <remarks>
@@ -1060,6 +1071,7 @@ public sealed class DockSettings
             FolderSymbol = app.FolderSymbol,
             FolderText = app.FolderText,
             FolderSymbolTone = app.FolderSymbolTone,
+            RunAsAdministrator = app.RunAsAdministrator,
 
             // Not the pin's lettering, which is only ever read from an older file and is moved
             // to the dock's as it is read — see AdoptPinLettering.

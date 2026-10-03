@@ -1080,6 +1080,7 @@ public sealed partial class SettingsWindow : Window
             FolderSymbol = editor.EditedFolderSymbol,
             FolderText = editor.EditedFolderText,
             FolderSymbolTone = editor.EditedFolderSymbolTone,
+            RunAsAdministrator = editor.EditedRunAsAdministrator,
             IsSeparator = source.IsSeparator
         };
 

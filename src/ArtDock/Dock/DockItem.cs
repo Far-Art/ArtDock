@@ -54,6 +54,12 @@ public sealed class DockItem
     /// <summary>What the symbol or text is painted in: <c>White</c>, <c>Black</c>, or null for toned.</summary>
     public string? FolderSymbolTone { get; init; }
 
+    /// <summary>
+    /// Start the program as administrator when the item is clicked. Means nothing unless
+    /// <see cref="CanRunAsAdministrator"/>.
+    /// </summary>
+    public bool RunAsAdministrator { get; init; }
+
     /// <summary>The resolved icon — custom if one is set, otherwise the shell's.</summary>
     public ImageSource? Icon { get; set; }
 
@@ -73,6 +79,13 @@ public sealed class DockItem
     public string? ExplorerFolder { get; init; }
 
     /// <summary>
+    /// The program this pin's launcher starts — <c>Battle.net.exe</c> for
+    /// <c>Battle.net Launcher.exe</c> beside it — which is what runs under the pin, or null.
+    /// Found as the pin is read (<c>PinnedAppsService.LaunchedProgram</c>).
+    /// </summary>
+    public string? LaunchedProgram { get; init; }
+
+    /// <summary>
     /// A spacer rather than an application: draws a divider and launches nothing.
     /// </summary>
     /// <remarks>
@@ -89,6 +102,12 @@ public sealed class DockItem
 
     /// <summary>True while the app has at least one open window — drives the indicator dot.</summary>
     public bool IsRunning { get; set; }
+
+    /// <summary>
+    /// True while one of those windows is a program running as administrator — which colours
+    /// the dot. Means nothing unless <see cref="IsRunning"/>.
+    /// </summary>
+    public bool IsElevated { get; set; }
 
     /// <summary>What the shell should resolve for the icon and for activation.</summary>
     public string ShellTarget =>
@@ -124,9 +143,14 @@ public sealed class DockItem
     /// <c>C:\Users\name\Downloads</c> are lit by the same windows, and a window that goes to
     /// another folder takes its dot with it.
     /// </para>
+    /// <para>
+    /// A launcher named after the program it starts is matched to that program
+    /// (<see cref="LaunchedProgram"/>): it has no window of its own to be matched by.
+    /// </para>
     /// </remarks>
     public string? RunningTarget =>
         ExplorerFolder
+        ?? LaunchedProgram
         ?? ((LinkTarget ?? TargetPath) is { Length: > 0 } target
             && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                 ? target
@@ -134,4 +158,12 @@ public sealed class DockItem
 
     /// <summary>True when clicking this item should do something.</summary>
     public bool IsLaunchable => !IsSeparator && !IsDisabled && ShellTarget.Length > 0;
+
+    /// <summary>
+    /// Whether the item starts a program Windows can run as administrator — the ones Explorer
+    /// offers <em>Run as administrator</em> for. Asked of the shell as the pin is read
+    /// (<c>PinnedAppsService.CanRunAsAdministrator</c>), since the item's menu asks it on every
+    /// right-click and a launch on every click.
+    /// </summary>
+    public bool CanRunAsAdministrator { get; init; }
 }

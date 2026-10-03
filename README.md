@@ -385,6 +385,15 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   namespace, so nothing can open it. It is asked for by posting the taskbar the same command
   its own button sends, and it carries a mark that ships with the dock, because Windows
   exposes no Start icon anywhere — see *Known gaps*.
+- **Run as administrator**: right-click a program — an `.exe`, a shortcut to one, a `.bat`,
+  `.cmd` or `.msc`, whatever Windows' own associations give the `runas` verb — and the entry
+  is at the top, above the ones that act on the pin. It is greyed while the program is open,
+  so it never starts a second copy beside the one a click would bring forward, and it
+  survives *Lock modification*, being a launch. To have a pin always start that way, tick *Run this program
+  as an administrator* in its item editor; a click on one whose program is already open still
+  brings that window forward. Windows asks every time either way, and the icon only bounces
+  when the answer was yes. Not for Store apps. **An app running as administrator has an amber
+  dot** rather than a white one — however it was started, from the dock or not.
 - **Empty the Recycle Bin from the dock**: right-click the pin and the entry is there, above
   the ones that act on the pin itself. It greys out when the bin is already empty, and it
   **asks first exactly when Explorer would** — the *Display delete confirmation dialog*
@@ -921,6 +930,12 @@ legitimately resolve to nothing — `File Explorer.lnk` points at a shell folder
 file — so the match falls back to the shortcut's own path rather than treating that as an
 error.
 
+**A launcher is matched to the program it starts.** A pin of `Battle.net Launcher.exe` would
+never light: the launcher opens no window, starts `Battle.net.exe` beside it and exits, and
+the two agree in neither path nor file name. So a pin whose program is named `X Launcher.exe`
+is lit by `X.exe` in the same folder when there is one — that and no wider, since lighting a
+pin by anything in its folder would light the wrong one wherever programs share a folder.
+
 **Anything that exists can be pinned, and the dock does not sort it into kinds.** A
 document launches through the same `ShellExecute` as an application, takes its icon from the
 same shell call — the shell has one for every registered type, and a generic sheet for the
@@ -1147,9 +1162,9 @@ and a signature of the project's own on the feed. Then the
 smaller things: sharpening the acrylic backdrop, and the Exclusions page's blind spot for Store
 apps.
 
-Asked for, and not begun: starting an item as administrator from its menu, with
-Ctrl+Shift+click, or with Ctrl+Shift+Enter from the keyboard; and the window previews from the
-keyboard, opened by pressing Up, as the taskbar's are. The previews themselves are built, and
+Asked for, and not begun: starting an item as administrator with Ctrl+Shift+click, or with
+Ctrl+Shift+Enter from the keyboard — the menu entry and the item editor's checkbox are built;
+and the window previews from the keyboard, opened by pressing Up, as the taskbar's are. The previews themselves are built, and
 not yet tried on screen.
 
 Version 2 is planned: more than one dock, so a machine with
@@ -1248,7 +1263,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Eight hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
+Nine hundred and thirteen tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1352,6 +1367,17 @@ than by the preset key it was added from — since the key is never stored, and 
 takes free text — and that nothing near it is mistaken for it. A false positive there is an
 *Empty Recycle Bin* entry offered on the wrong item, which is an offer to delete permanently
 made about something else.
+
+Eleven cover a launcher's pin being lit by the program it starts: `X Launcher.exe` by `X.exe`
+beside it, written with a space, a hyphen, an underscore or nothing, and through a shortcut;
+not when that program is not there, nor for `Launcher.exe` alone or a name that only starts
+with the word; and the pin still launching the launcher.
+
+Sixteen cover which pins can be run as administrator, asked of the machine's associations as
+the dock asks them: a program, a batch file and a console, by path or by a bare name on the
+`PATH`; a shortcut by what it points at, and one that cannot be resolved not at all; and not a
+folder, a document, a picture, a `shell:` place, a web address ending in `.exe`, or a Store
+app. And that a pin is not run that way unless it asks to be, and one that asks is launched so.
 
 Two more cover the bin's icon following the bin: that it is read afresh every time rather
 than served from the cache every other icon comes from, and that an icon swapped in place is

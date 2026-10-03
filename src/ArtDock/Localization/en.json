@@ -306,6 +306,7 @@
     "EditItem.UseIconNotThumbnail": "Use the file's icon instead of a thumbnail",
     "EditItem.Opens": "Opens",
     "EditItem.Opens.Hint": "A program, a shortcut, a folder or a web address — whatever Explorer would open.",
+    "EditItem.RunAsAdministrator": "Run this program as an administrator",
     "EditItem.Hint": "This item's label is held open on the dock while this is open, so the name can be judged where it is actually used. The label's font and size are the whole dock's, and are set on the Icons page of Dock settings.",
     "EditItem.ChooseTarget.Title": "Choose what this item opens",
     "EditItem.ChooseIcon.Title": "Choose an icon",
@@ -353,6 +354,7 @@
     "EditItem.Symbol.Flag": "Flag",
     "EditItem.Symbol.Bugs": "Bugs",
 
+    "Menu.RunAsAdministrator": "Run as administrator",
     "Menu.EditItem": "Edit item…",
     "Menu.RemoveFromDock": "Remove from dock",
     "Menu.Add": "Add",

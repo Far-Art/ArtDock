@@ -17,7 +17,19 @@ public static class AppLauncher
     /// any elevation prompt all behave as they would from Explorer. Store apps are activated
     /// by AUMID through the same <c>shell:AppsFolder</c> path Explorer uses.
     /// </remarks>
-    public static bool Launch(DockItem item)
+    public static bool Launch(DockItem item) =>
+        Launch(item, item.RunAsAdministrator && item.CanRunAsAdministrator);
+
+    /// <summary>
+    /// Launches a pinned item, as administrator or not whatever the item says.
+    /// </summary>
+    /// <remarks>
+    /// As administrator is the shell's <c>runas</c> verb, which is what Explorer's <em>Run as
+    /// administrator</em> is: Windows asks first, and declining it is a launch that did not
+    /// happen. Only for an item that <see cref="DockItem.CanRunAsAdministrator"/>; on anything
+    /// else the shell has no such verb and the launch fails.
+    /// </remarks>
+    public static bool Launch(DockItem item, bool asAdministrator)
     {
         var target = item.ShellTarget;
         if (string.IsNullOrWhiteSpace(target))
@@ -39,6 +51,11 @@ public static class AppLauncher
                 FileName = target,
                 UseShellExecute = true
             };
+
+            if (asAdministrator)
+            {
+                startInfo.Verb = "runas";
+            }
 
             // Give the app its own directory so relative paths inside it resolve. Checked
             // rather than assumed: a target can be a web address now that the edit dialog

@@ -34,7 +34,10 @@ public enum MenuGlyph
     Info,
     MoveUp,
     MoveDown,
-    ClearAll
+    ClearAll,
+
+    /// <summary>The symbol font's <em>Admin</em>, for what starts a program as administrator.</summary>
+    Administrator
 }
 
 /// <summary>
@@ -143,6 +146,7 @@ public static class MenuIcons
         MenuGlyph.MoveUp => "",
         MenuGlyph.MoveDown => "",
         MenuGlyph.ClearAll => "",
+        MenuGlyph.Administrator => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };
 

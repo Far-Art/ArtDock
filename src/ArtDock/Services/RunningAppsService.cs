@@ -125,6 +125,16 @@ public sealed class RunningAppsService : IDisposable
     public bool IsRunning(string? target) => FindWindows(target).Count > 0;
 
     /// <summary>
+    /// True when any open window of <paramref name="target"/> belongs to a program running as
+    /// administrator — above the dock's integrity level (<see cref="WindowsApi.IsElevated"/>).
+    /// </summary>
+    /// <remarks>
+    /// Asked of the windows as they stand rather than kept with the census: a process's level is
+    /// read from its token, a few calls per window, and only for the pins that are running.
+    /// </remarks>
+    public bool IsElevated(string? target) => FindWindows(target).Any(WindowsApi.IsElevated);
+
+    /// <summary>
     /// The open windows of a pinned target, in the order they were first seen — the order the
     /// window previews show them in, which does not change as the user moves between them.
     /// </summary>

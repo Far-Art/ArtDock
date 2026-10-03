@@ -760,6 +760,7 @@ public sealed partial class DockWindow : Window
                 pin.FolderSymbol,
                 pin.FolderText,
                 pin.FolderSymbolTone,
+                pin.RunAsAdministrator ? "admin" : null,
                 pin.IsSeparator ? "sep" : null)));
 
     /// <summary>
@@ -1191,13 +1192,27 @@ public sealed partial class DockWindow : Window
 
         var menu = new ContextMenu();
 
-        // What the item can *do* comes first, above what can be done *to* it. Only the
-        // Recycle Bin has anything here so far.
+        // What the item can *do* comes first, above what can be done *to* it: starting a
+        // program as administrator, and emptying the Recycle Bin.
         //
-        // It survives the contents lock, and has to: that lock is about what is on the dock,
-        // and emptying the bin changes nothing about that. A locked dock still launches what
-        // you click, and this is the same kind of act — using an item rather than editing
+        // These survive the contents lock, and have to: that lock is about what is on the
+        // dock, and neither changes anything about that. A locked dock still launches what
+        // you click, and these are the same kind of act — using an item rather than editing
         // the dock.
+        //
+        // Run as administrator is offered on an item set to run that way already, too, and
+        // greyed while the program is open: asked for, so the entry starts a program only when
+        // there is none, rather than a second copy beside the one a click would bring forward.
+        // Greyed rather than absent, as the bin's entry is, since being open is a passing fact.
+        if (item is { IsLaunchable: true, CanRunAsAdministrator: true })
+        {
+            var header = Localizer.Get("Menu.RunAsAdministrator");
+            menu.Items.Add(item.IsRunning
+                ? MenuHost.Note(header, MenuGlyph.Administrator)
+                : MenuHost.Item(header, MenuGlyph.Administrator, () => OpenAsAdministrator(item)));
+            menu.Items.Add(new Separator());
+        }
+
         if (item is not null && DockPresets.IsRecycleBin(item.TargetPath))
         {
             menu.Items.Add(EmptyRecycleBinEntry());
@@ -1494,6 +1509,7 @@ public sealed partial class DockWindow : Window
         pin.FolderSymbol = editor.EditedFolderSymbol;
         pin.FolderText = editor.EditedFolderText;
         pin.FolderSymbolTone = editor.EditedFolderSymbolTone;
+        pin.RunAsAdministrator = editor.EditedRunAsAdministrator;
         pin.TargetPath = editor.EditedTargetPath;
         pin.Aumid = editor.EditedAumid;
 
@@ -2881,6 +2897,18 @@ public sealed partial class DockWindow : Window
     }
 
     /// <summary>
+    /// Starts an item's program as administrator, from its menu, which offers it only while the
+    /// program is not open. Flashes as <see cref="Open"/> does, and not when Windows was told no.
+    /// </summary>
+    private void OpenAsAdministrator(DockItem item)
+    {
+        if (AppLauncher.Launch(item, asAdministrator: true))
+        {
+            _dock.FlashItem(item);
+        }
+    }
+
+    /// <summary>
     /// Brings forward a window of a pinned target's — a folder's on the tab showing it, which may
     /// be behind another (<see cref="ExplorerWindows.Activate"/>).
     /// </summary>
@@ -2924,9 +2952,11 @@ public sealed partial class DockWindow : Window
         foreach (var item in _items)
         {
             var running = _runningApps.IsRunning(item.RunningTarget);
-            if (item.IsRunning != running)
+            var elevated = running && _runningApps.IsElevated(item.RunningTarget);
+            if (item.IsRunning != running || item.IsElevated != elevated)
             {
                 item.IsRunning = running;
+                item.IsElevated = elevated;
                 changed = true;
             }
         }

@@ -64,6 +64,9 @@ public sealed class PinnedAppsService
     /// <summary>Whether Windows counts an extension as a picture — a registry read, so asked once.</summary>
     private static readonly Dictionary<string, bool> PictureTypes = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Whether Windows can run an extension as administrator — a registry read, so asked once.</summary>
+    private static readonly Dictionary<string, bool> RunAsTypes = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Fills an empty pin list with what a new dock starts with — see
     /// <see cref="DockPresets.CreateDefaults"/> — so a fresh install is never an empty bar.
@@ -280,10 +283,61 @@ public sealed class PinnedAppsService
             FolderSymbol = app.FolderSymbol,
             FolderText = app.FolderText,
             FolderSymbolTone = app.FolderSymbolTone,
+            RunAsAdministrator = app.RunAsAdministrator,
+            CanRunAsAdministrator = !app.IsSeparator
+                && app.Aumid is not { Length: > 0 }
+                && CanRunAsAdministrator(app.TargetPath, linkTarget),
             LinkTarget = linkTarget,
             ExplorerFolder = ExplorerFolder(app.TargetPath, linkTarget),
+            LaunchedProgram = LaunchedProgram(app.TargetPath, linkTarget),
             IsSeparator = app.IsSeparator
         };
+    }
+
+    /// <summary>
+    /// The program a launcher starts, when the pin's program is a launcher named after it:
+    /// <c>Battle.net Launcher.exe</c> beside <c>Battle.net.exe</c>. Null for anything else.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Such a launcher opens no window of its own — it starts the program and exits — so the
+    /// census, which matches by path and then by file name, never found the program under the
+    /// pin, and the dot stayed dark however long it ran. Found 2026-10-03 on the Battle.net pin
+    /// the games scan had made from Blizzard's own Start menu shortcut, which points at the
+    /// launcher and carries no app ID to tie the two together.
+    /// </para>
+    /// <para>
+    /// Narrow on purpose: the name without <c>Launcher</c>, in the same folder, and only if that
+    /// file is there. Lighting a pin by any program beside it would light the wrong pin wherever
+    /// several share a folder. Read as the pin is read, so the file is looked for once.
+    /// </para>
+    /// </remarks>
+    /// <param name="target">The pin's target.</param>
+    /// <param name="linkTarget">Where it points, when it is a shortcut: see <see cref="ResolveLinkTarget"/>.</param>
+    public static string? LaunchedProgram(string? target, string? linkTarget)
+    {
+        if ((linkTarget ?? target) is not { Length: > 0 } program
+            || !Path.GetExtension(program).Equals(".exe", StringComparison.OrdinalIgnoreCase)
+            || !Path.IsPathFullyQualified(program))
+        {
+            return null;
+        }
+
+        const string suffix = "Launcher";
+        var name = Path.GetFileNameWithoutExtension(program);
+        if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var stem = name[..^suffix.Length].TrimEnd(' ', '-', '_', '.');
+        if (stem.Length == 0 || Path.GetDirectoryName(program) is not { Length: > 0 } folder)
+        {
+            return null;
+        }
+
+        var launched = Path.Combine(folder, stem + ".exe");
+        return File.Exists(launched) ? launched : null;
     }
 
     /// <summary>
@@ -481,6 +535,47 @@ public sealed class PinnedAppsService
         }
 
         return picture;
+    }
+
+    /// <summary>
+    /// Whether a target is a program Windows can start as administrator — one whose type has
+    /// the shell's <c>runas</c> verb (<see cref="ShellVerbs.HasRunAs"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A shortcut counts by what it points at, and is still what is started, so it keeps its
+    /// arguments; one the shell cannot resolve has nothing to say it is a program. A bare name
+    /// the shell finds on the <c>PATH</c> — <c>notepad.exe</c> — counts; a web address does
+    /// not, whatever it ends in.
+    /// </para>
+    /// <para>
+    /// Not a Store app, which has no path: whether <c>runas</c> on
+    /// <c>shell:AppsFolder\&lt;AUMID&gt;</c> does what Start's entry does for the few that offer
+    /// it was not tried, and most Store apps cannot be elevated at all.
+    /// </para>
+    /// </remarks>
+    /// <param name="target">The pin's target.</param>
+    /// <param name="linkTarget">What it points at, for a shortcut; see <see cref="ResolveLinkTarget"/>.</param>
+    public static bool CanRunAsAdministrator(string? target, string? linkTarget)
+    {
+        var program = Path.GetExtension(target ?? string.Empty).Equals(".lnk", StringComparison.OrdinalIgnoreCase)
+            ? linkTarget
+            : target;
+
+        if (program is not { Length: > 0 } path
+            || (Uri.TryCreate(path, UriKind.Absolute, out var address) && !address.IsFile))
+        {
+            return false;
+        }
+
+        var extension = Path.GetExtension(path);
+        if (!RunAsTypes.TryGetValue(extension, out var elevates))
+        {
+            elevates = ShellVerbs.HasRunAs(extension);
+            RunAsTypes[extension] = elevates;
+        }
+
+        return elevates;
     }
 
     /// <summary>

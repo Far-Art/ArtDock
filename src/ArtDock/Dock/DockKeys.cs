@@ -71,7 +71,7 @@ public static class DockKeys
     /// window has none; they were refused here until the hotkeys were Win+Ctrl+Alt for a few hours
     /// on 2026-10-02. Not the Windows key, whose combinations are Windows' own. Opening, with Enter
     /// or Space, takes nothing held: Ctrl+Shift+Enter is what Windows starts a program as
-    /// administrator with, which the dock does not do — and a launch, unlike a move, is not
+    /// administrator with, which the dock leaves to the item's menu — and a launch, unlike a move, is not
     /// something to do by mistake.
     /// </para>
     /// <para>

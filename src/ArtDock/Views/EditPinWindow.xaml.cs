@@ -92,6 +92,7 @@ public sealed partial class EditPinWindow : Window
         NameBox.Text = item.Label;
         TargetBox.Text = item.TargetPath ?? item.Aumid ?? string.Empty;
         UseIconBox.IsChecked = item.UseIconNotThumbnail;
+        RunAsAdminBox.IsChecked = item.RunAsAdministrator;
 
         // A folder that was never drawn starts from the design's own colour, so customizing it
         // shows the folder as it was meant to look rather than a colour nobody chose.
@@ -192,6 +193,19 @@ public sealed partial class EditPinWindow : Window
     /// </remarks>
     public bool EditedUseIconNotThumbnail =>
         UseIconBox.IsChecked == true && !IsStoreTarget && PinnedAppsService.OpensPicture(EditedTargetPath);
+
+    /// <summary>Whether the item's program is started as administrator.</summary>
+    /// <remarks>
+    /// Kept only for a program that can be, and read against the target as it stands, as the
+    /// thumbnail choice is.
+    /// </remarks>
+    public bool EditedRunAsAdministrator => RunAsAdminBox.IsChecked == true && TargetElevates;
+
+    /// <summary>Whether what the item opens, as it stands, is a program Windows can run as administrator.</summary>
+    private bool TargetElevates =>
+        !IsStoreTarget
+        && PinnedAppsService.CanRunAsAdministrator(
+            EditedTargetPath, PinnedAppsService.ResolveLinkTarget(EditedTargetPath));
 
     /// <summary>The colour of the folder the dock is to draw, or null for the shell's icon.</summary>
     /// <remarks>
@@ -627,6 +641,10 @@ public sealed partial class EditPinWindow : Window
             ? Visibility.Visible
             : Visibility.Collapsed;
         UseIconBox.IsEnabled = _iconPath is not { Length: > 0 };
+
+        // Offered for a program only. Here with the icon because it follows the target the same
+        // way, and is asked as rarely: a shortcut is read to see what it points at.
+        RunAsAdminBox.Visibility = TargetElevates ? Visibility.Visible : Visibility.Collapsed;
 
         // Says where the picture comes from, which with a set in use is not always the app:
         // the set is asked the same question the dock will ask it.

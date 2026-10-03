@@ -276,6 +276,13 @@
                             Margin="80,8,0,0"
                             Style="{StaticResource Hint}"
                             Text="{DynamicResource EditItem.Opens.Hint}" />
+
+                        <!-- Only for a program Windows can run as administrator. -->
+                        <CheckBox
+                            x:Name="RunAsAdminBox"
+                            Margin="80,12,0,0"
+                            Content="{DynamicResource EditItem.RunAsAdministrator}"
+                            Visibility="Collapsed" />
                     </StackPanel>
                 </Border>
 

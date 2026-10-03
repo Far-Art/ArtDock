@@ -210,6 +210,12 @@ internal static class WindowsApi
     [DllImport("kernel32.dll")]
     private static extern nint GetCurrentProcess();
 
+    private const int ErrorAccessDenied = 5;
+
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ProcessIdToSessionId(uint processId, out uint sessionId);
+
     [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool OpenProcessToken(nint process, int access, out nint token);
@@ -254,9 +260,56 @@ internal static class WindowsApi
         return ours is { } own && theirs is { } other && other <= own;
     }
 
-    /// <summary>A process's integrity level (0x2000 medium, 0x3000 high); 0 for this one; null when unreadable.</summary>
-    private static int? IntegrityLevel(uint processId)
+    /// <summary>
+    /// Whether a window's program runs at a higher integrity level than the dock — started as
+    /// administrator, for the unelevated dock.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read from the program's token where Windows lets the dock read it, as
+    /// <see cref="CanClose"/> does; Task Manager's can be. An ordinary elevated program's cannot:
+    /// measured 2026-10-03 on Rider started as administrator, the process opens for limited
+    /// information — its path reads — but its token is refused (error 5), and so is the label on
+    /// the process itself. The refusal is the answer, then. A program of the dock's own user at
+    /// the dock's level always lets its token be read, so a token refused by a process that
+    /// opened, in the dock's own session, is one above the dock. Other sessions are left out:
+    /// a service refuses as well, and is not elevated by anyone at the desktop.
+    /// </para>
+    /// <para>
+    /// Anything else unreadable is not elevated, so a doubt is not shown as one. A program
+    /// started as another user would be, refusing its token the same way; it is not this user's
+    /// either.
+    /// </para>
+    /// </remarks>
+    internal static bool IsElevated(nint hwnd)
     {
+        GetWindowThreadProcessId(hwnd, out var processId);
+        if (processId == 0 || IntegrityLevel(0, out _) is not { } ours)
+        {
+            return false;
+        }
+
+        return IntegrityLevel(processId, out var refused) is { } theirs
+            ? theirs > ours
+            : refused && InOurSession(processId);
+    }
+
+    /// <summary>Whether a process runs in the dock's own session — at this desktop.</summary>
+    private static bool InOurSession(uint processId) =>
+        ProcessIdToSessionId(processId, out var theirs)
+        && ProcessIdToSessionId((uint)Environment.ProcessId, out var ours)
+        && theirs == ours;
+
+    /// <summary>A process's integrity level (0x2000 medium, 0x3000 high); 0 for this one; null when unreadable.</summary>
+    private static int? IntegrityLevel(uint processId) => IntegrityLevel(processId, out _);
+
+    /// <summary>
+    /// A process's integrity level, as <see cref="IntegrityLevel(uint)"/>; and, when it is
+    /// null, whether that was because the process opened and its token was refused.
+    /// </summary>
+    private static int? IntegrityLevel(uint processId, out bool tokenRefused)
+    {
+        tokenRefused = false;
         var process = processId == 0 ? GetCurrentProcess() : OpenProcess(ProcessQueryLimitedInformation, false, processId);
         if (process == 0)
         {
@@ -267,6 +320,7 @@ internal static class WindowsApi
         {
             if (!OpenProcessToken(process, TokenQuery, out var token))
             {
+                tokenRefused = Marshal.GetLastWin32Error() == ErrorAccessDenied;
                 return null;
             }
 
