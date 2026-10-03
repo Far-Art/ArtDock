@@ -547,7 +547,7 @@ public sealed partial class ScanWindow : Window
                 app,
                 underHeading: _kind == ScanKind.Games,
                 _icons.GetValueOrDefault(app.Programs[0].Path),
-                isOpen: app.Programs.Any(program => open.Contains(program.FileName)),
+                isOpen: ProgramScan.IsOpen(app, open),
                 listed: ListedIn(app),
                 onDock: _purpose == ScanPurpose.Pin);
 

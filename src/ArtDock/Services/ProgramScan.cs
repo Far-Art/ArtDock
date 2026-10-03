@@ -356,6 +356,24 @@ public static class ProgramScan
     }
 
     /// <summary>
+    /// True when one of a row's programs has a window open, by file name — or the program one
+    /// of them launches does (<see cref="PinnedAppsService.LaunchedProgram"/>).
+    /// </summary>
+    /// <remarks>
+    /// The launcher is the dock's dot over again: Battle.net's Start menu shortcut points at
+    /// <c>Battle.net Launcher.exe</c>, which starts <c>Battle.net.exe</c> and exits, so
+    /// <em>Search apps…</em> showed Battle.net as closed however long it had been open. Found
+    /// 2026-10-03, the same day as the dot.
+    /// </remarks>
+    /// <param name="app">The row.</param>
+    /// <param name="open">The file names of the programs with a window open.</param>
+    public static bool IsOpen(ScannedApp app, IReadOnlySet<string> open) =>
+        app.Programs.Any(program =>
+            open.Contains(program.FileName)
+            || PinnedAppsService.LaunchedProgram(program.Path, null) is { } launched
+                && open.Contains(FullscreenApps.KeyOf(launched)));
+
+    /// <summary>
     /// The one program of a row that a pin should open, when the row is put on the dock.
     /// </summary>
     /// <remarks>

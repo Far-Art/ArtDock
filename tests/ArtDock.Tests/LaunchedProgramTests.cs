@@ -77,4 +77,20 @@ public class LaunchedProgramTests : IDisposable
         Assert.Equal(program, item.RunningTarget);
         Assert.Equal(launcher, item.ShellTarget);
     }
+
+    [Fact]
+    public void AScannedLauncher_IsOpenWhileItsProgramIs()
+    {
+        var launcher = Make("Battle.net Launcher.exe");
+        Make("Battle.net.exe");
+        var row = new ScannedApp(
+            "Battle.net",
+            "Battle.net",
+            [new ScannedProgram(launcher, "Battle.net Launcher.exe", 1, new ProgramFacts("Battle.net", true, true, 0))],
+            IsHelper: false);
+
+        Assert.True(ProgramScan.IsOpen(row, new HashSet<string>(["battle.net.exe"], StringComparer.OrdinalIgnoreCase)));
+        Assert.True(ProgramScan.IsOpen(row, new HashSet<string>(["Battle.net Launcher.exe"], StringComparer.OrdinalIgnoreCase)));
+        Assert.False(ProgramScan.IsOpen(row, new HashSet<string>(["Other.exe"], StringComparer.OrdinalIgnoreCase)));
+    }
 }
