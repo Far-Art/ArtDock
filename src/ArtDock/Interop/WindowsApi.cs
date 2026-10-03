@@ -147,7 +147,11 @@ internal static class WindowsApi
 
     internal const uint EVENT_OBJECT_CREATE = 0x8000;
     internal const uint EVENT_OBJECT_DESTROY = 0x8001;
+    internal const uint EVENT_OBJECT_NAMECHANGE = 0x800C;
     internal const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+
+    /// <summary>CHILDID_SELF: an event about the window itself, not one of its parts.</summary>
+    internal const int CHILDID_SELF = 0;
 
     internal const uint WINEVENT_OUTOFCONTEXT = 0x0000;
     internal const uint WINEVENT_SKIPOWNPROCESS = 0x0002;

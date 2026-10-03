@@ -92,7 +92,14 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   cycles. On by default, on the Behaviour page, with the delay beside it.
 - **Shows a dot** under every app that has an open window, kept current by window events
   rather than polling. A pinned shortcut is matched by what it points at, so one dragged
-  out of the Start menu lights up like anything else.
+  out of the Start menu lights up like anything else. **A folder has the dot while it is
+  open**: a folder, a drive, This PC or the Recycle Bin, while a File Explorer window shows
+  it in any of its tabs — the folder itself, not one inside it — and its previews are those
+  windows. A window that goes to another folder takes the dot with it. A click goes to such a
+  window, bringing the folder's tab to the front if another is in front of it, on to the next
+  window if there are several, and opens the folder when none shows it; a preview's card brings
+  its window forward on that tab too. The Add menu's *File Explorer* is lit by every folder
+  window, as the taskbar's is.
 - **Floats above other windows**, or not — a dock that can be covered like any other window
   is one setting away. Either way it is **never over a window that fills its display** — a
   game, a video, a presentation, borderless or not, or any window maximized there with the
@@ -606,7 +613,8 @@ src/ArtDock/
   Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
                WindowsApi, ShellIcons, ShellLink, AppLauncher, Autostart, MonitorDpi,
                TaskbarColour, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
-               ShellIdList (what Explorer drags besides paths)
+               ShellIdList (what Explorer drags besides paths), ExplorerWindows (which
+               folder each File Explorer window shows, for the folders' dots)
   Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,
                FolderArt (the folders the dock draws, from Assets/folder.svg),
                IconShadow (the shadow an icon casts onto the bar), SvgBlur (the blur
@@ -629,7 +637,8 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
                        install folder, the shell's images' transparency, the
-                       folders the dock draws, the icons' shadow
+                       folders the dock draws, the icons' shadow, which windows
+                       light a folder
 LICENSE                MIT with the Commons Clause: free to use and change, not to sell
 docs/step-2-transparency.md
 docs/packs.md          the language-pack and icon-set formats
@@ -910,7 +919,14 @@ same shell call — the shell has one for every registered type, and a generic s
 rest — and occupies the same slot. The single difference is the running dot, and that is
 ruled out where it is decided rather than by refusing the pin: `DockItem.RunningTarget` is
 null for anything that is not an executable, because what opens a document is its editor,
-whose window belongs to whatever pin starts *that*. Documents were turned away once, on the
+whose window belongs to whatever pin starts *that*. A folder is the one other thing with a
+dot, and it is not matched to what opens it: every folder window is `explorer.exe`'s,
+whichever folder it shows, so a folder is matched to the folders Explorer's windows show in
+their tabs. The dock asks Explorer for those on a thread of its own, since one of Explorer's
+windows hanging must not hang the dock, whenever a window comes, goes or changes its title —
+which is all a window going to another folder or tab changes. A tab behind another is brought
+to the front by UI Automation, the way Windows lets another program choose one. Documents were
+turned away once, on the
 reasoning that a dock of documents is not what anyone means by pinning — a judgement made on
 the user's behalf and enforced by doing nothing at all when they dropped one.
 
@@ -1153,6 +1169,14 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   are the pictures' corners rounded: DWM draws a thumbnail over everything in its rectangle.
 - **No previews for a Store app pinned by its app id**, which has no running dot either, and
   none of windows on another virtual desktop, which Windows hides from the census.
+- **A tab is chosen by its name.** Windows lets another program bring a File Explorer tab to
+  the front only by its header, so of two tabs behind another with the same name — two folders
+  called *Docs* — a click may bring the other one forward.
+- **A window that goes to another folder of the same name may keep the first one's dot** until
+  something else changes on the desktop. The dock hears a window change folders by its title
+  changing, and two folders called *Docs* give it the same title.
+- **The Add menu's Control Panel is never marked as open.** `control.exe` hands Control Panel to
+  File Explorer and exits, so nothing runs under it for long enough to be seen.
 - **The bottom edge only.** The Position page has no choice of edge: the dock's geometry is
   written across the screen rather than down it, so a side dock is a change to the whole
   layout rather than a setting. Left and right used to be offered greyed out and were taken
@@ -1216,7 +1240,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Eight hundred and seventy-one tests cover the cosine falloff (peak, range boundary,
+Eight hundred and eighty-two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1240,7 +1264,12 @@ those sliders flickering — that an arriving drop preview grows in *under* the 
 than instead of it, and that two spellings of the same path are one pin, which is what stops
 a second copy of an app being dropped onto the dock. The last group covers what may be
 pinned at all — a document and a folder by their own names, nothing where there is no file,
-and a pin that is not an executable never claiming to be running. Thirteen more hold the item
+and a pin that is not an executable never claiming to be running unless it is a folder,
+which is lit by the File Explorer windows showing it — This PC included, and not a zip, a
+folder to the shell that is a file as well — by the one name the shell gives a folder however
+it is written. Four more cover those windows: each folder's in the census's order, a window
+with tabs under every folder they show, once, only the census's windows, and Explorer asked
+about them without failing. Thirteen more hold the item
 editor's *Reset* to the names pins are made with: a document, a folder, a program and a target
 that is not there as pinning names them, the Add menu's places, *Start* and *Settings* as the
 menu names them, a web address by its site, and no name at all for an address that has none of its own.

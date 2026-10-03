@@ -322,9 +322,21 @@ internal sealed class WindowPreviews(
 
     private void OnChosen(object? sender, nint window)
     {
+        // A folder's window comes forward on the folder's tab, which may be behind another: the
+        // card was chosen under that folder. Asked before closing, which lets go of the item.
+        var tab = running.TabShowing(window, _item?.RunningTarget);
+
         // Closed first: the window coming forward is the answer, and the panel over it is not.
         Dismiss();
-        AppLauncher.Activate(window);
+
+        if (tab is { } shown)
+        {
+            ExplorerWindows.Activate(shown, System.Windows.Threading.Dispatcher.CurrentDispatcher);
+        }
+        else
+        {
+            AppLauncher.Activate(window);
+        }
     }
 
     private void OnCloseRequested(object? sender, nint window)

@@ -64,6 +64,15 @@ public sealed class DockItem
     public string? LinkTarget { get; set; }
 
     /// <summary>
+    /// The folder this pin opens in File Explorer — a folder or a drive, This PC, the Recycle
+    /// Bin, a shortcut to a folder — by the shell's own name for it, or null for a pin that
+    /// opens no folder. Asked of the shell as the pin is read
+    /// (<c>PinnedAppsService.ExplorerFolder</c>), since answering it is a call to the shell and
+    /// <see cref="RunningTarget"/> is asked on every look at the pointer.
+    /// </summary>
+    public string? ExplorerFolder { get; init; }
+
+    /// <summary>
     /// A spacer rather than an application: draws a divider and launches nothing.
     /// </summary>
     /// <remarks>
@@ -86,8 +95,9 @@ public sealed class DockItem
         Aumid is { Length: > 0 } aumid ? $@"shell:AppsFolder\{aumid}" : TargetPath ?? string.Empty;
 
     /// <summary>
-    /// The image path a process must be running under for this item to count as open, or
-    /// null for a pin that cannot be running at all.
+    /// The image path a process must be running under for this item to count as open — for a
+    /// folder, the folder a File Explorer window must be showing — or null for a pin that
+    /// cannot be running at all.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -97,18 +107,30 @@ public sealed class DockItem
     /// and clicking a running app pinned that way started a second copy.
     /// </para>
     /// <para>
-    /// Only an executable gets one. A document, a folder or a web address has no process of
-    /// its own: what opens a document is its editor, whose window belongs to whatever pin
+    /// Only an executable gets one, and a folder. A document or a web address has no process
+    /// of its own: what opens a document is its editor, whose window belongs to whatever pin
     /// launches *that*. Asking the question at all would answer it eventually — the running
     /// census falls back to matching on file name — so the dot is ruled out here rather than
     /// left to the unlikeliness of a collision.
     /// </para>
+    /// <para>
+    /// A folder — anything File Explorer opens, This PC and the Recycle Bin included — is
+    /// matched not to the program that opens it but to the folder File Explorer's windows show,
+    /// by the shell's own name for it (<see cref="ExplorerFolder"/>): every folder window is
+    /// <c>explorer.exe</c>'s, whichever folder it shows, so a folder matched by its process
+    /// would be lit by all of them, and every folder pin with it. The census asks Explorer which
+    /// folders each window's tabs show — a tab behind another as much as the one in front, and a
+    /// click brings that tab forward. So <c>shell:Downloads</c> and
+    /// <c>C:\Users\name\Downloads</c> are lit by the same windows, and a window that goes to
+    /// another folder takes its dot with it.
+    /// </para>
     /// </remarks>
     public string? RunningTarget =>
-        (LinkTarget ?? TargetPath) is { Length: > 0 } target
-        && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-            ? target
-            : null;
+        ExplorerFolder
+        ?? ((LinkTarget ?? TargetPath) is { Length: > 0 } target
+            && target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                ? target
+                : null);
 
     /// <summary>True when clicking this item should do something.</summary>
     public bool IsLaunchable => !IsSeparator && !IsDisabled && ShellTarget.Length > 0;

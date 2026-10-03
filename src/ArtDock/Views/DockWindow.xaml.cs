@@ -2822,11 +2822,16 @@ public sealed partial class DockWindow : Window
     /// Click behaviour: raise the app if it already has a window, otherwise start it.
     /// Clicking an app that is already in front moves to its next window.
     /// </summary>
+    /// <remarks>
+    /// A folder's windows are the File Explorer windows showing it, in any of their tabs (see
+    /// <see cref="DockItem.RunningTarget"/>), so a click on a folder goes to one of those, on the
+    /// folder's tab, and opens the folder when none shows it.
+    /// </remarks>
     /// <returns>True when a window was raised or something was started.</returns>
     private bool Open(DockItem item)
     {
         var window = _runningApps.NextWindow(item.RunningTarget);
-        if (window != 0 && AppLauncher.Activate(window))
+        if (window != 0 && Raise(window, item.RunningTarget))
         {
             return true;
         }
@@ -2841,6 +2846,15 @@ public sealed partial class DockWindow : Window
 
         return false;
     }
+
+    /// <summary>
+    /// Brings forward a window of a pinned target's — a folder's on the tab showing it, which may
+    /// be behind another (<see cref="ExplorerWindows.Activate"/>).
+    /// </summary>
+    private bool Raise(nint window, string? target) =>
+        _runningApps.TabShowing(window, target) is { } tab
+            ? ExplorerWindows.Activate(tab, Dispatcher)
+            : AppLauncher.Activate(window);
 
     /// <summary>Persists a drag that moved an icon to a new position.</summary>
     private void OnItemReordered(object? sender, (int From, int To) move)

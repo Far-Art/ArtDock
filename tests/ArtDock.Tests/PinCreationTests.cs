@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Compression;
 using ArtDock.Dock;
 using ArtDock.Interop;
 using ArtDock.Services;
@@ -172,17 +173,78 @@ public class PinCreationTests : IDisposable
     }
 
     [Fact]
-    public void AShortcutToAFolder_ShowsNoDotEither()
+    public void AShortcutToAFolder_IsLitByItsFolder()
     {
-        var item = new DockItem
-        {
-            Id = "folder",
-            Label = "Work",
-            TargetPath = @"C:\Users\someone\Start Menu\Work.lnk",
-            LinkTarget = @"C:\Work"
-        };
+        // A shortcut opens what it points at, which here is a folder.
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "Work")).FullName;
+        const string shortcut = @"C:\Users\someone\Start Menu\Work.lnk";
 
-        Assert.Null(item.RunningTarget);
+        Assert.Equal(folder, PinnedAppsService.ExplorerFolder(shortcut, folder), ignoreCase: true);
+
+        // One the shell cannot resolve opens nothing that can be named.
+        Assert.Null(PinnedAppsService.ExplorerFolder(shortcut, null));
+    }
+
+    [Fact]
+    public void ThisPC_IsLitByAWindowOnThisPC()
+    {
+        // Not by every folder window, as the Add menu's File Explorer is: This PC is a folder
+        // like the rest, lit while a window shows it.
+        var thisPc = PinnedAppsService.ToDockItem(DockPresets.Create("thispc")!);
+        var explorer = PinnedAppsService.ToDockItem(DockPresets.Create("explorer")!);
+
+        Assert.Equal("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}", thisPc.RunningTarget, ignoreCase: true);
+        Assert.Equal("explorer.exe", Path.GetFileName(explorer.RunningTarget), ignoreCase: true);
+    }
+
+    [Theory]
+    [InlineData("userfolder")]
+    [InlineData("downloads")]
+    [InlineData("recyclebin")]
+    public void EveryPlace_IsLitByItsOwnFolder(string key)
+    {
+        // By the shell's own name for it, which is what a window's folder comes back as.
+        var pin = DockPresets.Create(key)!;
+        var item = PinnedAppsService.ToDockItem(pin);
+
+        Assert.NotNull(item.RunningTarget);
+        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget);
+        Assert.False(item.RunningTarget.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void AFolderOrADrive_IsLitByItself()
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "Projects")).FullName;
+        var item = PinnedAppsService.ToDockItem(PinnedAppsService.CreatePin(folder)!);
+        var drive = Path.GetPathRoot(folder)!;
+
+        Assert.Equal(folder, item.RunningTarget, ignoreCase: true);
+        Assert.Equal(drive, PinnedAppsService.ExplorerFolder(drive, null), ignoreCase: true);
+    }
+
+    [Fact]
+    public void AFolder_HasOneName_HoweverItIsWritten()
+    {
+        // The pin may say shell:Profile and the window's folder come back as the path, or the
+        // other way round; both go through the shell to the one name they are compared by.
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var name = PinnedAppsService.ExplorerFolder(profile, null);
+
+        Assert.NotNull(name);
+        Assert.Equal(name, PinnedAppsService.ExplorerFolder("shell:Profile", null), ignoreCase: true);
+        Assert.Equal(name, PinnedAppsService.ExplorerFolder(profile + Path.DirectorySeparatorChar, null), ignoreCase: true);
+    }
+
+    [Fact]
+    public void AZip_IsAFileToOpen_NotAFolder()
+    {
+        // A folder to the shell, and a file as well, which opens in whatever owns zips.
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "Packed")).FullName;
+        var zip = Path.Combine(_root, "Packed.zip");
+        ZipFile.CreateFromDirectory(folder, zip);
+
+        Assert.Null(PinnedAppsService.ExplorerFolder(zip, null));
     }
 
     [Theory]

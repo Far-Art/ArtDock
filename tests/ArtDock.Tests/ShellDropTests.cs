@@ -128,7 +128,10 @@ public class ShellDropTests : IDisposable
 
         var item = PinnedAppsService.ToDockItem(pin);
         Assert.True(item.IsLaunchable);
-        Assert.Null(item.RunningTarget);
+
+        // A folder to the shell, lit while a File Explorer window shows it.
+        Assert.NotNull(item.RunningTarget);
+        Assert.Equal(ShellNames.FolderName(pin.TargetPath), item.RunningTarget);
     }
 
     [Theory]

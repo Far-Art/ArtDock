@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Media;
@@ -38,6 +39,16 @@ public sealed class PinnedAppsService
     /// shortcut the shell cannot resolve must not be re-asked on every tick of a slider.
     /// </remarks>
     private static readonly Dictionary<string, string?> LinkTargetCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The folder each target opens in File Explorer, if any, keyed by the target.
+    /// </summary>
+    /// <remarks>
+    /// Cached as <see cref="LinkTargetCache"/> is, since the answer is the shell's — and
+    /// written for nearly every pin, where that one is written only for shortcuts, so it is
+    /// made safe for the tests, which make items on several threads at once.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<string, string?> ExplorerFolderCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Pictures' thumbnails, keyed by the file's path, with when the file was written.
@@ -217,21 +228,52 @@ public sealed class PinnedAppsService
     }
 
     /// <summary>Projects a stored pin onto the model the dock draws from.</summary>
-    public static DockItem ToDockItem(PinnedAppSetting app) => new()
+    public static DockItem ToDockItem(PinnedAppSetting app)
     {
-        Id = app.Id,
-        Label = app.Label,
-        TargetPath = app.TargetPath,
-        Aumid = app.Aumid,
-        IconPath = app.IconPath,
-        UseIconNotThumbnail = app.UseIconNotThumbnail,
-        FolderColor = app.FolderColor,
-        FolderSymbol = app.FolderSymbol,
-        FolderText = app.FolderText,
-        FolderSymbolTone = app.FolderSymbolTone,
-        LinkTarget = ResolveLinkTarget(app.TargetPath),
-        IsSeparator = app.IsSeparator
-    };
+        var linkTarget = ResolveLinkTarget(app.TargetPath);
+        return new DockItem
+        {
+            Id = app.Id,
+            Label = app.Label,
+            TargetPath = app.TargetPath,
+            Aumid = app.Aumid,
+            IconPath = app.IconPath,
+            UseIconNotThumbnail = app.UseIconNotThumbnail,
+            FolderColor = app.FolderColor,
+            FolderSymbol = app.FolderSymbol,
+            FolderText = app.FolderText,
+            FolderSymbolTone = app.FolderSymbolTone,
+            LinkTarget = linkTarget,
+            ExplorerFolder = ExplorerFolder(app.TargetPath, linkTarget),
+            IsSeparator = app.IsSeparator
+        };
+    }
+
+    /// <summary>
+    /// The folder a pin opens in File Explorer — a folder or a drive, This PC, the Recycle Bin,
+    /// a shortcut to a folder — by the shell's own name for it, which is what File Explorer's
+    /// windows showing it are found by: see <see cref="DockItem.RunningTarget"/>. Null for a pin
+    /// that opens no folder.
+    /// </summary>
+    /// <param name="target">The pin's target.</param>
+    /// <param name="linkTarget">Where it points, when it is a shortcut: see <see cref="ResolveLinkTarget"/>.</param>
+    /// <remarks>
+    /// A shortcut opens what it points at, so it is asked about that, and one the shell cannot
+    /// resolve opens nothing that can be named. An executable and a command are answered
+    /// without asking, being the commonest pins and never folders.
+    /// </remarks>
+    public static string? ExplorerFolder(string? target, string? linkTarget)
+    {
+        var opens = string.Equals(Path.GetExtension(target), ".lnk", StringComparison.OrdinalIgnoreCase)
+            ? linkTarget
+            : target;
+
+        return opens is { Length: > 0 } path
+            && !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            && !DockCommands.IsCommand(path)
+                ? ExplorerFolderCache.GetOrAdd(path, ShellNames.FolderName)
+                : null;
+    }
 
     /// <summary>
     /// The executable behind a pinned shortcut, or <see langword="null"/> for anything that
@@ -466,14 +508,15 @@ public sealed class PinnedAppsService
     }
 
     /// <summary>
-    /// Forgets what has been read from the shell — icons, thumbnails, and where shortcuts
-    /// point — so a changed file on disk is picked up.
+    /// Forgets what has been read from the shell — icons, thumbnails, where shortcuts point and
+    /// which targets are folders — so a changed file on disk is picked up.
     /// </summary>
     public static void ClearIconCache()
     {
         IconCache.Clear();
         ThumbnailCache.Clear();
         LinkTargetCache.Clear();
+        ExplorerFolderCache.Clear();
     }
 
     /// <summary>

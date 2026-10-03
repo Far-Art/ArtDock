@@ -18,9 +18,24 @@ namespace ArtDock.Services;
 /// <c>EVENT_OBJECT_CREATE</c>s in a few milliseconds, and each rescan enumerates every
 /// top-level window on the desktop.
 /// </para>
+/// <para>
+/// A folder is lit by the File Explorer windows showing it, in any of their tabs, not by every
+/// window of <c>explorer.exe</c>, which every folder window is — see <c>DockItem.RunningTarget</c>.
+/// Which folders each window's tabs show is Explorer's to say (<see cref="ExplorerWindows.Tabs"/>),
+/// and is asked after every rescan that finds a window of Explorer's, on a thread of its own:
+/// the question crosses into Explorer's process, and a window of Explorer's that hangs must not
+/// hang the dock with it. Going to another folder or tab makes and destroys no window, but it
+/// does change the window's title, so an Explorer window's change of name is heard as well.
+/// </para>
 /// </remarks>
 public sealed class RunningAppsService : IDisposable
 {
+    /// <summary>The class of a File Explorer window, whose change of title may be a change of folder.</summary>
+    private const string ExplorerWindowClass = "CabinetWClass";
+
+    /// <summary>The program every File Explorer window belongs to, by file name.</summary>
+    private const string ExplorerFileName = "explorer.exe";
+
     /// <summary>Open windows keyed by their process's full image path.</summary>
     private readonly Dictionary<string, List<nint>> _windowsByPath = new(StringComparer.OrdinalIgnoreCase);
 
@@ -35,6 +50,21 @@ public sealed class RunningAppsService : IDisposable
     /// redirection, which is what makes this a useful second key.
     /// </remarks>
     private readonly Dictionary<string, List<nint>> _windowsByFileName = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// File Explorer's windows by the folders their tabs show, keyed by the shell's name for the
+    /// folder (<see cref="ShellNames.FolderName"/>), in the census's order.
+    /// </summary>
+    private Dictionary<string, List<nint>> _windowsByFolder = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>What Explorer last said its windows' tabs show.</summary>
+    private IReadOnlyList<ExplorerTab> _tabs = [];
+
+    /// <summary>
+    /// Set to have Explorer's folders read again. Set while a reading is under way, it comes to
+    /// one more reading, however many times it was set.
+    /// </summary>
+    private readonly AutoResetEvent _foldersWanted = new(false);
 
     private readonly DispatcherTimer _debounce = new()
     {
@@ -52,7 +82,8 @@ public sealed class RunningAppsService : IDisposable
 
     private long _nextSeen;
 
-    private bool _disposed;
+    /// <summary>Volatile, being read on the thread that reads Explorer's folders as well.</summary>
+    private volatile bool _disposed;
 
     public RunningAppsService()
     {
@@ -70,31 +101,54 @@ public sealed class RunningAppsService : IDisposable
     /// <summary>Begins watching, and takes a first census of what is already open.</summary>
     public void Start()
     {
+        var dock = Dispatcher.CurrentDispatcher;
+        var reader = new Thread(() => ReadFolders(dock))
+        {
+            IsBackground = true,
+            Name = "ArtDock folders"
+        };
+
+        // The shell's own apartment, as the dock's thread is.
+        reader.SetApartmentState(ApartmentState.STA);
+        reader.Start();
+
         Hook(WindowsApi.EVENT_SYSTEM_FOREGROUND, WindowsApi.EVENT_SYSTEM_FOREGROUND);
         Hook(WindowsApi.EVENT_OBJECT_CREATE, WindowsApi.EVENT_OBJECT_DESTROY);
+        Hook(WindowsApi.EVENT_OBJECT_NAMECHANGE, WindowsApi.EVENT_OBJECT_NAMECHANGE);
         Rescan();
     }
 
-    /// <summary>True when <paramref name="executablePath"/> has at least one open window.</summary>
-    public bool IsRunning(string? executablePath) => FindWindows(executablePath).Count > 0;
+    /// <summary>
+    /// True when <paramref name="target"/> — an executable's path, or a folder's name, as
+    /// <c>DockItem.RunningTarget</c> gives them — has at least one open window.
+    /// </summary>
+    public bool IsRunning(string? target) => FindWindows(target).Count > 0;
 
     /// <summary>
     /// The open windows of a pinned target, in the order they were first seen — the order the
     /// window previews show them in, which does not change as the user moves between them.
     /// </summary>
     /// <remarks>A copy: the census replaces its lists, but a caller may hold this one.</remarks>
-    public IReadOnlyList<nint> WindowsOf(string? executablePath) =>
-        WindowOrder.Arrange(FindWindows(executablePath), _firstSeen);
+    public IReadOnlyList<nint> WindowsOf(string? target) =>
+        WindowOrder.Arrange(FindWindows(target), _firstSeen);
 
     /// <summary>
     /// Open windows for a pinned target: an exact image-path match if there is one, otherwise
-    /// a match on executable file name to cover Windows' launcher stubs.
+    /// a match on executable file name to cover Windows' launcher stubs — or, for a folder,
+    /// the File Explorer windows showing it.
     /// </summary>
-    private IReadOnlyList<nint> FindWindows(string? executablePath)
+    private IReadOnlyList<nint> FindWindows(string? target)
     {
-        if (executablePath is not { Length: > 0 } path)
+        if (target is not { Length: > 0 } path)
         {
             return [];
+        }
+
+        // Anything but an executable is a folder, by the shell's name for it: nothing else is
+        // given a running target.
+        if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return _windowsByFolder.TryGetValue(path, out var showing) ? showing : [];
         }
 
         if (_windowsByPath.TryGetValue(path, out var exact))
@@ -110,15 +164,15 @@ public sealed class RunningAppsService : IDisposable
     /// The window to raise for this app. Repeat calls cycle through its windows, so clicking
     /// a multi-window app in the dock walks them rather than re-raising the same one.
     /// </summary>
-    public nint NextWindow(string? executablePath)
+    public nint NextWindow(string? target)
     {
-        var windows = FindWindows(executablePath);
+        var windows = FindWindows(target);
         if (windows.Count == 0)
         {
             return 0;
         }
 
-        var path = executablePath!;
+        var path = target!;
         _cycleIndex.TryGetValue(path, out var index);
 
         // A second click on an app that is already in front moves to its next window.
@@ -175,6 +229,14 @@ public sealed class RunningAppsService : IDisposable
             return;
         }
 
+        // Titles change all the time, everywhere. Only a File Explorer window's says that it
+        // may have gone to another folder, or another tab.
+        if (eventType == WindowsApi.EVENT_OBJECT_NAMECHANGE
+            && (idChild != WindowsApi.CHILDID_SELF || WindowsApi.GetWindowClass(hwnd) != ExplorerWindowClass))
+        {
+            return;
+        }
+
         _debounce.Stop();
         _debounce.Start();
     }
@@ -227,30 +289,175 @@ public sealed class RunningAppsService : IDisposable
         var fresh = Census();
         _nextSeen = WindowOrder.Note(_firstSeen, [.. fresh.Values.SelectMany(windows => windows)], _nextSeen);
 
-        if (SameAsBefore(fresh))
+        var changed = !SameAsBefore(fresh);
+        if (changed)
+        {
+            _windowsByPath.Clear();
+            _windowsByFileName.Clear();
+            foreach (var (path, windows) in fresh)
+            {
+                _windowsByPath[path] = windows;
+
+                var fileName = System.IO.Path.GetFileName(path);
+                if (_windowsByFileName.TryGetValue(fileName, out var sameName))
+                {
+                    sameName.AddRange(windows);
+                }
+                else
+                {
+                    _windowsByFileName[fileName] = [.. windows];
+                }
+            }
+        }
+
+        // Asked whenever anything has changed — or has not, as far as the census can tell, when
+        // a window went to another folder. A window just closed goes from its folder at once,
+        // and one just opened joins its folder when Explorer has said which it is.
+        if (_windowsByFileName.ContainsKey(ExplorerFileName))
+        {
+            _foldersWanted.Set();
+        }
+        else
+        {
+            _tabs = [];
+        }
+
+        if (SortFolders() || changed)
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Reads which folders Explorer's windows' tabs show, whenever it is asked to, and hands
+    /// the answer to the dock's thread — never on the dock's thread: see the remarks above.
+    /// </summary>
+    /// <remarks>
+    /// Anything thrown loses that reading and no more, as <c>HandleWindow</c>'s reading does: an
+    /// exception on a background thread would take the dock down with it.
+    /// </remarks>
+    private void ReadFolders(Dispatcher dock)
+    {
+        while (true)
+        {
+            _foldersWanted.WaitOne();
+            if (_disposed)
+            {
+                return;
+            }
+
+            try
+            {
+                var tabs = ExplorerWindows.Tabs();
+                dock.BeginInvoke(() => OnTabsRead(tabs));
+            }
+            catch (Exception)
+            {
+                // See the remarks: the dots keep what they last showed until the next reading.
+            }
+        }
+    }
+
+    private void OnTabsRead(IReadOnlyList<ExplorerTab> tabs)
+    {
+        if (_disposed)
         {
             return;
         }
 
-        _windowsByPath.Clear();
-        _windowsByFileName.Clear();
-        foreach (var (path, windows) in fresh)
+        _tabs = tabs;
+        if (SortFolders())
         {
-            _windowsByPath[path] = windows;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
-            var fileName = System.IO.Path.GetFileName(path);
-            if (_windowsByFileName.TryGetValue(fileName, out var sameName))
+    /// <summary>
+    /// The tab of <paramref name="window"/> showing a folder pin's folder, as Explorer last said —
+    /// the one in front, if that is one — or null for anything else.
+    /// </summary>
+    /// <param name="window">A window of the pin's, as <see cref="NextWindow"/> gives one.</param>
+    /// <param name="target">The pin's running target: a folder's, or an executable's, which has no tabs.</param>
+    public ExplorerTab? TabShowing(nint window, string? target)
+    {
+        ExplorerTab? showing = null;
+        foreach (var tab in _tabs)
+        {
+            if (tab.Window != window || !string.Equals(tab.Folder, target, StringComparison.OrdinalIgnoreCase))
             {
-                sameName.AddRange(windows);
+                continue;
             }
-            else
+
+            if (ExplorerWindows.IsInFront(tab))
             {
-                _windowsByFileName[fileName] = [.. windows];
+                return tab;
+            }
+
+            showing ??= tab;
+        }
+
+        return showing;
+    }
+
+    /// <summary>
+    /// Puts Explorer's windows in the census under the folders Explorer last said their tabs show.
+    /// </summary>
+    /// <returns>Whether any folder's windows are not what they were.</returns>
+    private bool SortFolders()
+    {
+        var explorer = _windowsByFileName.TryGetValue(ExplorerFileName, out var windows) ? windows : [];
+        var sorted = WindowsByFolder(explorer, _tabs);
+        if (SameWindows(sorted, _windowsByFolder))
+        {
+            return false;
+        }
+
+        _windowsByFolder = sorted;
+        return true;
+    }
+
+    /// <summary>
+    /// The windows showing each folder, in any of their tabs: those of <paramref name="windows"/>,
+    /// in their order, that a tab of <paramref name="tabs"/> is in — keyed by the folder, in any
+    /// case, and each window under a folder once, however many of its tabs show it.
+    /// </summary>
+    /// <remarks>
+    /// The census's windows, not Explorer's answer, decide which windows there are: an answer
+    /// read before a window closed still names it, and one of Explorer's own dialogs — a copy's
+    /// progress, say — is in the census and shows no folder.
+    /// </remarks>
+    public static Dictionary<string, List<nint>> WindowsByFolder(
+        IReadOnlyList<nint> windows, IReadOnlyList<ExplorerTab> tabs)
+    {
+        var byFolder = new Dictionary<string, List<nint>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var window in windows)
+        {
+            foreach (var tab in tabs)
+            {
+                if (tab.Window != window)
+                {
+                    continue;
+                }
+
+                if (!byFolder.TryGetValue(tab.Folder, out var showing))
+                {
+                    showing = [];
+                    byFolder[tab.Folder] = showing;
+                }
+
+                if (!showing.Contains(window))
+                {
+                    showing.Add(window);
+                }
             }
         }
 
-        Changed?.Invoke(this, EventArgs.Empty);
+        return byFolder;
     }
+
+    private static bool SameWindows(Dictionary<string, List<nint>> fresh, Dictionary<string, List<nint>> old) =>
+        fresh.Count == old.Count
+        && fresh.All(entry => old.TryGetValue(entry.Key, out var existing) && existing.SequenceEqual(entry.Value));
 
     /// <summary>
     /// Compares the new census with the old one so an unchanged desktop does not repaint the
@@ -286,6 +493,10 @@ public sealed class RunningAppsService : IDisposable
 
         _disposed = true;
         _debounce.Stop();
+
+        // Wakes the reading thread to see it is over. The event is not disposed: the thread may
+        // be inside a reading still, and waits on it once more after one.
+        _foldersWanted.Set();
 
         foreach (var hook in _hooks)
         {
