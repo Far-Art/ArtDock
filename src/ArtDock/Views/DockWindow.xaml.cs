@@ -1952,14 +1952,23 @@ public sealed partial class DockWindow : Window
 
             switch (action)
             {
+                // Not every look: these come round every quarter of a second for as long as the
+                // window is in front, a dock brought up over it at the edge included, and closing
+                // the previews on each closed them a moment after they opened. They go as the dock
+                // goes behind the program — once — and, for a window that only fills the display,
+                // as auto-hide slides it away (VisibilityChanged), which a held dock does not.
                 case FrontAction.HideOutranked:
-                    _previews?.Dismiss();
-                    StandAside(WindowsApi.GetForegroundWindow());
+                    var game = WindowsApi.GetForegroundWindow();
+                    if (game != _asideFor)
+                    {
+                        _previews?.Dismiss();
+                    }
+
+                    StandAside(game);
                     _autoHide?.Yield(true);
                     break;
 
                 case FrontAction.Hide:
-                    _previews?.Dismiss();
                     StepBack();
                     _autoHide?.Yield(true);
                     break;
