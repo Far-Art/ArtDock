@@ -161,6 +161,13 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
+- **Follows Windows' *Transparency effects*** (Settings › Personalization › Colors). Off, Windows
+  makes the taskbar solid, and the bar goes solid with it, with no blur behind it — painted as
+  *No GPU* paints it, its colour at its opacity over grey, so the Opacity slider still does
+  something. Only the bar: the shadows and the handle stay as they were. The blur keeps its
+  setting, greyed on the Appearance page with a line saying why, and comes back when the
+  switch does; the switch is heard while the dock runs, and the dialogs and window previews,
+  which are on Windows' own materials, follow it as they always have.
 - **Runs without a graphics card**, when told to: *No GPU* on the System page, for a virtual
   machine or a remote session, where everything the dock asks of the compositor falls to the
   processor. On, the dock is drawn in software, with no Direct3D device at all, and gives up
@@ -1264,7 +1271,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Nine hundred and thirteen tests cover the cosine falloff (peak, range boundary,
+Nine hundred and fifteen tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1696,7 +1703,10 @@ colour with the update; a file of this format holding the same pair is somebody'
 is left; so is an older file with a colour or an opacity of its own, or one matching the
 taskbar, all of which were painted as asked all along; and migrating twice changes nothing.
 
-Fifteen hold *No GPU* to what it promises. Off in a new dock and in a file written before it
+Seventeen hold *No GPU*, and Windows' *Transparency effects*, to what they promise. With
+transparency effects off the bar is solid and unblurred, painted as *No GPU* paints it, and the
+shadows and the handle are left as chosen; the switch is the system's, on until the dock reads
+it otherwise, and never written to the file. Off in a new dock and in a file written before it
 existed; turned on by the dock itself at a first run with no hardware to draw with, and at no
 other time — not with a graphics card, and not for a dock that already has settings; on, the
 bar is solid, the blur off, the handle not inverting, neither the bar nor the icons casting a

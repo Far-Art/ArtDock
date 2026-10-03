@@ -201,6 +201,51 @@ public class NoGpuTests : IDisposable
         Assert.Equal("#EEF1FF", new DockSettings { BarOpacity = 0.4 }.BarPaint("#EEF1FF"));
     }
 
+    /// <summary>
+    /// Windows' <i>Transparency effects</i>, off, make the bar solid as No GPU does — and only
+    /// the bar: the shadows and the handle are not transparency.
+    /// </summary>
+    [Fact]
+    public void WithWindowsTransparencyOff_TheBarIsSolidAndUnblurred_AndTheRestIsAsChosen()
+    {
+        var settings = new DockSettings
+        {
+            WindowsTransparency = false, BlurBackground = true, BarOpacity = 0.4, IconShadows = true
+        };
+
+        Assert.True(settings.SolidBar);
+        Assert.False(settings.Blurs);
+        Assert.Equal(1, settings.BarAlpha);
+        Assert.Equal(
+            new DockSettings { NoGpu = true, BarOpacity = 0.4 }.BarPaint("#EEF1FF"),
+            settings.BarPaint("#EEF1FF"));
+
+        Assert.True(settings.HandleInverts);
+        Assert.True(settings.CastsIconShadows);
+        Assert.True(settings.CastsBarShadow);
+    }
+
+    [Fact]
+    public void WindowsTransparency_IsOnUntilTheDockSaysOtherwise_AndIsNeverStored()
+    {
+        Assert.True(new DockSettings().WindowsTransparency);
+
+        var path = Path.Combine(_dir, "transparency.json");
+        SettingsStore.Export(new DockSettings { WindowsTransparency = false, BlurBackground = true }, path);
+
+        using (var document = JsonDocument.Parse(File.ReadAllText(path)))
+        {
+            var names = document.RootElement.EnumerateObject().Select(property => property.Name).ToList();
+            Assert.DoesNotContain(nameof(DockSettings.WindowsTransparency), names);
+            Assert.DoesNotContain(nameof(DockSettings.SolidBar), names);
+        }
+
+        // The system's, not the user's: a file read back has the blur it was saved with.
+        var back = SettingsStore.Import(path);
+        Assert.True(back.WindowsTransparency);
+        Assert.True(back.Blurs);
+    }
+
     [Fact]
     public void TheFile_CarriesTheSetting_AndNotWhatFollowsFromIt()
     {
@@ -246,6 +291,9 @@ public class NoGpuTests : IDisposable
         Assert.Contains("." + nameof(DockSettings.HandleInverts), source);
         Assert.Contains("." + nameof(DockSettings.CastsIconShadows), source);
         Assert.Contains("." + nameof(DockSettings.CastsBarShadow), source);
+
+        // And it tells the settings what Windows' transparency effects are before reading them.
+        Assert.Contains("." + nameof(DockSettings.WindowsTransparency) + " = TransparencyEffects.Enabled", source);
     }
 
     private static string FindSourceRoot()

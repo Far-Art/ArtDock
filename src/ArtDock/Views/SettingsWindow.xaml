@@ -498,6 +498,12 @@
                             Style="{StaticResource Hint}"
                             Text="{DynamicResource Settings.Appearance.NoGpu.Note}"
                             Visibility="Collapsed" />
+                        <TextBlock
+                            x:Name="TransparencyOffNote"
+                            Margin="2,0,0,8"
+                            Style="{StaticResource Hint}"
+                            Text="{DynamicResource Settings.Appearance.TransparencyOff.Note}"
+                            Visibility="Collapsed" />
 
                         <Border Style="{StaticResource Card}">
                             <Grid>

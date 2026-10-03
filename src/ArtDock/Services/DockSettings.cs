@@ -819,21 +819,39 @@ public sealed class DockSettings
         return true;
     }
 
-    /// <summary>Whether the acrylic sheet is up: asked for, and not ruled out by <see cref="NoGpu"/>.</summary>
+    /// <summary>
+    /// Whether Windows' own <i>Transparency effects</i> are on (Personalization › Colors). Not a
+    /// setting and not in the file: the system's, put here by the dock as it applies these
+    /// (<c>Interop.TransparencyEffects</c>), so that what follows from it is worked out in one
+    /// place with what follows from <see cref="NoGpu"/>. On unless the dock has said otherwise.
+    /// </summary>
     [JsonIgnore]
-    public bool Blurs => BlurBackground && !NoGpu;
+    public bool WindowsTransparency { get; set; } = true;
+
+    /// <summary>
+    /// Whether the bar is solid, with no blur behind it: under <see cref="NoGpu"/>, or with
+    /// Windows' transparency effects off (<see cref="WindowsTransparency"/>) — where Windows makes
+    /// its own taskbar solid, and the dock's bar follows it. Only the bar: the shadows and the
+    /// handle's inversion are not transparency, and are No GPU's alone.
+    /// </summary>
+    [JsonIgnore]
+    public bool SolidBar => NoGpu || !WindowsTransparency;
+
+    /// <summary>Whether the acrylic sheet is up: asked for, and not ruled out by <see cref="SolidBar"/>.</summary>
+    [JsonIgnore]
+    public bool Blurs => BlurBackground && !SolidBar;
 
     /// <summary>
     /// The opacity the bar is painted at: <see cref="BarOpacity"/>, or solid under
-    /// <see cref="NoGpu"/> — where the opacity goes into the colour instead, see
+    /// <see cref="SolidBar"/> — where the opacity goes into the colour instead, see
     /// <see cref="BarPaint"/>.
     /// </summary>
     [JsonIgnore]
-    public double BarAlpha => NoGpu ? 1 : BarOpacity;
+    public double BarAlpha => SolidBar ? 1 : BarOpacity;
 
     /// <summary>
     /// The colour the bar is painted, given the colour in force — <see cref="BarColor"/>, or
-    /// the taskbar's: that colour, or under <see cref="NoGpu"/> what it looks like at
+    /// the taskbar's: that colour, or under <see cref="SolidBar"/> what it looks like at
     /// <see cref="BarOpacity"/> over grey (<see cref="BarPalette.Underlay"/>), as
     /// <c>#RRGGBB</c>.
     /// </summary>
@@ -843,7 +861,7 @@ public sealed class DockSettings
     /// the desktop did. Painted in the stored colour alone, a bar set up translucent was
     /// lighter solid than it had ever been seen.
     /// </remarks>
-    public string BarPaint(string color) => NoGpu
+    public string BarPaint(string color) => SolidBar
         ? BarPalette.ToHex(BarPalette.Over(BarPalette.Parse(color), BarOpacity, BarPalette.Underlay))
         : color;
 
@@ -1057,6 +1075,7 @@ public sealed class DockSettings
         SettingsPage = SettingsPage,
         ReduceMotion = ReduceMotion,
         NoGpu = NoGpu,
+        WindowsTransparency = WindowsTransparency,
         LockItemOrder = LockItemOrder,
         LockItemContents = LockItemContents,
         PinnedApps = [.. PinnedApps.Select(app => new PinnedAppSetting

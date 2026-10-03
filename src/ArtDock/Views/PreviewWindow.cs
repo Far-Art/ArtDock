@@ -161,7 +161,7 @@ internal sealed class PreviewWindow : IDisposable
         _source.AddHook(OnWindowMessage);
 
         var dark = !UsesLightTheme();
-        var blurred = !solid && TransparencyEffects();
+        var blurred = !solid && TransparencyEffects.Enabled;
 
         // Left to right whatever the language: the cards' rectangles are DWM's too, and a mirrored
         // panel would draw each title over another window's picture. Only the text reads the
@@ -668,9 +668,6 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <summary>Whether Windows is in light mode — the taskbar's and Start's setting, which its flyouts follow.</summary>
     private static bool UsesLightTheme() => ReadPersonalize("SystemUsesLightTheme", fallback: false);
-
-    /// <summary>Whether Windows' transparency effects are on; its flyouts go solid without them.</summary>
-    private static bool TransparencyEffects() => ReadPersonalize("EnableTransparency", fallback: true);
 
     private static bool ReadPersonalize(string name, bool fallback)
     {

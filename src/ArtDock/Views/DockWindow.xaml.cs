@@ -463,6 +463,11 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     public void ApplyAppearance(DockSettings settings)
     {
+        // Windows' transparency effects, which make the bar solid as No GPU does. Put on the
+        // settings rather than read beside them, so every reading of the blur and the opacity in
+        // force below — and the sheet's own, later — has it.
+        settings.WindowsTransparency = TransparencyEffects.Enabled;
+
         // The sheet is placed once, after both the row and the window have moved. Moving the
         // dock along its edge re-lays the row out inside the window and moves the window, and
         // the sheet follows each of those on its own — the first time against the other's old
@@ -1573,9 +1578,30 @@ public sealed partial class DockWindow : Window
     /// arrives as the Desktop category, which a new wallpaper is too — hence asking whether the
     /// work area is actually a new one.
     /// </para>
+    /// <para>
+    /// Windows' <i>Transparency effects</i> switch is heard here too, for the same reason: its
+    /// broadcast (<c>ImmersiveColorSet</c>) arrives as the General category, and is asked whether
+    /// it changed anything rather than trusted to have.
+    /// </para>
     /// </remarks>
     private void OnUserPreferenceChanged(object? sender, UserPreferenceChangedEventArgs e)
     {
+        if (e.Category == UserPreferenceCategory.General)
+        {
+            // Compared with what this dock applied, not with what the reading was: of several
+            // docks, only the first to hear it would see the reading change.
+            Dispatcher.Invoke(() =>
+            {
+                TransparencyEffects.Refresh();
+                if (_applied.WindowsTransparency != TransparencyEffects.Enabled)
+                {
+                    ApplyAppearance(_applied);
+                }
+            });
+
+            return;
+        }
+
         if (e.Category != UserPreferenceCategory.Desktop)
         {
             return;

@@ -239,6 +239,10 @@ public sealed partial class SettingsWindow : Window
         // while the dialog is open: a remote session taking over is the usual way.
         RenderCapability.TierChanged += OnRenderTierChanged;
 
+        // And the blur's card follows Windows' transparency effects, which can be switched in
+        // Windows' Settings while this is open.
+        TransparencyEffects.Changed += OnRenderTierChanged;
+
         // Coming back to this window is when a pack copied in through Open folder has had a
         // chance to arrive, so that is when the pickers look again.
         Activated += (_, _) => RefreshPacks();
@@ -2570,14 +2574,21 @@ public sealed partial class SettingsWindow : Window
     /// slider still sets how much grey is mixed into its colour
     /// (<see cref="DockSettings.BarPaint"/>). The hint is only for a box that is not ticked:
     /// ticked, there is nothing left to suggest.
+    /// <para>
+    /// Windows' transparency effects, switched off, hold the bar solid in the same way
+    /// (<see cref="DockSettings.SolidBar"/>), and grey the blur with a note of their own — but not
+    /// the shadows, which they leave alone. Under No GPU its note says it all.
+    /// </para>
     /// </remarks>
     private void UpdateNoGpuControls()
     {
         var noGpu = NoGpuCheck.IsChecked == true;
         var note = noGpu ? Visibility.Visible : Visibility.Collapsed;
+        var opaque = !noGpu && !TransparencyEffects.Enabled;
 
-        BlurCard.IsEnabled = !noGpu;
+        BlurCard.IsEnabled = !noGpu && !opaque;
         NoGpuNote.Visibility = note;
+        TransparencyOffNote.Visibility = opaque ? Visibility.Visible : Visibility.Collapsed;
 
         IconShadowsCard.IsEnabled = !noGpu;
         NoGpuIconsNote.Visibility = note;
@@ -2589,7 +2600,8 @@ public sealed partial class SettingsWindow : Window
 
     /// <summary>
     /// What Windows gives this process to draw with has changed — a remote session beginning or
-    /// ending, a display adapter coming or going — so the hint is asked again.
+    /// ending, a display adapter coming or going — or its transparency effects have been switched,
+    /// so the hints are asked again.
     /// </summary>
     private void OnRenderTierChanged(object? sender, EventArgs e) =>
         Dispatcher.BeginInvoke(UpdateNoGpuControls);
@@ -3287,6 +3299,7 @@ public sealed partial class SettingsWindow : Window
         _store.Changed -= OnStoreChanged;
         Localizer.LanguageChanged -= OnLanguageChanged;
         RenderCapability.TierChanged -= OnRenderTierChanged;
+        TransparencyEffects.Changed -= OnRenderTierChanged;
         _updateDownload?.Cancel();
 
         Preview();

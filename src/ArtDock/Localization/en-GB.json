@@ -23,6 +23,7 @@
     "Settings.Appearance.SaveColour": "Save this colour",
 
     "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid and the blur off. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur keeps its setting, and comes back when No GPU is turned off.",
+    "Settings.Appearance.TransparencyOff.Note": "Transparency effects are off in Windows (Settings › Personalisation › Colours), so the bar is solid with no blur behind it, like the taskbar. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur keeps its setting, and comes back when transparency effects are turned on.",
 
     "Settings.Items.LockOrder.Tip": "Stops a drag rearranging the items, here or on the dock. Adding, removing and editing are unaffected.",
     "Settings.Items.LockContents.Tip": "Stops items being added, removed or edited, here or on the dock — the dock's own commands go away, leaving a greyed Locked in their place, and a file dropped on the bar is refused. Reordering is unaffected.",

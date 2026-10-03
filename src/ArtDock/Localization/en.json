@@ -71,6 +71,7 @@
     "Settings.Appearance.Blur": "Blur what is behind the bar",
     "Settings.Appearance.Blur.Hint": "Puts a sheet of Windows acrylic behind the bar. Lower the opacity above to see it.",
     "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid and the blur off. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur keeps its setting, and comes back when No GPU is turned off.",
+    "Settings.Appearance.TransparencyOff.Note": "Transparency effects are off in Windows (Settings › Personalization › Colors), so the bar is solid with no blur behind it, like the taskbar. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur keeps its setting, and comes back when transparency effects are turned on.",
     "Settings.Appearance.Reset": "Reset Appearance to defaults",
 
     "Settings.Icons.Title": "Icons",
