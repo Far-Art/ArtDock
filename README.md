@@ -393,7 +393,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   as an administrator* in its item editor; a click on one whose program is already open still
   brings that window forward. Windows asks every time either way, and the icon only bounces
   when the answer was yes. Not for Store apps. **An app running as administrator has an amber
-  dot** rather than a white one — however it was started, from the dock or not.
+  dot** rather than a white one — however it was started, from the dock or not. Either dot has
+  a dark rim, so it stands out on a pale bar as well as a dark one.
 - **Empty the Recycle Bin from the dock**: right-click the pin and the entry is there, above
   the ones that act on the pin itself. It greys out when the bin is already empty, and it
   **asks first exactly when Explorer would** — the *Display delete confirmation dialog*

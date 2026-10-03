@@ -97,15 +97,40 @@ public sealed class DockBar : Canvas
     /// which no eye can tell from nothing and Windows can — see <see cref="DrawsBar"/>.
     /// </summary>
     private static readonly Brush StandInBrush = Frozen(Color.FromArgb(0x01, 0x00, 0x00, 0x00));
-    private static readonly Brush DotBrush = Frozen(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));
+    /// <summary>
+    /// The running dot's radius and its rim's width, in DIPs: a 6 DIP dot inside a 1 DIP rim,
+    /// which leaves a DIP of the bar's padding above and below it.
+    /// </summary>
+    /// <remarks>
+    /// The dot was 4 DIP across with no edge, and on a pale bar — the stock lavender at a half,
+    /// over the blur — a white dot or an amber one was barely there: a light colour on a light
+    /// ground, too small for its hue to tell. A darker rim of the dot's own colour keeps it
+    /// apart from any bar, light or dark. Asked for 2026-10-03, from four drawn side by side.
+    /// </remarks>
+    private const double DotRadius = 3;
+
+    private const double DotRim = 1;
+
+    private static readonly Brush DotBrush = Frozen(Colors.White);
+
+    private static readonly Pen DotRimPen = FrozenPen(Color.FromArgb(0x8C, 0x1E, 0x23, 0x46));
 
     /// <summary>
     /// The dot under an app running as administrator: amber, the yellow of Windows' own UAC
-    /// shield, at the white dot's opacity — a colour that reads on a light bar and a dark one.
+    /// shield, in a rim of a dark brown of its own hue.
     /// </summary>
-    public static Color ElevatedDot { get; } = Color.FromArgb(0xE6, 0xFF, 0xB9, 0x00);
+    public static Color ElevatedDot { get; } = Color.FromRgb(0xFF, 0xB9, 0x00);
 
     private static readonly Brush ElevatedDotBrush = Frozen(ElevatedDot);
+
+    private static readonly Pen ElevatedDotRimPen = FrozenPen(Color.FromRgb(0x7A, 0x4A, 0x00));
+
+    private static Pen FrozenPen(Color color)
+    {
+        var pen = new Pen(Frozen(color), DotRim);
+        pen.Freeze();
+        return pen;
+    }
 
     /// <summary>The label bubble. Keep it all but opaque: the labels are ClearType, which
     /// is blended against this colour, and any of the desktop showing through would show
@@ -3171,8 +3196,16 @@ public sealed class DockBar : Canvas
             }
 
             var centreX = _iconsLeft + _offsets[i] + (_sizes[i] / 2) + SlotShift(i);
-            var brush = _items[i].Item.IsElevated ? ElevatedDotBrush : DotBrush;
-            drawingContext.DrawEllipse(brush, pen: null, new Point(centreX, y), 2, 2);
+            // The rim's pen is centred on its circle, so the circle sits half a rim outside the
+            // fill: the fill shows at its full radius, and the rim lies wholly outside it.
+            var elevated = _items[i].Item.IsElevated;
+            var radius = DotRadius + (DotRim / 2);
+            drawingContext.DrawEllipse(
+                elevated ? ElevatedDotBrush : DotBrush,
+                elevated ? ElevatedDotRimPen : DotRimPen,
+                new Point(centreX, y),
+                radius,
+                radius);
         }
     }
 
