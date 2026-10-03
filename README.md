@@ -91,9 +91,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   under its title — Windows' own thumbnails, which cost the dock nothing however fast the
   window changes. Click a card to go to that window; its close button, or a middle click,
   closes it, except a window of a program running as administrator, which the dock cannot
-  close and offers no button for. The panel rises and fades in as it opens, slides across to
-  another running app when the pointer rests on that one, and fades out as it closes, as
-  Windows' does — none of it with *Reduce motion* or Windows' animations off. Too
+  close and offers no button for. The panel rises and fades in as it opens and fades out as it
+  closes, and moves to another running app at once when the pointer rests on that one, as
+  Windows' does — none of it animated with *Reduce motion* or Windows' animations off. Too
   many windows to fit across the display are shrunk alike, then listed by title. The icon
   stays magnified under the panel while the pointer is on it, and a click on the icon still
   cycles. On by default, on the Behaviour page, with the delay beside it.

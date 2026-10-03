@@ -58,27 +58,18 @@ internal sealed class WindowPreviews(
     private PreviewPlace _place;
     private IReadOnlyList<Size> _sizes = [];
     private bool _enabled = true;
-    private bool _solid;
     private bool _animate = true;
     private bool _holding;
 
     /// <summary>
     /// Takes the settings in force: whether previews are wanted at all, how long the pointer
-    /// rests before they open and may be away before they close, whether the panel may blur, and
-    /// whether it slides.
+    /// rests before they open and may be away before they close, and whether the panel animates.
     /// </summary>
-    public void Configure(bool enabled, int delayMs, int leaveMs, bool solid, bool animate)
+    public void Configure(bool enabled, int delayMs, int leaveMs, bool animate)
     {
         _animate = animate;
         _dwell.HoverTime = Math.Max(0, delayMs);
         _dwell.LeaveTime = Math.Max(0, leaveMs);
-
-        if (solid != _solid)
-        {
-            // The panel's material is chosen when it is made.
-            _solid = solid;
-            Dismiss();
-        }
 
         _enabled = enabled;
         if (!enabled)
@@ -231,40 +222,38 @@ internal sealed class WindowPreviews(
         dock.HoldForPreviews(item);
 
         // Another item's panel is not changed into this one's: a new panel takes over from it,
-        // made at its own size and coming in from the old one's place while the old one fades
-        // out. Changing it in place meant resizing a window on the screen, and Windows showed the
-        // space it gained, and the old pictures, for a frame or two before WPF had drawn the new
-        // cards — a blink at the start of every switch, the worse the wider the new panel.
-        Int32Rect? followsFrom = null;
+        // made at its own size, and is simply there — no slide, no fade, as Windows' previews
+        // move between buttons. Changing it in place meant resizing a window on the screen, and
+        // Windows showed the space it gained, and the old pictures, for a frame or two before WPF
+        // had drawn the new cards — a blink at the start of every switch, the worse the wider
+        // the new panel.
         var previous = _window;
         if (previous is not null)
         {
-            followsFrom = previous.Placed;
             previous.Chosen -= OnChosen;
             previous.CloseRequested -= OnCloseRequested;
 
             // One panel on its way out at a time: a third app in quick succession sends the first
             // on its way at once.
-            ReleaseOutgoing();
+            ReleaseOutgoing(fade: false);
             _outgoing = previous;
             _window = null;
         }
 
         // It rises the whole gap it keeps from the dock, and no further: see PreviewWindow.
         var rise = (int)Math.Round(_metrics.Lift * place.Scale);
-        _window = new PreviewWindow(Arrange(entries), entries, _solid, _animate, rise, followsFrom);
+        _window = new PreviewWindow(Arrange(entries), entries, _animate, rise, takesOver: previous is not null);
         _window.Chosen += OnChosen;
         _window.CloseRequested += OnCloseRequested;
 
-        // The old one fades out as the new one fades in over it — or, not animating, goes the
-        // moment the new one is there.
+        // The old one goes the moment the new one is there, over it.
         if (previous is not null)
         {
             _window.Shown += (_, _) =>
             {
                 if (ReferenceEquals(_outgoing, previous))
                 {
-                    ReleaseOutgoing();
+                    ReleaseOutgoing(fade: false);
                 }
             };
         }

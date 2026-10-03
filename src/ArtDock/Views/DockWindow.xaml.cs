@@ -431,13 +431,11 @@ public sealed partial class DockWindow : Window
             autoHide.SetEnabled(settings.AutoHide);
         }
 
-        // The previews are Windows' look, not the bar's, so the dock's own blur setting is not
-        // theirs; only No GPU, which takes every material away, makes them solid.
+        // The previews are Windows' look, not the bar's: solid, whatever the dock's own blur.
         _previews?.Configure(
             settings.WindowPreviews,
             settings.PreviewDelayMs,
             settings.HideDelayMs,
-            solid: settings.NoGpu,
             animate: !settings.ReduceMotion && SystemParameters.ClientAreaAnimation);
 
         // After auto-hide has been told: turning it off brings the dock back, and the handle

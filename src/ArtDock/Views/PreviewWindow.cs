@@ -25,11 +25,12 @@ internal sealed record PreviewEntry(nint Window, string Title, ImageSource? Icon
 /// </summary>
 /// <remarks>
 /// <para>
-/// An ordinary, unlayered window on the accent policy's acrylic, with Windows' own rounded
-/// corners — the taskbar's route, and the one that blurs in a window that is never active, as
-/// this one never is (<c>WS_EX_NOACTIVATE</c>). Measured before choosing (TODO.md, *Resolved*,
-/// "What a window holding window previews can be"). Under *No GPU*, or with Windows'
-/// transparency effects off, it is a solid sheet of the theme's colour instead.
+/// An ordinary, unlayered window, a solid sheet of Windows' flyout colour for the light or dark
+/// mode, with Windows' own rounded corners. It was on the accent policy's acrylic at first, which
+/// blurs in a window that is never active as this one is (<c>WS_EX_NOACTIVATE</c>; TODO.md,
+/// *Resolved*, "What a window holding window previews can be"); taken off on 2026-10-03, since
+/// Windows' own previews have no blur, and the blur coming up a moment after the panel was the
+/// blink left when moving between apps.
 /// </para>
 /// <para>
 /// <b>Made where it is shown, in physical pixels, and never moved to another display.</b> WPF
@@ -39,12 +40,13 @@ internal sealed record PreviewEntry(nint Window, string Title, ImageSource? Icon
 /// and a panel wanted on another display is a new one.
 /// </para>
 /// <para>
-/// <b>It slides and fades, as Windows' does</b>: up into place and in as it opens, sideways to
-/// the next item when the pointer moves along the dock, and out as it closes. The slide moves the
-/// window, which carries the pictures, being in its client area; and only ever above the dock's
-/// hover zone — the rise starts at the floor <see cref="PreviewLayout"/> keeps it above, since a
-/// panel over the zone even for a frame tells the dock it is covered and drops the wave. Off with
-/// *Reduce motion* or Windows' animations.
+/// <b>It rises and fades, as Windows' does</b>: up into place and in as it opens, and out as it
+/// closes; moving to another item, or changing size, it does neither, also as Windows' does — the
+/// new panel is simply there (see <c>WindowPreviews.Show</c>). The rise moves the window, which
+/// carries the pictures, being in its client area; and only ever above the dock's hover zone — it
+/// starts at the floor <see cref="PreviewLayout"/> keeps it above, since a panel over the zone even
+/// for a frame tells the dock it is covered and drops the wave. Off with *Reduce motion* or
+/// Windows' animations.
 /// </para>
 /// <para>
 /// <b>The fade is the whole window's, and only while it fades.</b> WPF's opacity never reaches
@@ -86,9 +88,6 @@ internal sealed class PreviewWindow : IDisposable
     /// <summary>How long the rise into place takes as the panel opens, in milliseconds.</summary>
     private const double OpenMs = 200;
 
-    /// <summary>How long the slide to another item takes.</summary>
-    private const double SwitchMs = 167;
-
     /// <summary>How long the fade out takes as it closes.</summary>
     private const double CloseMs = 120;
 
@@ -122,8 +121,6 @@ internal sealed class PreviewWindow : IDisposable
     /// <summary>True once it is fading out to close: nothing more is shown in it.</summary>
     private bool _closing;
 
-    /// <summary>The panel this one took over from, while it is still to come in from its place.</summary>
-    private readonly Int32Rect? _followsFrom;
     private bool _shown;
     private bool _disposed;
     private bool _thumbnailsPending;
@@ -136,28 +133,24 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <param name="arrangement">Where the panel goes and what is in it.</param>
     /// <param name="entries">The windows, one to a card, in the arrangement's order.</param>
-    /// <param name="solid">Whether to paint a solid sheet rather than blur — *No GPU*.</param>
     /// <param name="animate">Whether it slides, or simply appears and moves.</param>
     /// <param name="rise">How far below its place it starts as it opens, in pixels: no further than
     /// the floor it stands above.</param>
-    /// <param name="followsFrom">
-    /// The panel this one takes over from, for another item, as a screen rectangle: it then comes
-    /// in from that one's place, centred where it was, rather than rising. Null for a panel that
-    /// opens.
+    /// <param name="takesOver">
+    /// Whether this panel takes over from another item's: it is then simply there, as Windows'
+    /// is moving between buttons, rather than rising and fading in.
     /// </param>
     public PreviewWindow(
         PreviewArrangement arrangement,
         IReadOnlyList<PreviewEntry> entries,
-        bool solid,
         bool animate,
         int rise,
-        Int32Rect? followsFrom = null)
+        bool takesOver = false)
     {
         _arrangement = arrangement;
         _entries = entries;
-        _animate = animate;
+        _animate = animate && !takesOver;
         _rise = Math.Max(0, rise);
-        _followsFrom = followsFrom;
 
         var panel = arrangement.Panel;
         var parameters = new HwndSourceParameters("ArtDockPreviews")
@@ -176,7 +169,6 @@ internal sealed class PreviewWindow : IDisposable
         _source.AddHook(OnWindowMessage);
 
         var dark = !UsesLightTheme();
-        var blurred = !solid && TransparencyEffects.Enabled;
 
         // Left to right whatever the language: the cards' rectangles are DWM's too, and a mirrored
         // panel would draw each title over another window's picture. Only the text reads the
@@ -184,15 +176,11 @@ internal sealed class PreviewWindow : IDisposable
         _panel = new PreviewPanel(dark, Localizer.FlowDirection);
         _source.RootVisual = _panel;
 
-        if (blurred && DesktopComposition.EnableAcrylic(Hwnd, dark ? 0xA0202020 : 0xA0F3F3F3))
-        {
-            _source.CompositionTarget.BackgroundColor = Colors.Transparent;
-        }
-        else
-        {
-            _source.CompositionTarget.BackgroundColor = dark ? Color.FromRgb(0x2C, 0x2C, 0x2C) : Color.FromRgb(0xEE, 0xEE, 0xEE);
-        }
+        // Windows' flyout colours, solid: its previews have no blur behind them.
+        _source.CompositionTarget.BackgroundColor = dark ? Color.FromRgb(0x2C, 0x2C, 0x2C) : Color.FromRgb(0xF3, 0xF3, 0xF3);
 
+        // The border DWM draws round a rounded window follows this, as the taskbar's flyouts' does.
+        DesktopComposition.SetDarkFrame(Hwnd, dark);
         DesktopComposition.SetRoundedCorners(Hwnd, rounded: true);
 
         foreach (var entry in entries)
@@ -205,7 +193,10 @@ internal sealed class PreviewWindow : IDisposable
         ScheduleThumbnails();
     }
 
-    /// <summary>Raised once, as the panel first comes onto the screen.</summary>
+    /// <summary>
+    /// Raised once, as the panel first comes onto the screen: as its fade in starts, or, not
+    /// fading, once it is there whole.
+    /// </summary>
     public event EventHandler? Shown;
 
     /// <summary>A card was clicked: go to its window.</summary>
@@ -218,9 +209,6 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <summary>Where the panel is, or is sliding to, in physical screen pixels.</summary>
     public Int32Rect Bounds => _target;
-
-    /// <summary>Where the panel is on the screen at this moment, part way through a slide or not.</summary>
-    public Int32Rect Placed => _placed;
 
     /// <summary>The windows shown, in order.</summary>
     public IReadOnlyList<PreviewEntry> Entries => _entries;
@@ -308,6 +296,7 @@ internal sealed class PreviewWindow : IDisposable
         CompositionTarget.Rendering -= OnRenderingThumbnails;
         CompositionTarget.Rendering -= OnRenderingSlide;
         CompositionTarget.Rendering -= OnRenderingFade;
+        CompositionTarget.Rendering -= OnRenderingReveal;
         foreach (var thumbnail in _thumbnails)
         {
             thumbnail?.Dispose();
@@ -414,10 +403,8 @@ internal sealed class PreviewWindow : IDisposable
     }
 
     /// <summary>
-    /// Sends the panel to a new place: at once before it is up or without animation, and
-    /// otherwise by a slide from where it is — at its new size from the start, its middle where
-    /// the old middle was and its bottom where the old bottom was, so the new contents arrive in
-    /// the old place and travel to the new one.
+    /// Sends the panel to a new place, at once, as Windows' changes size when one of its app's
+    /// windows opens or closes. A rise still under way carries on to the new place.
     /// </summary>
     private void Place(Int32Rect panel)
     {
@@ -427,19 +414,14 @@ internal sealed class PreviewWindow : IDisposable
         }
 
         _target = panel;
-        if (!_shown || !_animate)
+        if (_sliding)
         {
-            StopSlide();
-            Move(panel);
+            // The slide reads the target each frame; it only needs the new size now.
+            Move(new Int32Rect(_placed.X, _placed.Y, panel.Width, panel.Height));
             return;
         }
 
-        Move(new Int32Rect(
-            _placed.X + ((_placed.Width - panel.Width) / 2),
-            _placed.Y + _placed.Height - panel.Height,
-            panel.Width,
-            panel.Height));
-        SlideTo(SwitchMs);
+        Move(panel);
     }
 
     /// <summary>Puts the window somewhere, when it is not there already.</summary>
@@ -546,44 +528,65 @@ internal sealed class PreviewWindow : IDisposable
 
         _shown = true;
 
-        // Up from the floor into place and in from nothing, as the taskbar's previews come — or,
-        // taking over from another item's panel, across from where that one is, fading in as
-        // it fades out (see WindowPreviews.Show).
-        var duration = _followsFrom is null ? OpenMs : SwitchMs;
-        var moved = false;
-        if (_animate)
+        // Shown at nothing, whether it then fades in or not. WPF puts what it has drawn on the
+        // screen only once the window is visible, a frame or two after this, but DWM draws the
+        // pictures from the moment it is — so a panel shown as it was came up, for a frame, as
+        // pictures floating over nothing, with whatever was behind showing through: the old
+        // panel, on a switch. Captured frame by frame on 2026-10-03 (TODO.md, item 25).
+        SetLayered(true, alpha: 0);
+
+        // Up from the floor into place and in from nothing, as the taskbar's previews come.
+        if (_animate && _rise > 0)
         {
-            SetLayered(true, alpha: 0);
-            if (_followsFrom is { } from)
-            {
-                var start = new Int32Rect(
-                    from.X + ((from.Width - _target.Width) / 2),
-                    from.Y + from.Height - _target.Height,
-                    _target.Width,
-                    _target.Height);
-                moved = start != _target;
-                Move(start);
-            }
-            else if (_rise > 0)
-            {
-                Move(new Int32Rect(_target.X, _target.Y + _rise, _target.Width, _target.Height));
-                moved = true;
-            }
+            Move(new Int32Rect(_target.X, _target.Y + _rise, _target.Width, _target.Height));
         }
 
         NativeMethods.ShowWindow(Hwnd, SW_SHOWNA);
         BringToTop();
-        Shown?.Invoke(this, EventArgs.Empty);
 
         if (_animate)
         {
-            if (moved)
+            Shown?.Invoke(this, EventArgs.Empty);
+            if (_rise > 0)
             {
-                SlideTo(duration);
+                SlideTo(OpenMs);
             }
 
-            Fade(fadeIn: true, duration);
+            Fade(fadeIn: true, OpenMs);
+            return;
         }
+
+        // Not fading: all at once, as soon as WPF's drawing is there with the pictures.
+        _panel.InvalidateVisual();
+        _revealFrames = 0;
+        CompositionTarget.Rendering += OnRenderingReveal;
+    }
+
+    /// <summary>
+    /// How many frames to wait, once the window is visible, before it is made opaque: the frame
+    /// WPF draws it in, and the one by which that has reached the screen.
+    /// </summary>
+    private const int RevealAfterFrames = 2;
+
+    private int _revealFrames;
+
+    /// <summary>Makes a panel shown at nothing opaque once WPF's drawing has had time to reach the screen.</summary>
+    private void OnRenderingReveal(object? sender, EventArgs e)
+    {
+        if (_disposed)
+        {
+            CompositionTarget.Rendering -= OnRenderingReveal;
+            return;
+        }
+
+        if (++_revealFrames <= RevealAfterFrames)
+        {
+            return;
+        }
+
+        CompositionTarget.Rendering -= OnRenderingReveal;
+        SetLayered(false, alpha: 255);
+        Shown?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>WPF's own scale for this window, which is the one its drawing is in.</summary>

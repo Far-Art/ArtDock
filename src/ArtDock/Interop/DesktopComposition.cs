@@ -209,6 +209,13 @@ internal static class DesktopComposition
         }
     }
 
+    /// <summary>Matches the frame DWM draws round a window — its rim — to the dark or light mode.</summary>
+    public static void SetDarkFrame(nint hwnd, bool dark)
+    {
+        var immersive = dark ? 1 : 0;
+        DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref immersive, sizeof(int));
+    }
+
     /// <summary>
     /// Asks DWM for its own rounded corners, roughly eight pixels. It will not take a
     /// radius, and there is no second way to shape the material.
