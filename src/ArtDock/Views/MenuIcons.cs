@@ -29,6 +29,8 @@ public enum MenuGlyph
     Show,
     Exit,
     Browse,
+    Apps,
+    Games,
     Info,
     MoveUp,
     MoveDown,
@@ -135,7 +137,9 @@ public static class MenuIcons
         MenuGlyph.Show => "",
         MenuGlyph.Exit => "",
         MenuGlyph.Browse => "",
-        MenuGlyph.Info => "",
+        MenuGlyph.Apps => "",
+        MenuGlyph.Games => "",
+        MenuGlyph.Info =>"",
         MenuGlyph.MoveUp => "",
         MenuGlyph.MoveDown => "",
         MenuGlyph.ClearAll => "",
@@ -174,6 +178,8 @@ public static class MenuIcons
     public static FrameworkElement? For(DockPreset preset) => preset.Key switch
     {
         DockPresets.BrowseKey => Glyph(MenuGlyph.Browse),
+        DockPresets.SearchAppsKey => Glyph(MenuGlyph.Apps),
+        DockPresets.SearchGamesKey => Glyph(MenuGlyph.Games),
         DockPresets.SeparatorKey => Rule(),
         _ => Picture(TargetIcon(preset.Target))
     };

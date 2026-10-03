@@ -1375,18 +1375,51 @@ public sealed partial class DockWindow : Window
         return index < 0 ? pins.Count : index + 1;
     }
 
-    /// <summary>Adds one of the ready-made entries, or browses for a target.</summary>
+    /// <summary>Adds one of the ready-made entries, or browses or searches for targets.</summary>
     private void AddPreset(string key, int index)
     {
-        var pin = key == DockPresets.BrowseKey ? BrowseForPin() : DockPresets.Create(key);
-        if (pin is null)
+        IReadOnlyList<PinnedAppSetting> pins = key switch
+        {
+            DockPresets.BrowseKey => BrowseForPin() is { } chosen ? [chosen] : [],
+            DockPresets.SearchAppsKey => SearchForPins(ScanKind.Apps),
+            DockPresets.SearchGamesKey => SearchForPins(ScanKind.Games),
+            _ => DockPresets.Create(key) is { } preset ? [preset] : []
+        };
+
+        if (pins.Count == 0)
         {
             return;
         }
 
         var settings = ContentsToSave();
-        settings.PinnedApps.Insert(Math.Clamp(index, 0, settings.PinnedApps.Count), pin);
+        settings.PinnedApps.InsertRange(Math.Clamp(index, 0, settings.PinnedApps.Count), pins);
         _settings.Save(settings);
+    }
+
+    /// <summary>
+    /// Looks through the apps — or the games — on this machine, and makes a pin of each one
+    /// ticked. See <see cref="ScanWindow"/>.
+    /// </summary>
+    /// <remarks>
+    /// Centred on the screen rather than on an owner, as the item editor is: the dock never
+    /// takes the foreground, and a dialog owned by it would come up behind whatever has it.
+    /// </remarks>
+    private List<PinnedAppSetting> SearchForPins(ScanKind kind)
+    {
+        var scan = new ScanWindow(kind, PinnedAppsService.TargetPaths(_applied.PinnedApps), ScanPurpose.Pin)
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
+        };
+
+        HoldRevealed(true);
+        try
+        {
+            return scan.ShowDialog() == true ? PinnedAppsService.CreateFoundPins(scan.ChosenPins) : [];
+        }
+        finally
+        {
+            HoldRevealed(false);
+        }
     }
 
     /// <summary>Asks for a file to pin.</summary>

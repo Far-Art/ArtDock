@@ -957,20 +957,33 @@ public sealed partial class SettingsWindow : Window
         AddButton.ContextMenu = menu;
     }
 
-    /// <summary>Adds a preset, or browses for a target when that is what was chosen.</summary>
+    /// <summary>Adds a preset, or browses or searches for targets when that is what was chosen.</summary>
     private void AddPreset(string key)
     {
-        var pin = key == DockPresets.BrowseKey ? BrowseForPin() : DockPresets.Create(key);
-        if (pin is null)
+        IReadOnlyList<PinnedAppSetting> pins = key switch
+        {
+            DockPresets.BrowseKey => BrowseForPin() is { } chosen ? [chosen] : [],
+            DockPresets.SearchAppsKey => SearchForPins(ScanKind.Apps),
+            DockPresets.SearchGamesKey => SearchForPins(ScanKind.Games),
+            _ => DockPresets.Create(key) is { } preset ? [preset] : []
+        };
+
+        if (pins.Count == 0)
         {
             return;
         }
 
         // After the selection when there is one, so a run of additions stays in order and
-        // lands where the user was looking.
+        // lands where the user was looking. The last of them is selected, so the next lands
+        // after it.
         var index = PinnedList.SelectedIndex < 0 ? _pinned.Count : PinnedList.SelectedIndex + 1;
-        _pinned.Insert(index, pin);
-        PinnedList.SelectedIndex = index;
+        for (var i = 0; i < pins.Count; i++)
+        {
+            _pinned.Insert(index + i, pins[i]);
+        }
+
+        PinnedList.SelectedIndex = index + pins.Count - 1;
+        PinnedList.ScrollIntoView(PinnedList.SelectedItem);
 
         _pinsEdited = true;
         UpdateItemButtons();
@@ -992,6 +1005,16 @@ public sealed partial class SettingsWindow : Window
         }
 
         return PinnedAppsService.CreateChosenPin(dialog.FileName);
+    }
+
+    /// <summary>
+    /// Looks through the apps — or the games — on this machine, and makes a pin of each one
+    /// ticked; the Exclusions page's scan, put to the dock's use.
+    /// </summary>
+    private List<PinnedAppSetting> SearchForPins(ScanKind kind)
+    {
+        var scan = new ScanWindow(kind, PinnedAppsService.TargetPaths(_pinned), ScanPurpose.Pin) { Owner = this };
+        return scan.ShowDialog() == true ? PinnedAppsService.CreateFoundPins(scan.ChosenPins) : [];
     }
 
     /// <summary>Opens the item editor for the selected pin.</summary>

@@ -7,7 +7,8 @@ namespace ArtDock.Services;
 /// <param name="Label">What the menu shows.</param>
 /// <param name="Target">
 /// What the entry's icon is read from: the target the pin it makes will have. Null for the
-/// entries that make nothing known in advance — <em>Browse…</em>, and the separator.
+/// entries that make nothing known in advance — <em>Browse…</em>, the two searches, and the
+/// separator.
 /// </param>
 public readonly record struct DockPreset(string Key, string Label, string? Target = null);
 
@@ -24,6 +25,19 @@ public static class DockPresets
 {
     /// <summary>Key for the entry that opens a file dialog rather than pinning something known.</summary>
     public const string BrowseKey = "browse";
+
+    /// <summary>Key for the entry that looks through the apps installed on this machine — see <see cref="Views.ScanWindow"/>.</summary>
+    public const string SearchAppsKey = "searchapps";
+
+    /// <summary>Key for the entry that looks through the games the launchers installed.</summary>
+    public const string SearchGamesKey = "searchgames";
+
+    /// <summary>
+    /// Whether an entry asks what to pin — a file dialog, or a search of the machine — rather
+    /// than pinning something known. The caller does the asking; <see cref="Create"/> makes
+    /// nothing for these.
+    /// </summary>
+    public static bool Asks(string key) => key is BrowseKey or SearchAppsKey or SearchGamesKey;
 
     /// <summary>Key for the divider entry.</summary>
     public const string SeparatorKey = "separator";
@@ -223,7 +237,11 @@ public static class DockPresets
 
         IReadOnlyList<DockPreset>[] groups =
         [
-            [new DockPreset(BrowseKey, Localization.Localizer.Get("Preset.Browse"))],
+            [
+                new DockPreset(BrowseKey, Localization.Localizer.Get("Preset.Browse")),
+                new DockPreset(SearchAppsKey, Localization.Localizer.Get("Preset.SearchApps")),
+                new DockPreset(SearchGamesKey, Localization.Localizer.Get("Preset.SearchGames"))
+            ],
             apps,
             [
                 .. Places.Select(place => new DockPreset(place.Key, place.Label, place.Path)),
@@ -239,8 +257,8 @@ public static class DockPresets
     /// Builds the pin for a menu key.
     /// </summary>
     /// <returns>
-    /// A pin, or <see langword="null"/> for <see cref="BrowseKey"/> and for anything whose
-    /// target has since gone missing — the caller decides what to do instead.
+    /// A pin, or <see langword="null"/> for an entry that <see cref="Asks"/> and for anything
+    /// whose target has since gone missing — the caller decides what to do instead.
     /// </returns>
     public static PinnedAppSetting? Create(string key)
     {

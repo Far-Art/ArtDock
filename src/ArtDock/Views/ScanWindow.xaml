@@ -17,7 +17,8 @@
     WindowStartupLocation="CenterOwner">
 
     <!-- Styled by WPF's own Fluent theme, like the other dialogs. Opened from the settings
-         dialog's Exclusions page, over it. -->
+         dialog's Exclusions page and its Add menu, over it, and from the dock's Add menu,
+         which gives it no owner and so has it centred on the screen instead. -->
 
     <Window.Resources>
         <!-- TextBlock is not a Control, and its own default foreground is black; see the

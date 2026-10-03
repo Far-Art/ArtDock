@@ -34,10 +34,19 @@ namespace ArtDock.Views;
 /// and a dispatcher call for each would be the slowest part of looking. The thread is STA,
 /// because reading icons is a shell call. Stop keeps what was found so far.
 /// </para>
+/// <para>
+/// The Add menu's <em>Search apps…</em> and <em>Search games…</em> open it too, to pin what is
+/// ticked (<see cref="ScanPurpose.Pin"/>). The list is the same; what differs is that a row
+/// becomes one pin rather than every program in it — see <see cref="ProgramScan.ToPin"/> — and
+/// that a row is already there when any of its programs is pinned, by its whole path, since a
+/// pin opens one file where the list matches every file of that name.
+/// </para>
 /// </remarks>
 public sealed partial class ScanWindow : Window
 {
     private readonly ScanKind _kind;
+
+    private readonly ScanPurpose _purpose;
 
     /// <summary>What each installed app is called in the Start menu, by its program's path.</summary>
     private readonly Dictionary<string, string> _titles = new(StringComparer.OrdinalIgnoreCase);
@@ -45,7 +54,10 @@ public sealed partial class ScanWindow : Window
     /// <summary>The edge length the row icons are read at: 28 DIPs, crisp at up to 200%.</summary>
     private const int IconPixels = 64;
 
-    /// <summary>The file names already on the list, which are shown ticked and greyed.</summary>
+    /// <summary>
+    /// What is on the list or the dock already, which is shown ticked and greyed: the excluded
+    /// programs, matched by file name, or the pins' targets, matched by path.
+    /// </summary>
     private readonly IReadOnlyCollection<string> _listed;
 
     private readonly DispatcherTimer _progress = new() { Interval = TimeSpan.FromMilliseconds(100) };
@@ -84,14 +96,21 @@ public sealed partial class ScanWindow : Window
     private int _done;
     private int _total;
 
-    public ScanWindow(ScanKind kind, IEnumerable<string> listed)
+    public ScanWindow(ScanKind kind, IEnumerable<string> listed, ScanPurpose purpose = ScanPurpose.Exclude)
     {
         InitializeComponent();
 
         _kind = kind;
+        _purpose = purpose;
         _listed = [.. listed];
         HeadingText.Text = Localizer.Get("Scan.Title");
-        HintText.Text = Localizer.Get(kind == ScanKind.Games ? "Scan.Hint" : "Scan.Hint.Apps");
+        HintText.Text = (kind, purpose) switch
+        {
+            (ScanKind.Games, ScanPurpose.Pin) => Localizer.Get("Scan.Hint.Pin"),
+            (ScanKind.Apps, ScanPurpose.Pin) => Localizer.Get("Scan.Hint.Apps.Pin"),
+            (ScanKind.Games, _) => Localizer.Get("Scan.Hint"),
+            _ => Localizer.Get("Scan.Hint.Apps")
+        };
 
         StopButton.Click += (_, _) =>
         {
@@ -159,7 +178,32 @@ public sealed partial class ScanWindow : Window
             .Select(program => program.Path)
     ];
 
-    private bool IsListed(ScannedProgram program) => FullscreenApps.Contains(_listed, program.Path);
+    /// <summary>
+    /// The rows to pin, each as the one program its pin opens and the name the row goes by, in
+    /// the order the list shows them — which is the order they land on the dock.
+    /// </summary>
+    public IReadOnlyList<(string Path, string Name)> ChosenPins =>
+    [
+        .. (Results.ItemsSource as IEnumerable<object> ?? [])
+            .OfType<ScanRow>()
+            .Where(row => row.IsChecked && row.CanAdd)
+            .Select(row => (ProgramScan.ToPin(row.App).Path, row.Name))
+            .DistinctBy(pin => pin.Path, StringComparer.OrdinalIgnoreCase)
+    ];
+
+    private bool IsListed(ScannedProgram program) => _purpose == ScanPurpose.Pin
+        ? _listed.Contains(program.Path, StringComparer.OrdinalIgnoreCase)
+        : FullscreenApps.Contains(_listed, program.Path);
+
+    /// <summary>
+    /// How many of a row's programs count as there already. For the dock it is all or none:
+    /// the row is one pin, and any of its programs pinned is that pin.
+    /// </summary>
+    private int ListedIn(ScannedApp app)
+    {
+        var listed = app.Programs.Count(IsListed);
+        return _purpose == ScanPurpose.Pin && listed > 0 ? app.Programs.Count : listed;
+    }
 
     // ---- looking ------------------------------------------------------------------------
 
@@ -504,7 +548,8 @@ public sealed partial class ScanWindow : Window
                 underHeading: _kind == ScanKind.Games,
                 _icons.GetValueOrDefault(app.Programs[0].Path),
                 isOpen: app.Programs.Any(program => open.Contains(program.FileName)),
-                listed: app.Programs.Count(IsListed));
+                listed: ListedIn(app),
+                onDock: _purpose == ScanPurpose.Pin);
 
             if (ticked.Contains(row.Key))
             {
@@ -647,6 +692,16 @@ public enum ScanKind
     Apps
 }
 
+/// <summary>What a scan's ticks are for.</summary>
+public enum ScanPurpose
+{
+    /// <summary>The Exclusions page's list: every program in a ticked row.</summary>
+    Exclude,
+
+    /// <summary>The dock: one pin for each ticked row.</summary>
+    Pin
+}
+
 /// <summary>A game's heading in the scan, whose tick is every one of its programs.</summary>
 /// <param name="name">The game.</param>
 /// <param name="source">Where it was found: its launcher, or the folder the user added.</param>
@@ -712,7 +767,8 @@ public sealed class ScanGame(string name, string source, Func<ScanRow, bool> isS
 /// <summary>One row of the scan: an app within a game, and whether it is ticked.</summary>
 /// <param name="underHeading">Whether the row sits under its game's heading, and is indented to say so.</param>
 /// <param name="listed">How many of its programs are on the list already.</param>
-public sealed class ScanRow(ScanGame game, ScannedApp app, bool underHeading, ImageSource? icon, bool isOpen, int listed)
+/// <param name="onDock">Whether the list is the dock's, which a row is on whole or not at all.</param>
+public sealed class ScanRow(ScanGame game, ScannedApp app, bool underHeading, ImageSource? icon, bool isOpen, int listed, bool onDock = false)
     : INotifyPropertyChanged
 {
     public Thickness Margin { get; } = underHeading ? new Thickness(28, 3, 0, 3) : new Thickness(0, 3, 0, 3);
@@ -745,8 +801,8 @@ public sealed class ScanRow(ScanGame game, ScannedApp app, bool underHeading, Im
     /// </summary>
     public bool HasListed => listed > 0;
 
-    public string ListedText => IsListed
-        ? Localizer.Get("Scan.Listed")
+    public string ListedText => onDock ? Localizer.Get("Scan.OnDock")
+        : IsListed ? Localizer.Get("Scan.Listed")
         : Localizer.Format("Scan.PartlyListed", listed, App.Programs.Count);
 
     public bool CanAdd => !IsListed;

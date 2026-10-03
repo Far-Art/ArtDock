@@ -7,7 +7,8 @@ namespace ArtDock.Services;
 public sealed record InstalledApp(string Name, string Path);
 
 /// <summary>
-/// Finds the apps installed on this machine, for the Exclusions page's <em>Scan for apps…</em>.
+/// Finds the apps installed on this machine, for the Exclusions page's <em>Scan for apps…</em>
+/// and the Add menu's <em>Search apps…</em>.
 /// </summary>
 /// <remarks>
 /// <para>

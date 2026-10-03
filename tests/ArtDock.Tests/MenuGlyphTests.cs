@@ -83,7 +83,7 @@ public class MenuGlyphTests
         // what would be the one blank in the menu.
         foreach (var preset in DockPresets.Menu().SelectMany(group => group))
         {
-            var pinsNothingKnown = preset.Key is DockPresets.BrowseKey or DockPresets.SeparatorKey;
+            var pinsNothingKnown = DockPresets.Asks(preset.Key) || preset.Key is DockPresets.SeparatorKey;
             Assert.Equal(pinsNothingKnown, preset.Target is null);
         }
     }

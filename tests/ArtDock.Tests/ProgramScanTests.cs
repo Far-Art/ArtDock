@@ -86,6 +86,31 @@ public class ProgramScanTests : IDisposable
     }
 
     [Fact]
+    public void PinningTheGamesRow_PinsTheStubAtTheTop_NotTheGameBelowIt()
+    {
+        // SC2_x64.exe is what runs, but started by hand it does not: the stub goes through
+        // Battle.net, which is what starting the game means.
+        var row = Assert.Single(ArrangeStarCraft(), app => app.Name == "StarCraft II");
+
+        Assert.Equal(@"E:\Games\StarCraft II\StarCraft II.exe", ProgramScan.ToPin(row).Path);
+    }
+
+    [Fact]
+    public void PinningARow_AtOneDepth_TakesTheProgramWithAnIcon_ThenTheLarger()
+    {
+        var facts = new Dictionary<string, ProgramFacts>
+        {
+            [@"C:\Game\a.exe"] = new("Game", Described: true, HasIcon: false, Size: 900),
+            [@"C:\Game\b.exe"] = new("Game", Described: true, HasIcon: true, Size: 100),
+            [@"C:\Game\c.exe"] = new("Game", Described: true, HasIcon: true, Size: 500)
+        };
+
+        var app = Assert.Single(ProgramScan.Arrange(InOneGame([.. facts.Keys]), _ => DateTime.UnixEpoch, path => facts[path]));
+
+        Assert.Equal(@"C:\Game\c.exe", ProgramScan.ToPin(app).Path);
+    }
+
+    [Fact]
     public void TheErrorReporter_IsAHelper_AndComesLast()
     {
         var apps = ArrangeStarCraft();

@@ -165,6 +165,43 @@ public sealed class PinnedAppsService
         };
 
     /// <summary>
+    /// The pins for what the Add menu's <em>Search apps…</em> or <em>Search games…</em> found,
+    /// each under the name the search showed it by.
+    /// </summary>
+    /// <remarks>
+    /// That name rather than the one <see cref="CreatePin"/> reads off the program: for an app
+    /// it is the Start menu's, which is the name the user knows it by — "Word", not "Microsoft
+    /// Word" — and the one they just ticked. A program gone since the search found it is left
+    /// out, as a drop of one would be.
+    /// </remarks>
+    public static List<PinnedAppSetting> CreateFoundPins(IEnumerable<(string Path, string Name)> found)
+    {
+        var pins = new List<PinnedAppSetting>();
+        foreach (var (path, name) in found)
+        {
+            if (CreatePin(path) is { } pin)
+            {
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    pin.Label = name;
+                }
+
+                pins.Add(pin);
+            }
+        }
+
+        return pins;
+    }
+
+    /// <summary>
+    /// Where the pins open, as paths, for a search to show what is on the dock already.
+    /// </summary>
+    public static IEnumerable<string> TargetPaths(IEnumerable<PinnedAppSetting> pins) =>
+        pins
+            .Where(pin => !pin.IsSeparator && !string.IsNullOrWhiteSpace(pin.TargetPath))
+            .Select(pin => Environment.ExpandEnvironmentVariables(pin.TargetPath!.Trim()));
+
+    /// <summary>
     /// What a pin opening <paramref name="target"/>, or the Store app
     /// <paramref name="aumid"/>, would be called if it were pinned now — which is what the item
     /// editor's <em>Reset</em> puts back. Null when there is nothing to name it from.

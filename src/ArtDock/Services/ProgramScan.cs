@@ -41,7 +41,8 @@ public sealed record ScannedProgram(string Path, string FileName, int Copies, Pr
 public sealed record ScannedApp(string Game, string Name, IReadOnlyList<ScannedProgram> Programs, bool IsHelper);
 
 /// <summary>
-/// Finds the programs in a folder, for the Exclusions page's Scan.
+/// Finds the programs in a folder, for the Exclusions page's Scan and the Add menu's
+/// <em>Search games…</em>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -353,6 +354,33 @@ public static class ProgramScan
             || app.Game.Contains(wanted, StringComparison.CurrentCultureIgnoreCase)
             || app.Programs.Any(program => program.FileName.Contains(wanted, StringComparison.CurrentCultureIgnoreCase));
     }
+
+    /// <summary>
+    /// The one program of a row that a pin should open, when the row is put on the dock.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The list stands down for every program in a row, but a pin opens one. The one nearest
+    /// the top of its folder: StarCraft II's row is <c>StarCraft II.exe</c> at the top of its
+    /// folder and <c>SC2_x64.exe</c> two folders down, and the top one is the stub that goes
+    /// through Battle.net, which is what starting the game means — the one below is what runs
+    /// once it has started, and started by hand it does not.
+    /// </para>
+    /// <para>
+    /// Between programs as deep as each other, the one with an icon of its own, then the
+    /// larger, then by file name so the choice does not change from one look to the next.
+    /// </para>
+    /// </remarks>
+    public static ScannedProgram ToPin(ScannedApp app) =>
+        app.Programs
+            .OrderBy(program => Depth(program.Path))
+            .ThenByDescending(program => program.Facts.HasIcon)
+            .ThenByDescending(program => program.Facts.Size)
+            .ThenBy(program => program.FileName, StringComparer.OrdinalIgnoreCase)
+            .First();
+
+    private static int Depth(string path) =>
+        path.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar);
 
     // ---- helpers --------------------------------------------------------------------
 

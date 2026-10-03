@@ -37,7 +37,8 @@
 
     "Scan.Hint": "Tick a game to exclude all of its programs, or tick them one by one. Programs that give the same name share a row, since a launcher often starts a game under another file name — and a program that never fills the screen changes nothing, so when unsure, tick it. A game that is running is marked Open now and listed first.",
     "Scan.Hint.Apps": "The apps installed on this computer, from the Start menu and the desktop — games are left to Scan for games. Tick the ones the dock should stay down for while they fill the screen: a video player, a browser, a remote desktop. An app that is running is marked Open now and listed first.",
-    "Scan.Add": "Add ticked",
+    "Scan.Hint.Pin": "Tick the games to put on the dock. Programs that give the same name share a row, and become one item — the one nearest the top of the game's folder, which is usually the one that starts it. Within each game the likeliest is listed first, and a game that is running is marked Open now and listed before the rest.",
+    "Scan.Hint.Apps.Pin": "The apps installed on this computer, from the Start menu and the desktop — games are left to Search games. Tick the ones to put on the dock. An app that is running is marked Open now and listed first.",
 
     "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
     "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",

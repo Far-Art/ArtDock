@@ -283,6 +283,34 @@ public class PinCreationTests : IDisposable
     }
 
     [Fact]
+    public void TheSearches_AreOfferedUnderBrowse_AndPinNothingByThemselves()
+    {
+        var first = DockPresets.Menu()[0].Select(entry => entry.Key);
+
+        Assert.Equal(
+            [DockPresets.BrowseKey, DockPresets.SearchAppsKey, DockPresets.SearchGamesKey],
+            first);
+
+        // The caller asks; Create has nothing to make from the key alone.
+        Assert.All(first, key => Assert.True(DockPresets.Asks(key)));
+        Assert.All(first, key => Assert.Null(DockPresets.Create(key)));
+    }
+
+    [Fact]
+    public void APinFromASearch_GoesByTheNameTheSearchShowed()
+    {
+        // The Start menu's name, which is the one the user ticked — not the program's own.
+        var notepad = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "notepad.exe");
+        var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("n") + ".exe");
+
+        var pins = PinnedAppsService.CreateFoundPins([(notepad, "My Notes"), (missing, "Gone")]);
+
+        var pin = Assert.Single(pins);
+        Assert.Equal("My Notes", pin.Label);
+        Assert.Equal(notepad, pin.TargetPath);
+    }
+
+    [Fact]
     public void ANewDock_StartsWithStartThisPcTheUserFolderDownloadsSettingsAndTheRecycleBinApart()
     {
         var settings = new DockSettings();

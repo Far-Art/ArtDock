@@ -361,7 +361,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   brought from another machine — stays chosen, marked as not installed, and the labels fall back
   as WPF does for any missing font. Until 2026-10-01 the lettering was chosen in the item editor
   and written to every pin; a settings file from then gives it to the dock as it is read.
-- **The Add menu offers places and actions, not only apps**: alongside *Browse…* and a few
+- **The Add menu offers places and actions, not only apps**: alongside *Browse…*, the two
+  searches (below, with the scans they share) and a few
   of the machine's own applications, **This PC**, the **User folder**, **Downloads**, the
   **Recycle Bin** and **Start**. They are there because nothing else can supply them, or not as well. This
   PC and the Recycle Bin are shell namespace extensions rather than shortcuts, so the file
@@ -505,6 +506,13 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   console; so is anything inside a game's folder, which *Scan for games…* has. Here it finds
   seventy-three apps in about a second. Store apps are not among them — their Start menu
   entries are not shortcuts — though one that is open is on the *Add* menu.
+- **Both scans pin, too**: the dock's Add menu, and the settings dialog's, have *Search apps…*
+  and *Search games…* under *Browse…*, which open the same dialog to put what is ticked on the
+  dock, after the item the menu was opened on. A row is one pin there, not every program in
+  it: the one nearest the top of its folder, which for StarCraft II is the stub that goes
+  through Battle.net rather than the game two folders down; then the one with an icon, then
+  the larger. An app keeps the name the Start menu gives it. A row with any of its programs
+  pinned already — by its whole path, since a pin opens one file — is shown *On the dock*.
 - **Both scans put the likeliest first, and can be filtered**: *Most likely first* ranks a
   program that is open now above everything, then one whose name is its game's, then one with
   an icon of its own — every game here has one and not one of the crash handlers and
@@ -1240,7 +1248,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Eight hundred and eighty-two tests cover the cosine falloff (peak, range boundary,
+Eight hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1320,7 +1328,10 @@ the user folder's pin carries the name Explorer shows for it, and that a name th
 cannot resolve comes back empty rather than as an exception. Two more cover
 what a new dock starts with — the seven defaults, in order, with the user folder and Downloads
 stored by name rather than as paths and the separator before the Recycle Bin — and that a dock which
-already has pins is left alone.
+already has pins is left alone. And two cover *Search apps…* and *Search games…*: that they come
+straight after *Browse…*, and that `DockPresets.Create` makes nothing for them, the caller doing
+the asking; and that a pin made from what a search found goes by the name the search showed, with
+a program gone since left out.
 
 Twenty-five cover dropping those places, which Explorer drags as a shell ID list and no
 paths. One takes the data object the desktop itself hands to a drag of This PC and the Recycle
@@ -1520,7 +1531,7 @@ bar decides — StarCraft II's window, maximized with no title bar over the whol
 is the case that matters there. Seven held that line once before, and went when the dock came
 to hide for both alike; it came back when the handle was taken off fullscreen windows.
 
-Seventy-two cover the scans' arranging, and the case they are built around is StarCraft II's folder
+Seventy-four cover the scans' arranging, and the case they are built around is StarCraft II's folder
 as it really is on this machine — twelve programs, three of which call themselves
 "StarCraft II". Those three have to come out as one row, the stub and the game together,
 with the error reporter the only thing hidden and last. Two games that each ship a
@@ -1542,6 +1553,9 @@ the game's name outweighing the larger editor, an open program ahead of all of i
 with one open ahead of the other games; a name that is the game's whatever its spacing and
 trademark signs; installed apps ranked as one list, and Windows' tools below them but above a
 program with no icon; and seven the filter, which matches a name, a file name or a game.
+Two cover the one program a row becomes when *Search games…* pins it: StarCraft II's stub at
+the top of its folder, not the game two folders down, which started by hand does not start;
+and between programs as deep as each other, the one with an icon, then the larger.
 The last four walk a real folder made for the test: programs at every
 depth and nothing else — not a `.txt`, not a `game.exe.bak`, not a folder called `Folder.exe`
 — the folders entered counted, none entered once stopped, and a junction pointing back at its

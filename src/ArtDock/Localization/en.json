@@ -220,8 +220,11 @@
     "Scan.None": "No programs were found.",
     "Scan.OpenNow": "Open now",
     "Scan.Listed": "On the list",
+    "Scan.OnDock": "On the dock",
+    "Scan.Hint.Pin": "Check the games to put on the dock. Programs that give the same name share a row, and become one item — the one nearest the top of the game's folder, which is usually the one that starts it. Within each game the likeliest is listed first, and a game that is running is marked Open now and listed before the rest.",
+    "Scan.Hint.Apps.Pin": "The apps installed on this computer, from the Start menu and the desktop — games are left to Search games. Check the ones to put on the dock. An app that is running is marked Open now and listed first.",
     "Scan.PartlyListed": "{0:N0} of {1:N0} on the list",
-    "Scan.Add": "Add checked",
+    "Scan.Add": "Add",
 
     "Library.Steam": "Steam",
     "Library.BattleNet": "Battle.net",
@@ -373,6 +376,8 @@
     "Drop.AlreadyPinned": "Already on the dock",
 
     "Preset.Browse": "Browse…",
+    "Preset.SearchApps": "Search apps…",
+    "Preset.SearchGames": "Search games…",
     "Preset.TaskManager": "Task Manager",
     "Preset.ControlPanel": "Control Panel",
     "Preset.FileExplorer": "File Explorer",
