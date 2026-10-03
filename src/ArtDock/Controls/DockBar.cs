@@ -498,7 +498,7 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private readonly DispatcherTimer _cursorWatch = new()
     {
-        Interval = TimeSpan.FromMilliseconds(32)
+        Interval = PollInterval
     };
 
     public DockBar(DockMetrics metrics)
@@ -541,9 +541,40 @@ public sealed class DockBar : Canvas
     /// <summary>
     /// Raised on every look the dock takes at the pointer, some thirty times a second, whatever it
     /// finds — for what else has to be looked at as often, without a timer of its own to wake the
-    /// machine: the keys the items' numbers wait for.
+    /// machine: the keys the items' numbers wait for, and the window previews.
     /// </summary>
+    /// <remarks>
+    /// From the cursor watch while the dock is idle, and from the frame loop while it runs, at
+    /// most once a <see cref="PollInterval"/> either way (<see cref="RaisePolled"/>). The watch
+    /// alone was not enough: it is a <c>DispatcherTimer</c> at Background priority, and WPF runs
+    /// nothing at that priority while each frame leaves too little of the frame interval over.
+    /// Measured on 2026-10-03 with a frame loop of the dock's kind at 120 Hz: 24 ticks a second
+    /// with up to 6 ms of work a frame, 1.3 with 8 ms — gaps of 1.3 to 1.6 s — and none with 12.
+    /// That was the window previews taking seconds to move to another icon while the wave ran.
+    /// </remarks>
     public event EventHandler? Polled;
+
+    /// <summary>How often <see cref="Polled"/> is raised at most: the cursor watch's interval.</summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(32);
+
+    /// <summary>When <see cref="Polled"/> was last raised, as a <see cref="System.Diagnostics.Stopwatch"/> timestamp.</summary>
+    private long _lastPolled;
+
+    /// <summary>
+    /// Raises <see cref="Polled"/> unless it was raised less than a <see cref="PollInterval"/>
+    /// ago, give or take a couple of milliseconds, so the watch and the frames can both ask.
+    /// </summary>
+    private void RaisePolled()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(_lastPolled, now) < PollInterval - TimeSpan.FromMilliseconds(2))
+        {
+            return;
+        }
+
+        _lastPolled = now;
+        Polled?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Raised when a press on an icon has moved far enough to become a reorder drag.</summary>
     public event EventHandler? DragStarted;
@@ -1890,7 +1921,7 @@ public sealed class DockBar : Canvas
     /// <summary>Wakes the wave as soon as the cursor is over the dock.</summary>
     private void OnCursorWatchTick(object? sender, EventArgs e)
     {
-        Polled?.Invoke(this, EventArgs.Empty);
+        RaisePolled();
 
         // A drop preview holds the dock flat and drives its own redraws; waking the wave
         // here would only start a ramp the next tick immediately cancels.
@@ -2211,6 +2242,9 @@ public sealed class DockBar : Canvas
         // First, while the shape is still the one the last frame drew.
         _frame++;
         AnnounceDrawnBar();
+
+        // The cursor watch may not get a turn at all while frames are being drawn: see Polled.
+        RaisePolled();
 
         _inFrame = true;
         try
