@@ -121,6 +121,9 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <summary>True once it is fading out to close: nothing more is shown in it.</summary>
     private bool _closing;
+
+    /// <summary>The panel this one took over from, while it is still to come in from its place.</summary>
+    private readonly Int32Rect? _followsFrom;
     private bool _shown;
     private bool _disposed;
     private bool _thumbnailsPending;
@@ -137,12 +140,24 @@ internal sealed class PreviewWindow : IDisposable
     /// <param name="animate">Whether it slides, or simply appears and moves.</param>
     /// <param name="rise">How far below its place it starts as it opens, in pixels: no further than
     /// the floor it stands above.</param>
-    public PreviewWindow(PreviewArrangement arrangement, IReadOnlyList<PreviewEntry> entries, bool solid, bool animate, int rise)
+    /// <param name="followsFrom">
+    /// The panel this one takes over from, for another item, as a screen rectangle: it then comes
+    /// in from that one's place, centred where it was, rather than rising. Null for a panel that
+    /// opens.
+    /// </param>
+    public PreviewWindow(
+        PreviewArrangement arrangement,
+        IReadOnlyList<PreviewEntry> entries,
+        bool solid,
+        bool animate,
+        int rise,
+        Int32Rect? followsFrom = null)
     {
         _arrangement = arrangement;
         _entries = entries;
         _animate = animate;
         _rise = Math.Max(0, rise);
+        _followsFrom = followsFrom;
 
         var panel = arrangement.Panel;
         var parameters = new HwndSourceParameters("ArtDockPreviews")
@@ -190,6 +205,9 @@ internal sealed class PreviewWindow : IDisposable
         ScheduleThumbnails();
     }
 
+    /// <summary>Raised once, as the panel first comes onto the screen.</summary>
+    public event EventHandler? Shown;
+
     /// <summary>A card was clicked: go to its window.</summary>
     public event EventHandler<nint>? Chosen;
 
@@ -200,6 +218,9 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <summary>Where the panel is, or is sliding to, in physical screen pixels.</summary>
     public Int32Rect Bounds => _target;
+
+    /// <summary>Where the panel is on the screen at this moment, part way through a slide or not.</summary>
+    public Int32Rect Placed => _placed;
 
     /// <summary>The windows shown, in order.</summary>
     public IReadOnlyList<PreviewEntry> Entries => _entries;
@@ -525,27 +546,43 @@ internal sealed class PreviewWindow : IDisposable
 
         _shown = true;
 
-        // Up from the floor into place and in from nothing, as the taskbar's previews come.
+        // Up from the floor into place and in from nothing, as the taskbar's previews come — or,
+        // taking over from another item's panel, across from where that one is, fading in as
+        // it fades out (see WindowPreviews.Show).
+        var duration = _followsFrom is null ? OpenMs : SwitchMs;
+        var moved = false;
         if (_animate)
         {
             SetLayered(true, alpha: 0);
-            if (_rise > 0)
+            if (_followsFrom is { } from)
+            {
+                var start = new Int32Rect(
+                    from.X + ((from.Width - _target.Width) / 2),
+                    from.Y + from.Height - _target.Height,
+                    _target.Width,
+                    _target.Height);
+                moved = start != _target;
+                Move(start);
+            }
+            else if (_rise > 0)
             {
                 Move(new Int32Rect(_target.X, _target.Y + _rise, _target.Width, _target.Height));
+                moved = true;
             }
         }
 
         NativeMethods.ShowWindow(Hwnd, SW_SHOWNA);
         BringToTop();
+        Shown?.Invoke(this, EventArgs.Empty);
 
         if (_animate)
         {
-            if (_rise > 0)
+            if (moved)
             {
-                SlideTo(OpenMs);
+                SlideTo(duration);
             }
 
-            Fade(fadeIn: true, OpenMs);
+            Fade(fadeIn: true, duration);
         }
     }
 

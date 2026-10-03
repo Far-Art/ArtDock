@@ -48,6 +48,12 @@ internal sealed class WindowPreviews(
     private readonly Dictionary<nint, bool> _canClose = [];
 
     private PreviewWindow? _window;
+
+    /// <summary>
+    /// The panel a new one is taking over from, left on the screen until the new one is on it:
+    /// gone first, it would leave a frame or two with no panel at all.
+    /// </summary>
+    private PreviewWindow? _outgoing;
     private DockItem? _item;
     private PreviewPlace _place;
     private IReadOnlyList<Size> _sizes = [];
@@ -224,17 +230,43 @@ internal sealed class WindowPreviews(
 
         dock.HoldForPreviews(item);
 
-        if (_window is null)
+        // Another item's panel is not changed into this one's: a new panel takes over from it,
+        // made at its own size and coming in from the old one's place while the old one fades
+        // out. Changing it in place meant resizing a window on the screen, and Windows showed the
+        // space it gained, and the old pictures, for a frame or two before WPF had drawn the new
+        // cards — a blink at the start of every switch, the worse the wider the new panel.
+        Int32Rect? followsFrom = null;
+        var previous = _window;
+        if (previous is not null)
         {
-            // It rises the whole gap it keeps from the dock, and no further: see PreviewWindow.
-            var rise = (int)Math.Round(_metrics.Lift * place.Scale);
-            _window = new PreviewWindow(Arrange(entries), entries, _solid, _animate, rise);
-            _window.Chosen += OnChosen;
-            _window.CloseRequested += OnCloseRequested;
+            followsFrom = previous.Placed;
+            previous.Chosen -= OnChosen;
+            previous.CloseRequested -= OnCloseRequested;
+
+            // One panel on its way out at a time: a third app in quick succession sends the first
+            // on its way at once.
+            ReleaseOutgoing();
+            _outgoing = previous;
+            _window = null;
         }
-        else
+
+        // It rises the whole gap it keeps from the dock, and no further: see PreviewWindow.
+        var rise = (int)Math.Round(_metrics.Lift * place.Scale);
+        _window = new PreviewWindow(Arrange(entries), entries, _solid, _animate, rise, followsFrom);
+        _window.Chosen += OnChosen;
+        _window.CloseRequested += OnCloseRequested;
+
+        // The old one fades out as the new one fades in over it — or, not animating, goes the
+        // moment the new one is there.
+        if (previous is not null)
         {
-            _window.Update(Arrange(entries), entries);
+            _window.Shown += (_, _) =>
+            {
+                if (ReferenceEquals(_outgoing, previous))
+                {
+                    ReleaseOutgoing();
+                }
+            };
         }
 
         // The windows' real shapes are DWM's to say, once their pictures are registered — before
@@ -346,8 +378,29 @@ internal sealed class WindowPreviews(
         WindowsApi.RequestClose(window);
     }
 
+    /// <summary>Sends the panel being taken over from on its way: faded out, or at once without animation.</summary>
+    private void ReleaseOutgoing(bool fade = true)
+    {
+        if (_outgoing is not { } outgoing)
+        {
+            return;
+        }
+
+        _outgoing = null;
+        if (fade)
+        {
+            outgoing.FadeAway();
+        }
+        else
+        {
+            outgoing.Dispose();
+        }
+    }
+
     private void Close(bool lingers, bool fade = true)
     {
+        ReleaseOutgoing(fade);
+
         if (_window is { } window)
         {
             window.Chosen -= OnChosen;
