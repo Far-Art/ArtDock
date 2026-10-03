@@ -841,6 +841,58 @@
                             </Grid>
                         </Border>
 
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.WindowPreviews}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.WindowPreviews.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="WindowPreviewsCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.WindowPreviews}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.WindowPreviews.Hint}"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Greyed while the previews are off. -->
+                        <Border x:Name="PreviewDelayCard" Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.PreviewDelay}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.PreviewDelay.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="PreviewDelaySlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.PreviewDelay}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.PreviewDelay.Hint}"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="1000"
+                                    Minimum="0"
+                                    TickFrequency="10" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Behaviour.PreviewDelay.Value"
+                                    loc:Localized.Value="{Binding ElementName=PreviewDelaySlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
                         <Button
                             x:Name="ResetBehaviourButton"
                             Style="{StaticResource PageReset}"

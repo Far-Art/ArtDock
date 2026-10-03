@@ -313,6 +313,9 @@ public sealed partial class SettingsWindow : Window
         AutoHideCheck.IsChecked = settings.AutoHide;
         HideDelaySlider.Value = settings.HideDelayMs;
         RevealDelaySlider.Value = settings.RevealDelayMs;
+        WindowPreviewsCheck.IsChecked = settings.WindowPreviews;
+        PreviewDelaySlider.Value = settings.PreviewDelayMs;
+        UpdatePreviewControls();
         HandleCheck.IsChecked = settings.ShowHandle;
         HandleMatchDockCheck.IsChecked = settings.HandleMatchesDock;
         HandleWidthSlider.Value = settings.HandleWidth;
@@ -356,7 +359,7 @@ public sealed partial class SettingsWindow : Window
                  {
                      BaseSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
                      OpacitySlider, RoundnessSlider, LabelSizeSlider, HideDelaySlider,
-                     RevealDelaySlider, HandleWidthSlider
+                     RevealDelaySlider, PreviewDelaySlider, HandleWidthSlider
                  })
         {
             slider.ValueChanged += (_, _) => Preview();
@@ -380,6 +383,16 @@ public sealed partial class SettingsWindow : Window
         AlwaysOnTopCheck.Unchecked += (_, _) => Preview();
         AutoHideCheck.Checked += (_, _) => Preview();
         AutoHideCheck.Unchecked += (_, _) => Preview();
+        WindowPreviewsCheck.Checked += (_, _) =>
+        {
+            UpdatePreviewControls();
+            Preview();
+        };
+        WindowPreviewsCheck.Unchecked += (_, _) =>
+        {
+            UpdatePreviewControls();
+            Preview();
+        };
         BlurCheck.Checked += (_, _) => Preview();
         BlurCheck.Unchecked += (_, _) => Preview();
         IconShadowsCheck.Checked += (_, _) => Preview();
@@ -605,6 +618,8 @@ public sealed partial class SettingsWindow : Window
             AutoHide = AutoHideCheck.IsChecked == true,
             HideDelayMs = (int)HideDelaySlider.Value,
             RevealDelayMs = (int)RevealDelaySlider.Value,
+            WindowPreviews = WindowPreviewsCheck.IsChecked == true,
+            PreviewDelayMs = (int)PreviewDelaySlider.Value,
             ShowHandle = HandleCheck.IsChecked == true,
             HandleMatchesDock = HandleMatchDockCheck.IsChecked == true,
             HandleWidth = Math.Round(HandleWidthSlider.Value),
@@ -1904,6 +1919,10 @@ public sealed partial class SettingsWindow : Window
         Preview();
     }
 
+    /// <summary>Greys the preview delay while the previews are off: a slider that changes nothing should say so.</summary>
+    private void UpdatePreviewControls() =>
+        PreviewDelayCard.IsEnabled = WindowPreviewsCheck.IsChecked == true;
+
     private void ResetBehaviourPage()
     {
         var defaults = new DockSettings();
@@ -1913,6 +1932,9 @@ public sealed partial class SettingsWindow : Window
         AutoHideCheck.IsChecked = defaults.AutoHide;
         HideDelaySlider.Value = defaults.HideDelayMs;
         RevealDelaySlider.Value = defaults.RevealDelayMs;
+        WindowPreviewsCheck.IsChecked = defaults.WindowPreviews;
+        PreviewDelaySlider.Value = defaults.PreviewDelayMs;
+        UpdatePreviewControls();
         HandleCheck.IsChecked = defaults.ShowHandle;
         HandleMatchDockCheck.IsChecked = defaults.HandleMatchesDock;
         HandleWidthSlider.Value = defaults.HandleWidth;

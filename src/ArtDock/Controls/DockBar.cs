@@ -371,6 +371,12 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private bool _focusIsPreview;
 
+    /// <summary>
+    /// The item whose window previews are open, by id; null while they are closed. See
+    /// <see cref="HoldForPreviews"/>.
+    /// </summary>
+    private string? _previewsFor;
+
     /// <summary>Whether the settings dialog is open and showing the dock off.</summary>
     /// <remarks>
     /// What the dock goes back to when a menu or a dialog lets go of the item it was holding:
@@ -538,6 +544,9 @@ public sealed class DockBar : Canvas
     /// machine: the keys the items' numbers wait for.
     /// </summary>
     public event EventHandler? Polled;
+
+    /// <summary>Raised when a press on an icon has moved far enough to become a reorder drag.</summary>
+    public event EventHandler? DragStarted;
 
     /// <summary>Raised when a drag has moved an icon to a new position.</summary>
     public event EventHandler<(int From, int To)>? Reordered;
@@ -1413,6 +1422,42 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public bool IsHoldingLabel => _focusIndex >= 0 && _focusShowsLabel && !_focusIsPreview;
 
+    /// <summary>
+    /// Holds the wave on the item whose window previews are open, with no label, for as long as
+    /// the pointer is off the dock — on its way up to the previews, or on them; null lets go.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not a <see cref="FocusItem"/> hold, which would lock the pointer out of the dock: the
+    /// pointer coming back onto the dock takes the wave as it always does, and the previews go
+    /// with it or close. A menu's or a dialog's hold outranks this one, and this one outranks the
+    /// settings dialog's preview, which takes the wave back when this lets go.
+    /// </para>
+    /// <para>
+    /// Without it the icon falls back into the row as the pointer climbs off it, and the previews
+    /// are left floating over a dock that no longer reaches them. The label gives way: the
+    /// previews' own titles say what it would, and it would stand where they stand.
+    /// </para>
+    /// </remarks>
+    public void HoldForPreviews(DockItem? item)
+    {
+        var id = item?.Id;
+        if (id == _previewsFor)
+        {
+            return;
+        }
+
+        _previewsFor = id;
+
+        // The hold is applied by the frame loop, which may be idle with the pointer away.
+        EnsureRendering();
+        InvalidateVisual();
+    }
+
+    /// <summary>Where the item <see cref="HoldForPreviews"/> holds is in the row; -1 for none.</summary>
+    private int PreviewsIndex =>
+        _previewsFor is null ? -1 : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
+
     /// <summary>Releases a claim taken by <see cref="FocusItem"/>, if it is still the current one.</summary>
     public void ReleaseFocus(int claim)
     {
@@ -1966,6 +2011,7 @@ public sealed class DockBar : Canvas
 
             _dragging = true;
             _dragIndex = _pressedIndex;
+            DragStarted?.Invoke(this, EventArgs.Empty);
         }
 
         _dragTarget = SlotAt(local.X);
@@ -2283,6 +2329,21 @@ public sealed class DockBar : Canvas
 
         UpdateHovered(local: null);
 
+        // The window previews are open and the pointer has gone up to them: the wave stays on
+        // their item, under them, with the demonstration standing aside as it does for the
+        // pointer. Before the settings dialog's preview, which takes the wave back afterwards.
+        if (PreviewsIndex is var held and >= 0)
+        {
+            _sweepYielded |= _sweeping;
+            SetWaveCentre(_layout.RestingCentre(held), WaveDriver.Parked);
+            if (_rampTo < 1)
+            {
+                StartRamp(1, EnterRampMs);
+            }
+
+            return;
+        }
+
         if (_sweeping && PreviewedItem is null)
         {
             // Nobody is pointing at it, so the demonstration takes over again — picking up
@@ -2448,9 +2509,6 @@ public sealed class DockBar : Canvas
                 && local.Y <= ActualHeight;
         }
 
-        var overflow = Math.Max(0, Metrics.MaxSize - Metrics.BaseSize);
-        var barTop = BarBottom - Metrics.BarHeight;
-
         // While the bar is opening or closing over a change of contents this runs a slot
         // ahead of it for a few frames, which is the safe direction: a zone that lagged the
         // bar would drop the pointer part-way through the animation.
@@ -2458,10 +2516,38 @@ public sealed class DockBar : Canvas
 
         return local.X >= left
             && local.X <= right
-            && local.Y >= barTop - overflow
+            && local.Y >= HoverTop
             // Down to the window's edge rather than the bar's: the strip the shadow falls
             // into still reads as "on the dock" to anyone moving the pointer there.
             && local.Y <= ActualHeight;
+    }
+
+    /// <summary>
+    /// The top of the space that counts as "on the dock", in this element's coordinates: the
+    /// bar's top raised by as far as a fully magnified icon reaches above it.
+    /// </summary>
+    /// <remarks>
+    /// Fixed for the metrics, not for the wave, so a window placed above it — the window
+    /// previews — never meets an icon however the wave moves. Anything of ours reaching below it
+    /// would cover the dock's own space, and the dock counts its own windows as covering it.
+    /// </remarks>
+    public double HoverTop =>
+        BarBottom - Metrics.BarHeight - Math.Max(0, Metrics.MaxSize - Metrics.BaseSize);
+
+    /// <summary>
+    /// Where an item's middle is drawn while the wave is parked on it, in this element's
+    /// coordinates; null when the dock does not have it.
+    /// </summary>
+    public double? HeldCentreX(DockItem item)
+    {
+        var index = IndexOfItem(item);
+        return index < 0 ? null : RestingBarLeft() + _layout.HeldCentre(_items.Count, index);
+    }
+
+    private int IndexOfItem(DockItem item)
+    {
+        var index = _items.FindIndex(visual => ReferenceEquals(visual.Item, item));
+        return index >= 0 ? index : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == item.Id);
     }
 
     private void AdvanceRamp(double deltaMs)
@@ -3130,11 +3216,13 @@ public sealed class DockBar : Canvas
         // The item selected in the settings dialog is labelled as a hovered one would be, for
         // as long as the wave is parked on it: a pointer on the dock takes the wave, and the
         // label goes with it.
+        var held = PreviewsIndex;
         var labelled = _hoveredIndex >= 0 ? _hoveredIndex
-            : PreviewedItem is not null && _driver == WaveDriver.Parked ? _focusIndex
+            : PreviewedItem is not null && _driver == WaveDriver.Parked && held < 0 ? _focusIndex
             : -1;
 
-        if (labelled < 0 || labelled >= _items.Count || _progress < 0.5)
+        // The window previews stand where the label would, and their titles say what it would.
+        if (labelled < 0 || labelled >= _items.Count || labelled == held || _progress < 0.5)
         {
             return;
         }

@@ -43,6 +43,28 @@ public class SettingsPortabilityTests : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// The window previews are on for a new dock, and for one set up before they existed —
+    /// decided on 2026-10-02, so a missing property reads as on rather than off.
+    /// </summary>
+    [Fact]
+    public void WindowPreviews_AreOnForANewDock_AndForAFileFromBeforeThem()
+    {
+        Assert.True(new DockSettings().WindowPreviews);
+        Assert.True(SettingsStore.Import(Write("before-previews.json", """{ "AutoHide": true, "HideDelayMs": 900 }""")).WindowPreviews);
+    }
+
+    /// <summary>
+    /// The previews' wait is 250 ms for a new dock and for one from before it could be set —
+    /// shorter than the taskbar's 400, which they waited at first and felt slower than.
+    /// </summary>
+    [Fact]
+    public void PreviewDelay_Is250ForANewDock_AndForAFileFromBeforeIt()
+    {
+        Assert.Equal(250, new DockSettings().PreviewDelayMs);
+        Assert.Equal(250, SettingsStore.Import(Write("before-delay.json", """{ "WindowPreviews": true }""")).PreviewDelayMs);
+    }
+
     [Fact]
     public void AFreshSettingsObject_CarriesTheCurrentFormat()
     {
@@ -60,6 +82,8 @@ public class SettingsPortabilityTests : IDisposable
             BarOpacity = 0.5,
             AutoHide = true,
             HideDelayMs = 900,
+            WindowPreviews = false,
+            PreviewDelayMs = 620,
             BottomMargin = 21,
             OffsetAlongEdge = -0.35,
             LabelFontFamily = "Georgia",
@@ -85,6 +109,8 @@ public class SettingsPortabilityTests : IDisposable
         Assert.Equal(original.BarOpacity, back.BarOpacity);
         Assert.Equal(original.AutoHide, back.AutoHide);
         Assert.Equal(original.HideDelayMs, back.HideDelayMs);
+        Assert.Equal(original.WindowPreviews, back.WindowPreviews);
+        Assert.Equal(original.PreviewDelayMs, back.PreviewDelayMs);
 
         // The one setting with no control on any page. It rides along in the file, so an
         // import has to bring it back or a hand-tuned margin is lost by round-tripping.

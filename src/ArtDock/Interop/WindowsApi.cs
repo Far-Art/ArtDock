@@ -193,6 +193,119 @@ internal static class WindowsApi
         }
     }
 
+    // ---- closing another program's window ------------------------------------------
+
+    private const uint WM_CLOSE = 0x0010;
+    private const int TokenQuery = 0x0008;
+    private const int TokenIntegrityLevel = 25;
+
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    [DllImport("kernel32.dll")]
+    private static extern nint GetCurrentProcess();
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenProcessToken(nint process, int access, out nint token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetTokenInformation(nint token, int infoClass, nint info, int length, out int returned);
+
+    [DllImport("advapi32.dll")]
+    private static extern nint GetSidSubAuthorityCount(nint sid);
+
+    [DllImport("advapi32.dll")]
+    private static extern nint GetSidSubAuthority(nint sid, int index);
+
+    /// <summary>
+    /// Asks a window to close, as its title bar's close button does: a <c>WM_CLOSE</c> posted to
+    /// it, which leaves any question about unsaved work to the program.
+    /// </summary>
+    /// <returns>False when it could not be posted — a window of a program above the dock's
+    /// integrity level, which Windows does not let an unelevated program send to.</returns>
+    internal static bool RequestClose(nint hwnd) => PostMessage(hwnd, WM_CLOSE, 0, 0);
+
+    /// <summary>
+    /// Whether the dock can close a window: true unless its program runs at a higher integrity
+    /// level than the dock — elevated — or that cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// Measured against Task Manager (TODO.md, *Resolved*): the level of an elevated program
+    /// reads from the unelevated dock, and a <c>WM_CLOSE</c> posted to its window fails with
+    /// error 5. Asked rather than tried, so a close button that would do nothing is not drawn.
+    /// </remarks>
+    internal static bool CanClose(nint hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var processId);
+        if (processId == 0)
+        {
+            return false;
+        }
+
+        var ours = IntegrityLevel(0);
+        var theirs = IntegrityLevel(processId);
+        return ours is { } own && theirs is { } other && other <= own;
+    }
+
+    /// <summary>A process's integrity level (0x2000 medium, 0x3000 high); 0 for this one; null when unreadable.</summary>
+    private static int? IntegrityLevel(uint processId)
+    {
+        var process = processId == 0 ? GetCurrentProcess() : OpenProcess(ProcessQueryLimitedInformation, false, processId);
+        if (process == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!OpenProcessToken(process, TokenQuery, out var token))
+            {
+                return null;
+            }
+
+            try
+            {
+                GetTokenInformation(token, TokenIntegrityLevel, 0, 0, out var length);
+                if (length <= 0)
+                {
+                    return null;
+                }
+
+                var buffer = Marshal.AllocHGlobal(length);
+                try
+                {
+                    if (!GetTokenInformation(token, TokenIntegrityLevel, buffer, length, out _))
+                    {
+                        return null;
+                    }
+
+                    // TOKEN_MANDATORY_LABEL starts with the label's SID; its last sub-authority is the level.
+                    var sid = Marshal.ReadIntPtr(buffer);
+                    var count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+                    return count == 0 ? null : Marshal.ReadInt32(GetSidSubAuthority(sid, count - 1));
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+            finally
+            {
+                CloseHandle(token);
+            }
+        }
+        finally
+        {
+            if (processId != 0)
+            {
+                CloseHandle(process);
+            }
+        }
+    }
+
     internal static string GetWindowTitle(nint hwnd)
     {
         var length = GetWindowTextLength(hwnd);

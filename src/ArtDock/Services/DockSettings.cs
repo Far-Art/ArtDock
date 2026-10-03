@@ -544,6 +544,29 @@ public sealed class DockSettings
     public int RevealDelayMs { get; set; } = 300;
 
     /// <summary>
+    /// Whether resting the pointer on a running app's icon shows its windows, live, above it —
+    /// the taskbar's previews, on the dock.
+    /// </summary>
+    /// <remarks>
+    /// On by default, for a dock already set up as much as for a new one: a settings file from
+    /// before the previews has no such property and reads as on, decided on 2026-10-02. They
+    /// open after <see cref="PreviewDelayMs"/> and close after <see cref="HideDelayMs"/> with the
+    /// pointer elsewhere.
+    /// </remarks>
+    public bool WindowPreviews { get; set; } = true;
+
+    /// <summary>
+    /// How long the pointer rests on a running app's icon before its window previews open.
+    /// </summary>
+    /// <remarks>
+    /// Its own setting since 2026-10-03, asked for once the previews had been seen: they first
+    /// waited as long as the taskbar's (<c>ExtendedUIHoverTime</c>, 400 ms unless set), and felt
+    /// slower than the taskbar's all the same — the icons grow and shift under a pointer arriving
+    /// on the dock, and each icon it lands on starts the wait again. Shorter by default for that.
+    /// </remarks>
+    public int PreviewDelayMs { get; set; } = 250;
+
+    /// <summary>
     /// Whether a slim handle marks where the dock is while it cannot be seen — slid away by
     /// auto-hide, or under the windows in front.
     /// </summary>
@@ -1005,6 +1028,8 @@ public sealed class DockSettings
         AutoHide = AutoHide,
         HideDelayMs = HideDelayMs,
         RevealDelayMs = RevealDelayMs,
+        WindowPreviews = WindowPreviews,
+        PreviewDelayMs = PreviewDelayMs,
         ShowHandle = ShowHandle,
         HandleMatchesDock = HandleMatchesDock,
         HandleWidth = HandleWidth,

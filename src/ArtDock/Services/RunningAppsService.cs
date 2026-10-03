@@ -47,6 +47,11 @@ public sealed class RunningAppsService : IDisposable
     private readonly List<nint> _hooks = [];
     private readonly Dictionary<string, int> _cycleIndex = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>When each open window was first seen, for <see cref="WindowsOf"/>.</summary>
+    private readonly Dictionary<nint, long> _firstSeen = [];
+
+    private long _nextSeen;
+
     private bool _disposed;
 
     public RunningAppsService()
@@ -72,6 +77,14 @@ public sealed class RunningAppsService : IDisposable
 
     /// <summary>True when <paramref name="executablePath"/> has at least one open window.</summary>
     public bool IsRunning(string? executablePath) => FindWindows(executablePath).Count > 0;
+
+    /// <summary>
+    /// The open windows of a pinned target, in the order they were first seen — the order the
+    /// window previews show them in, which does not change as the user moves between them.
+    /// </summary>
+    /// <remarks>A copy: the census replaces its lists, but a caller may hold this one.</remarks>
+    public IReadOnlyList<nint> WindowsOf(string? executablePath) =>
+        WindowOrder.Arrange(FindWindows(executablePath), _firstSeen);
 
     /// <summary>
     /// Open windows for a pinned target: an exact image-path match if there is one, otherwise
@@ -212,6 +225,7 @@ public sealed class RunningAppsService : IDisposable
     private void Rescan()
     {
         var fresh = Census();
+        _nextSeen = WindowOrder.Note(_firstSeen, [.. fresh.Values.SelectMany(windows => windows)], _nextSeen);
 
         if (SameAsBefore(fresh))
         {

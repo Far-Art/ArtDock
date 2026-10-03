@@ -79,6 +79,17 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   alongside the hovered one.
 - **Launches pinned apps**, or raises them if they already have a window. Clicking an app
   that is already in front cycles through its windows.
+- **Shows an app's windows, live, above its icon**: rest the pointer on a running app for the
+  *Preview delay* (250 ms unless changed), and a panel of cards comes up over it, a picture of each window
+  under its title — Windows' own thumbnails, which cost the dock nothing however fast the
+  window changes. Click a card to go to that window; its close button, or a middle click,
+  closes it, except a window of a program running as administrator, which the dock cannot
+  close and offers no button for. The panel rises and fades in as it opens, slides across to
+  another running app when the pointer rests on that one, and fades out as it closes, as
+  Windows' does — none of it with *Reduce motion* or Windows' animations off. Too
+  many windows to fit across the display are shrunk alike, then listed by title. The icon
+  stays magnified under the panel while the pointer is on it, and a click on the icon still
+  cycles. On by default, on the Behaviour page, with the delay beside it.
 - **Shows a dot** under every app that has an open window, kept current by window events
   rather than polling. A pinned shortcut is matched by what it points at, so one dragged
   out of the Start menu lights up like anything else.
@@ -1113,8 +1124,9 @@ smaller things: sharpening the acrylic backdrop, and the Exclusions page's blind
 apps.
 
 Asked for, and not begun: starting an item as administrator from its menu, with
-Ctrl+Shift+click, or with Ctrl+Shift+Enter from the keyboard; and previews of an app's windows
-on resting the pointer on its icon, or pressing Up from the keyboard, as the taskbar shows them.
+Ctrl+Shift+click, or with Ctrl+Shift+Enter from the keyboard; and the window previews from the
+keyboard, opened by pressing Up, as the taskbar's are. The previews themselves are built, and
+not yet tried on screen.
 
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
@@ -1134,7 +1146,13 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 - **Running-app matching falls back to file name.** Several Windows 11 apps are launcher
   stubs — pinned `notepad.exe` starts a process under `WindowsApps`. Matching on file name
   covers that, at the cost of a possible false positive between two different apps that share
-  an executable name.
+  an executable name — which the window previews show plainly, with the other app's windows
+  under the icon.
+- **The window previews do not peek.** Resting on one of the taskbar's previews shows that
+  window alone on the desktop; what does that is not public, and the dock does not use it. Nor
+  are the pictures' corners rounded: DWM draws a thumbnail over everything in its rectangle.
+- **No previews for a Store app pinned by its app id**, which has no running dot either, and
+  none of windows on another virtual desktop, which Windows hides from the census.
 - **The bottom edge only.** The Position page has no choice of edge: the dock's geometry is
   written across the screen rather than down it, so a side dock is a change to the whole
   layout rather than a setting. Left and right used to be offered greyed out and were taken
@@ -1198,7 +1216,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-Eight hundred and twenty-eight tests cover the cosine falloff (peak, range boundary,
+Eight hundred and seventy-one tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1681,6 +1699,21 @@ turned on meanwhile has the dock from then on; turned off again before the hold 
 dock is put away as before. And two read the source, to keep the hotkeys that hide the dock and
 open the settings asking before the keyboard lets go of it — the other order puts the dock away
 as the keys let go, and the toggle then brings it straight back, or the dialog a moment later.
+
+Forty-three cover the window previews. Their layout: a window's shape kept inside the picture
+box, whatever its size or a size that could not be read; a narrow window still given room for
+its title; every part inside its card and every card inside the panel, in order and apart; the
+panel centred on the icon, kept on the display at both ends and on the left-hand display in its
+own coordinates, scaled by half again at 150%, and always standing clear of the dock; a row too
+wide shrunk alike until it fits, then a list, and a list too tall cut to what fits. Their timing:
+opening after the hover time and not before, the wait starting again on another icon, never
+with a button down; staying open on the panel however long, closing after the leave time
+elsewhere and not while on another icon; moving to another app only after resting on it, so
+cutting across a neighbour on the way up does not; and a dismissed item staying shut until the
+pointer has left it, while another still opens. The windows kept in the order first seen, a
+new one last and a closed one forgotten; the held icon drawn where the wave puts it, carried
+outward at the ends; and the setting on, and the delay 250 ms, for a new dock and a file from
+before them, both carried through an export.
 
 ## Licence
 

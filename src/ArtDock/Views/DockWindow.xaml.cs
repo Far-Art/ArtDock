@@ -81,6 +81,9 @@ public sealed partial class DockWindow : Window
     /// <summary>The handle that marks the dock while it is out of sight; made the first time it is wanted.</summary>
     private HandleWindow? _handle;
 
+    /// <summary>The previews of a running app's windows, above its icon — see <see cref="WindowPreviews"/>.</summary>
+    private WindowPreviews? _previews;
+
     /// <summary>
     /// Looks, a few times a second, at what is in front of the dock's display — see
     /// <see cref="CheckFront"/>.
@@ -193,7 +196,14 @@ public sealed partial class DockWindow : Window
 
         _frontWatch.Tick += (_, _) => CheckFront();
         _onForeground = (_, _, _, _, _, _, _) => CheckFront(foregroundChanged: true);
-        _dock.Polled += (_, _) => WatchWinCtrl();
+        _dock.Polled += (_, _) =>
+        {
+            WatchWinCtrl();
+            _previews?.Poll(PreviewsAllowed());
+        };
+
+        // A press that has become a drag is moving an icon, not choosing a window.
+        _dock.DragStarted += (_, _) => _previews?.Dismiss();
 
         _runningApps.Changed += OnRunningAppsChanged;
         _settings.Changed += (_, updated) => Dispatcher.Invoke(() => ApplySettings(updated));
@@ -212,6 +222,7 @@ public sealed partial class DockWindow : Window
             _hotkeys?.Dispose();
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _previews?.Dispose();
             _runningApps.Dispose();
             _backdrop?.Dispose();
             _binWatch?.Dispose();
@@ -328,6 +339,12 @@ public sealed partial class DockWindow : Window
                 SyncHandle();
             }
 
+            // Previews over a dock on its way away would be left standing over nothing.
+            if (!IsDockShown)
+            {
+                _previews?.Dismiss();
+            }
+
             // As the dock starts to leave or to come back, not as it lands: IsDockShown counts a
             // dock on its way as where it is going.
             if (IsDockShown != _shownAnnounced)
@@ -351,6 +368,14 @@ public sealed partial class DockWindow : Window
         // Against this window, which is where WM_HOTKEY arrives; registered by ApplySettings.
         _hotkeys = new HotkeyRegistry(source.Handle);
         _hotkeys.TakenChanged += (_, _) => TakenHotkeysChanged?.Invoke(this, EventArgs.Empty);
+
+        // Before the first ApplySettings, which configures them.
+        _previews = new WindowPreviews(
+            _dock,
+            _runningApps,
+            id => _items.FirstOrDefault(item => item.Id == id),
+            PreviewPlaceFor,
+            (hold, lingers) => _autoHide?.HoldRevealed(hold, lingers));
 
         ApplySettings(_settings.Current);
 
@@ -405,6 +430,15 @@ public sealed partial class DockWindow : Window
             autoHide.RevealDelay = TimeSpan.FromMilliseconds(settings.RevealDelayMs);
             autoHide.SetEnabled(settings.AutoHide);
         }
+
+        // The previews are Windows' look, not the bar's, so the dock's own blur setting is not
+        // theirs; only No GPU, which takes every material away, makes them solid.
+        _previews?.Configure(
+            settings.WindowPreviews,
+            settings.PreviewDelayMs,
+            settings.HideDelayMs,
+            solid: settings.NoGpu,
+            animate: !settings.ReduceMotion && SystemParameters.ClientAreaAnimation);
 
         // After auto-hide has been told: turning it off brings the dock back, and the handle
         // goes with that — but turning the handle itself on or off changes nothing auto-hide
@@ -862,6 +896,9 @@ public sealed partial class DockWindow : Window
         // Whatever DragLeave may have just claimed, the drag is plainly still here.
         _dropLeaving = false;
 
+        // Something is being carried onto the dock: the previews would only be in its way.
+        _previews?.Dismiss();
+
         e.Effects = PrepareDrop(e) ? DroppedItems.Effect(e.AllowedEffects) : DragDropEffects.None;
         var pinnable = e.Effects != DragDropEffects.None;
         e.Handled = true;
@@ -1231,6 +1268,7 @@ public sealed partial class DockWindow : Window
         // Hold the icon the menu belongs to: magnified, label showing, so it is obvious
         // which one is about to be edited or removed. Released when the menu goes, whether
         // anything was chosen or not.
+        _previews?.Dismiss();
         HoldRevealed(true);
         var claim = item is null ? 0 : _dock.FocusItem(item);
 
@@ -1461,7 +1499,12 @@ public sealed partial class DockWindow : Window
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) =>
-        Dispatcher.Invoke(() => ApplySettings(_applied));
+        Dispatcher.Invoke(() =>
+        {
+            // Placed for a display that has just changed under them.
+            _previews?.Dismiss();
+            ApplySettings(_applied);
+        });
 
     /// <summary>
     /// Re-anchors when the taskbar takes or gives back room on the dock's display.
@@ -1506,6 +1549,9 @@ public sealed partial class DockWindow : Window
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
+
+        // A panel belongs to one display; the dock has just gone to another.
+        _previews?.Dismiss();
 
         // Posted rather than run here.
         //
@@ -1831,11 +1877,13 @@ public sealed partial class DockWindow : Window
             switch (action)
             {
                 case FrontAction.HideOutranked:
+                    _previews?.Dismiss();
                     StandAside(WindowsApi.GetForegroundWindow());
                     _autoHide?.Yield(true);
                     break;
 
                 case FrontAction.Hide:
+                    _previews?.Dismiss();
                     StepBack();
                     _autoHide?.Yield(true);
                     break;
@@ -1850,6 +1898,12 @@ public sealed partial class DockWindow : Window
         if (!CheckSight() && marked)
         {
             SyncHandle();
+        }
+
+        // A click anywhere else changes the foreground, and is the dock's only word of it.
+        if (foregroundChanged)
+        {
+            _previews?.ForegroundChanged();
         }
 
         KeepHandleOnTop(overOthers: foregroundChanged);
@@ -1869,12 +1923,16 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private void KeepHandleOnTop(bool overOthers = false)
     {
+        ReadOnlySpan<nint> dock = [_chrome?.Hwnd ?? 0, _backdrop?.Hwnd ?? 0];
+
+        // The window previews too, which a raise of the dock would otherwise bury.
+        _previews?.KeepOnTop(dock);
+
         if (_handle is not { } handle)
         {
             return;
         }
 
-        ReadOnlySpan<nint> dock = [_chrome?.Hwnd ?? 0, _backdrop?.Hwnd ?? 0];
         handle.KeepOnTop(overOthers, dock);
     }
 
@@ -2404,6 +2462,8 @@ public sealed partial class DockWindow : Window
             return;
         }
 
+        _previews?.Dismiss();
+
         if (_keys is null)
         {
             _keys = new KeyboardHost();
@@ -2712,7 +2772,51 @@ public sealed partial class DockWindow : Window
         return items;
     }
 
-    private void OnItemActivated(object? sender, DockItem item) => Open(item);
+    private void OnItemActivated(object? sender, DockItem item)
+    {
+        // The click goes on cycling the app's windows, as it did before there were previews;
+        // the previews are for choosing, and close for the window the click brings up.
+        _previews?.Dismiss();
+        Open(item);
+    }
+
+    /// <summary>
+    /// Whether the window previews may be up: the dock settled on screen, and nothing else — a
+    /// menu, a dialog's hold on an item, the keyboard — in charge of it.
+    /// </summary>
+    private bool PreviewsAllowed() =>
+        !_closed && IsSettled && !_keyboard && !_dock.IsHoldingLabel;
+
+    /// <summary>
+    /// Where an item's window previews go: over the icon as the wave holds it, above the dock's
+    /// hover zone, on the dock's display — all in physical pixels, and for a dock still sliding
+    /// up, where it will be once it has.
+    /// </summary>
+    private PreviewPlace? PreviewPlaceFor(DockItem item)
+    {
+        if (_chrome is null || PresentationSource.FromVisual(_dock) is null || _workArea.IsEmpty
+            || _dock.HeldCentreX(item) is not { } centre)
+        {
+            return null;
+        }
+
+        var anchor = _dock.PointToScreen(new Point(centre, _dock.HoverTop));
+        var lift = _shownTop is { } shown && NativeMethods.GetWindowRect(_chrome.Hwnd, out var actual)
+            ? shown - actual.Top
+            : 0;
+
+        var work = new Int32Rect(
+            (int)Math.Round(_workArea.X),
+            (int)Math.Round(_workArea.Y),
+            (int)Math.Round(_workArea.Width),
+            (int)Math.Round(_workArea.Height));
+
+        return new PreviewPlace(
+            work,
+            MonitorDpi.ScaleForWindow(_chrome.Hwnd),
+            (int)Math.Round(anchor.X),
+            (int)Math.Floor(anchor.Y) + lift);
+    }
 
     /// <summary>
     /// Click behaviour: raise the app if it already has a window, otherwise start it.

@@ -218,6 +218,30 @@ public sealed class DockLayout(DockMetrics metrics)
             : RestingWidth(count) + (MaxLift(count) * Math.Clamp(amplitude, 0, 1));
 
     /// <summary>
+    /// Where an icon's middle is drawn while a full wave is parked on it, from the resting bar's
+    /// left edge.
+    /// </summary>
+    /// <remarks>
+    /// Its resting centre in the middle of a long row, where the wave lifts as much on one side
+    /// as the other. Towards an end it is not: the icon has fewer neighbours on that side to push
+    /// away, the row grows mostly the other way, and growing about its middle carries the icon
+    /// outward, by up to half its own growth. What the window previews are centred on, so they
+    /// stand over the icon as it is drawn rather than over where it rests.
+    /// </remarks>
+    public double HeldCentre(int count, int index)
+    {
+        if (count <= 0 || index < 0 || index >= count)
+        {
+            return 0;
+        }
+
+        var sizes = Sizes(count, RestingCentre(index));
+        var offsets = Offsets(sizes);
+        var lift = BarWidth(sizes) - RestingWidth(count);
+        return offsets[index] + (sizes[index] / 2) - (lift / 2);
+    }
+
+    /// <summary>
     /// Holds a dragged icon's left edge inside the bar.
     /// </summary>
     /// <remarks>

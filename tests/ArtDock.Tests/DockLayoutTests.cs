@@ -343,4 +343,48 @@ public class DockLayoutTests
         Assert.Null(fresh.InfluenceRange);
         Assert.Null(fresh.Gap);
     }
+
+    // ---- the icon the window previews hold ------------------------------------------------
+
+    [Fact]
+    public void AHeldIcon_InTheMiddleOfALongRow_IsDrawnWhereItRests()
+    {
+        var layout = Layout();
+        Assert.Equal(layout.RestingCentre(4), layout.HeldCentre(9, 4), 6);
+    }
+
+    [Fact]
+    public void AHeldIcon_AtEitherEnd_IsCarriedOutward_ByNoMoreThanHalfItsGrowth()
+    {
+        var layout = Layout();
+        var growth = Metrics.MaxSize - Metrics.BaseSize;
+
+        var first = layout.HeldCentre(9, 0) - layout.RestingCentre(0);
+        Assert.InRange(first, -growth / 2, -0.01);
+
+        var last = layout.HeldCentre(9, 8) - layout.RestingCentre(8);
+        Assert.InRange(last, 0.01, growth / 2);
+    }
+
+    [Fact]
+    public void AHeldIcon_IsWhereTheRowDrawsIt()
+    {
+        var layout = Layout();
+        const int Count = 6;
+        const int Index = 1;
+
+        var sizes = layout.Sizes(Count, layout.RestingCentre(Index));
+        var offsets = layout.Offsets(sizes);
+        var barLeft = -((layout.BarWidth(sizes) - layout.RestingWidth(Count)) / 2);
+        Assert.Equal(barLeft + offsets[Index] + (sizes[Index] / 2), layout.HeldCentre(Count, Index), 6);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(3, -1)]
+    [InlineData(3, 3)]
+    public void NoSuchIcon_HeldAtNothing(int count, int index)
+    {
+        Assert.Equal(0, Layout().HeldCentre(count, index));
+    }
 }
