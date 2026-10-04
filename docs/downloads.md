@@ -138,6 +138,18 @@ dialog open on the About page, so the new version number is the first thing show
 the setup did not install — a build run from the source tree, as `ArtDock.cmd` runs it —
 says so on the card and offers nothing.
 
+**Skipped versions are skipped.** A copy any number of versions behind is offered the newest
+release and goes straight to it; nothing in between is installed, and a new user's setup is
+the newest one's. Velopack reads the ten newest releases and merges their feeds, so a copy up
+to ten versions behind can chain the releases' deltas, each from the release before it, when
+the chain is smaller than the full package; further behind, or when a delta fails to apply, it
+downloads the full package. That holds only while nothing in the dock depends on having run a
+particular version: no work is done in an update hook, and the settings are brought up to date
+when they are read (`DockSettings.Migrate`), one `Version < n` step after another, every step
+kept for good — so a file of any age reaches the current format in one start. A step removed,
+or an upgrade done once on update rather than on read, breaks every copy that skipped the
+version doing it.
+
 **Never unannounced.** The dock sits on screen all day. Nothing goes online until the button
 is pressed, nothing is applied until it is pressed again for the version found, and the card
 says before then that the dock will close. A setting to check by itself is not built, and
