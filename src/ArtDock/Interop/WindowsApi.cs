@@ -121,6 +121,14 @@ internal static class WindowsApi
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool IsIconic(nint hWnd);
 
+    /// <summary>
+    /// Switches to a window as Alt+Tab does, restoring it from minimized — which the system does
+    /// itself, so it works on a window of an elevated program, where <see cref="ShowWindow"/> is
+    /// refused.
+    /// </summary>
+    [DllImport("user32.dll")]
+    internal static extern void SwitchToThisWindow(nint hWnd, [MarshalAs(UnmanagedType.Bool)] bool fAltTab);
+
     /// <summary>The window's own popup that was active last — a dialog open over it — or the window itself.</summary>
     [DllImport("user32.dll")]
     internal static extern nint GetLastActivePopup(nint hWnd);

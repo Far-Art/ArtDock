@@ -213,9 +213,10 @@ public sealed class DockItem
 
     /// <summary>
     /// Whether the item starts a program Windows can run as administrator — the ones Explorer
-    /// offers <em>Run as administrator</em> for. Asked of the shell as the pin is read
+    /// and Start offer <em>Run as administrator</em> for. Asked of the shell as the pin is read
     /// (<c>PinnedAppsService.CanRunAsAdministrator</c>), since the item's menu asks it on every
-    /// right-click and a launch on every click.
+    /// right-click and a launch on every click — but for a Store app, whose answer is slow to
+    /// come and is set once it has (<c>PinnedAppsService.LearnRunAsAdministrator</c>).
     /// </summary>
-    public bool CanRunAsAdministrator { get; init; }
+    public bool CanRunAsAdministrator { get; set; }
 }

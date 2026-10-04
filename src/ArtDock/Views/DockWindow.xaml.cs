@@ -1041,6 +1041,13 @@ public sealed partial class DockWindow : Window
                 pin.RunAsAdministrator ? "admin" : null,
                 pin.IsSeparator ? "sep" : null)));
 
+    /// <summary>What a button coming up asks for, by the keys its message says were held.</summary>
+    private static DockClick ClickOf(bool middle, nint wParam) =>
+        DockClicks.Of(
+            middle,
+            control: (wParam & NativeMethods.MK_CONTROL) != 0,
+            shift: (wParam & NativeMethods.MK_SHIFT) != 0);
+
     /// <summary>
     /// Turns raw mouse messages into dock presses.
     /// </summary>
@@ -1062,7 +1069,8 @@ public sealed partial class DockWindow : Window
 
         // The pointer taking over from the keys: the keyboard goes back to where it was, and
         // the press is the pointer's like any other.
-        if (_keyboard && msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONUP)
+        if (_keyboard && msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_MBUTTONDOWN
+                or NativeMethods.WM_RBUTTONUP)
         {
             EndKeyboard(giveBack: true);
         }
@@ -1096,7 +1104,24 @@ public sealed partial class DockWindow : Window
                 // Resolved before the capture is dropped, not after: ReleaseCapture posts
                 // WM_CAPTURECHANGED synchronously, and the handler below would cancel the
                 // very gesture that is about to be applied.
-                handled = _dock.EndPress();
+                handled = _dock.EndPress(ClickOf(middle: false, wParam));
+                NativeMethods.ReleaseCapture();
+                break;
+
+            case NativeMethods.WM_MBUTTONDOWN:
+                _dock.BeginMiddlePress();
+
+                // Held, as the left button's press is, so a button let go of off the dock is
+                // seen and does not leave the press standing for the next one to finish.
+                if (_dock.HoveredItem is not null)
+                {
+                    NativeMethods.SetCapture(hwnd);
+                }
+
+                break;
+
+            case NativeMethods.WM_MBUTTONUP:
+                handled = _dock.EndMiddlePress(ClickOf(middle: true, wParam));
                 NativeMethods.ReleaseCapture();
                 break;
 
@@ -1487,8 +1512,8 @@ public sealed partial class DockWindow : Window
 
         var menu = new ContextMenu();
 
-        // What the item can *do* comes first, above what can be done *to* it: starting a
-        // program as administrator, and emptying the Recycle Bin.
+        // What the item can *do* comes first, above what can be done *to* it: opening another
+        // window, starting a program as administrator, and emptying the Recycle Bin.
         //
         // These survive the contents lock, and have to: that lock is about what is on the
         // dock, and neither changes anything about that. A locked dock still launches what
@@ -1500,12 +1525,28 @@ public sealed partial class DockWindow : Window
         // there is none, rather than a second copy beside the one a click would bring forward.
         // Greyed while it is closing too: a copy started then meets the one on its way out.
         // Greyed rather than absent, as the bin's entry is, since being open is a passing fact.
+        //
+        // New window is the other way about: there only while the item is open, since a click
+        // on one that is not starts it anyway. It is what Shift+click and the middle button do.
+        var acts = false;
+        if (item is { IsLaunchable: true, IsRunning: true })
+        {
+            menu.Items.Add(MenuHost.Item(
+                Localizer.Get("Menu.NewWindow"), MenuGlyph.NewWindow, () => Open(item, DockClick.NewWindow)));
+            acts = true;
+        }
+
         if (item is { IsLaunchable: true, CanRunAsAdministrator: true })
         {
             var header = Localizer.Get("Menu.RunAsAdministrator");
             menu.Items.Add(item.IsRunning || item.IsClosing
                 ? MenuHost.Note(header, MenuGlyph.Administrator)
                 : MenuHost.Item(header, MenuGlyph.Administrator, () => OpenAsAdministrator(item)));
+            acts = true;
+        }
+
+        if (acts)
+        {
             menu.Items.Add(new Separator());
         }
 
@@ -3037,6 +3078,10 @@ public sealed partial class DockWindow : Window
                 OpenFromKeys(at);
                 break;
 
+            case DockKeyKind.OpenAsAdministrator:
+                OpenFromKeys(at, DockClick.AsAdministrator);
+                break;
+
             case DockKeyKind.Place:
                 // Held up, not opened: Enter or Space opens it — asked on 2026-10-02.
                 HoldKey(DockKeys.Place(_items, command.Place));
@@ -3079,7 +3124,10 @@ public sealed partial class DockWindow : Window
     /// foreground is handed on to anyone first: the window the keys came from has it meanwhile
     /// (<see cref="EndKeyboard"/>), and the app takes it from that one as it comes up.
     /// </remarks>
-    private void OpenFromKeys(int index)
+    /// <param name="click">
+    /// What the keys ask for: Enter and Space open, Ctrl+Shift+Enter opens as administrator.
+    /// </param>
+    private void OpenFromKeys(int index, DockClick click = DockClick.Open)
     {
         if (index < 0 || index >= _items.Count || _items[index].IsSeparator || _items[index].IsDisabled)
         {
@@ -3104,7 +3152,7 @@ public sealed partial class DockWindow : Window
         // Held up as it opens, so the launch's flash is on the item the keys chose.
         HoldKey(index);
         NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
-        Open(_items[index]);
+        Open(_items[index], click);
         EndKeyboard(giveBack: true);
     }
 
@@ -3191,11 +3239,26 @@ public sealed partial class DockWindow : Window
     {
         var items = settings.PinnedApps.Select(PinnedAppsService.ToDockItem).ToList();
         _pinnedApps.ResolveIcons(items, _iconSet);
+
+        // A Store app's Run as administrator is slow to ask, so asked behind the dock's back and
+        // set on whichever items have that app when the answer comes — the menu reads it as it
+        // opens, so nothing is redrawn for it.
+        PinnedAppsService.LearnRunAsAdministrator(items, (aumid, elevates) =>
+            Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var pin in _pins.Where(pin => string.Equals(pin.Aumid, aumid, StringComparison.OrdinalIgnoreCase)))
+                {
+                    pin.CanRunAsAdministrator = elevates;
+                }
+            }));
+
         return items;
     }
 
-    private void OnItemActivated(object? sender, DockItem item)
+    private void OnItemActivated(object? sender, (DockItem Item, DockClick Click) activation)
     {
+        var (item, click) = activation;
+
         // The click goes on cycling the app's windows, as it did before there were previews;
         // the previews are for choosing, and close for the window the click brings up.
         _previews?.Dismiss();
@@ -3211,7 +3274,7 @@ public sealed partial class DockWindow : Window
             return;
         }
 
-        Open(item);
+        Open(item, click);
     }
 
     /// <summary>
@@ -3257,17 +3320,30 @@ public sealed partial class DockWindow : Window
     /// Clicking an app that is already in front moves to its next window.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A folder's windows are the File Explorer windows showing it, in any of their tabs (see
     /// <see cref="DockItem.RunningTarget"/>), so a click on a folder goes to one of those, on the
     /// folder's tab, and opens the folder when none shows it.
+    /// </para>
+    /// <para>
+    /// Shift or the middle button start it again whatever it has open (<see cref="DockClick.NewWindow"/>),
+    /// as the taskbar does — what a second copy makes of that is the program's: most open a
+    /// window, some bring forward the one they have. Ctrl+Shift starts it as administrator, but
+    /// only where a click would start it at all: with a window open it brings that forward, as a
+    /// pin ticked to run as administrator does, so it never puts a second copy beside the first.
+    /// On anything Windows cannot elevate it is a plain click.
+    /// </para>
     /// </remarks>
     /// <returns>True when a window was raised or something was started.</returns>
-    private bool Open(DockItem item)
+    private bool Open(DockItem item, DockClick click = DockClick.Open)
     {
-        var window = _runningApps.NextWindow(item.RunningTarget);
-        if (window != 0 && Raise(window, item.RunningTarget))
+        if (click != DockClick.NewWindow)
         {
-            return true;
+            var window = _runningApps.NextWindow(item.RunningTarget);
+            if (window != 0 && Raise(window, item.RunningTarget))
+            {
+                return true;
+            }
         }
 
         // Still closing — its window gone, its process not — so a copy started now would meet
@@ -3275,7 +3351,7 @@ public sealed partial class DockWindow : Window
         // So the click waits for it, and is then taken again, which launches or, if a window
         // has come back meanwhile, raises it. It bounces now, so the click is seen to count;
         // more clicks while it waits do nothing, as the taskbar does nothing.
-        if (_waitingToOpen.Contains(item.Id))
+        if (_waitingToOpen.ContainsKey(item.Id))
         {
             return true;
         }
@@ -3284,14 +3360,18 @@ public sealed partial class DockWindow : Window
         var id = item.Id;
         if (_runningApps.WhenClosed(item.RunningTarget, () => Dispatcher.BeginInvoke(() => OpenWhenClosed(id))))
         {
-            _waitingToOpen.Add(id);
+            _waitingToOpen[id] = click;
             _dock.FlashItem(Shown(item));
             return true;
         }
 
         // Flash only on a real launch. Raising a window that was already open is not
         // something the dock needs to announce — and macOS does not bounce for it either.
-        if (AppLauncher.Launch(item))
+        var launched = click == DockClick.AsAdministrator && item.CanRunAsAdministrator
+            ? AppLauncher.Launch(item, asAdministrator: true)
+            : AppLauncher.Launch(item);
+
+        if (launched)
         {
             _dock.FlashItem(Shown(item));
             return true;
@@ -3300,8 +3380,11 @@ public sealed partial class DockWindow : Window
         return false;
     }
 
-    /// <summary>The items whose click is waiting for their program to finish closing, by id.</summary>
-    private readonly HashSet<string> _waitingToOpen = [];
+    /// <summary>
+    /// The items whose click is waiting for their program to finish closing, by id, with what
+    /// the click asked for.
+    /// </summary>
+    private readonly Dictionary<string, DockClick> _waitingToOpen = [];
 
     /// <summary>
     /// Takes a held click again, once its program has finished closing — on the item as it is
@@ -3309,13 +3392,13 @@ public sealed partial class DockWindow : Window
     /// </summary>
     private void OpenWhenClosed(string id)
     {
-        if (!_waitingToOpen.Remove(id) || _closed
+        if (!_waitingToOpen.Remove(id, out var click) || _closed
             || _pins.FirstOrDefault(candidate => candidate.Id == id) is not { IsLaunchable: true } item)
         {
             return;
         }
 
-        Open(item);
+        Open(item, click);
     }
 
     /// <summary>

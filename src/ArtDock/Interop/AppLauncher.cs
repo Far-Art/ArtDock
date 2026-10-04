@@ -85,11 +85,21 @@ public static class AppLauncher
     /// Brings <paramref name="hwnd"/> to the foreground.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Windows only lets the foreground process hand focus away, so a bare
     /// <c>SetForegroundWindow</c> from a background dock is silently downgraded to a taskbar
     /// flash. Attaching our input queue to the current foreground thread for the duration of
     /// the call is the long-standing way around that; the dock's own
     /// <c>WS_EX_NOACTIVATE</c> keeps it from becoming the foreground itself first.
+    /// </para>
+    /// <para>
+    /// A window of a program running as administrator cannot be restored from minimized that
+    /// way: Windows refuses <c>ShowWindow</c> from a program below it (error 5), and the window
+    /// then took the foreground still minimized — <c>SetForegroundWindow</c> said yes, and nothing
+    /// came up. Measured 2026-10-03, on Notepad started as administrator; bringing one forward
+    /// that was not minimized worked. So a restore refused goes through
+    /// <c>SwitchToThisWindow</c>, which the system carries out itself and which restored it.
+    /// </para>
     /// </remarks>
     public static bool Activate(nint hwnd)
     {
@@ -98,14 +108,21 @@ public static class AppLauncher
             return false;
         }
 
+        var restoreRefused = false;
         if (WindowsApi.IsIconic(hwnd))
         {
             WindowsApi.ShowWindow(hwnd, WindowsApi.SW_RESTORE);
+            restoreRefused = WindowsApi.IsIconic(hwnd);
         }
 
         var foreground = WindowsApi.GetForegroundWindow();
         if (foreground == hwnd)
         {
+            if (restoreRefused)
+            {
+                WindowsApi.SwitchToThisWindow(hwnd, true);
+            }
+
             return true;
         }
 
@@ -120,7 +137,13 @@ public static class AppLauncher
 
         try
         {
-            return WindowsApi.SetForegroundWindow(hwnd);
+            var brought = WindowsApi.SetForegroundWindow(hwnd);
+            if (restoreRefused)
+            {
+                WindowsApi.SwitchToThisWindow(hwnd, true);
+            }
+
+            return brought;
         }
         finally
         {

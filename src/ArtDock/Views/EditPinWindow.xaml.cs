@@ -203,9 +203,10 @@ public sealed partial class EditPinWindow : Window
 
     /// <summary>Whether what the item opens, as it stands, is a program Windows can run as administrator.</summary>
     private bool TargetElevates =>
-        !IsStoreTarget
-        && PinnedAppsService.CanRunAsAdministrator(
-            EditedTargetPath, PinnedAppsService.ResolveLinkTarget(EditedTargetPath));
+        IsStoreTarget
+            ? EditedAumid is { } aumid && PinnedAppsService.CanRunAppAsAdministrator(aumid)
+            : PinnedAppsService.CanRunAsAdministrator(
+                EditedTargetPath, PinnedAppsService.ResolveLinkTarget(EditedTargetPath));
 
     /// <summary>The colour of the folder the dock is to draw, or null for the shell's icon.</summary>
     /// <remarks>

@@ -1,3 +1,4 @@
+using ArtDock.Dock;
 using ArtDock.Services;
 
 namespace ArtDock.Tests;
@@ -44,15 +45,54 @@ public class RunAsAdministratorTests
         Assert.False(PinnedAppsService.CanRunAsAdministrator(@"C:\Links\Gone.lnk", null));
     }
 
+    /// <summary>
+    /// Store apps are asked of Start's own menu for them. Notepad, a desktop program packaged
+    /// for the Store, has the entry; Calculator, an app of the Store's own kind, does not. Both
+    /// ship with Windows 11.
+    /// </summary>
+    [Theory]
+    [InlineData("Microsoft.WindowsNotepad_8wekyb3d8bbwe!App", true)]
+    [InlineData("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", false)]
+    [InlineData("windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", false)]
+    [InlineData("NoSuchPublisher.NoSuchApp_0000000000000!App", false)]
+    public void AStoreApp_CanRunAsAdministrator_WhenStartOffersIt(string aumid, bool elevates)
+    {
+        var answer = false;
+        var thread = new Thread(() => answer = PinnedAppsService.CanRunAppAsAdministrator(aumid));
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Equal(elevates, answer);
+    }
+
     [Fact]
-    public void AStoreApp_CannotRunAsAdministrator() =>
-        Assert.False(PinnedAppsService.ToDockItem(new PinnedAppSetting
+    public void AStoreApp_IsLearnedOffTheDocksThread_AndKnownOnceLearned()
+    {
+        const string notepad = "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App";
+        DockItem Item() => PinnedAppsService.ToDockItem(new PinnedAppSetting
         {
             Id = "a",
-            Label = "Calculator",
-            Aumid = "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App",
-            RunAsAdministrator = true
-        }).CanRunAsAdministrator);
+            Label = "Notepad",
+            Aumid = notepad
+        });
+
+        var learned = new TaskCompletionSource<(string, bool, bool)>();
+        var asked = PinnedAppsService.LearnRunAsAdministrator(
+            [Item()],
+            (aumid, elevates) => learned.TrySetResult(
+                (aumid, elevates, Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)));
+
+        // Another test may have asked already, in which case there is nothing left to learn.
+        if (asked)
+        {
+            Assert.True(learned.Task.Wait(TimeSpan.FromSeconds(10)));
+            Assert.Equal((notepad, true, true), learned.Task.Result);
+        }
+
+        Assert.True(Item().CanRunAsAdministrator);
+        Assert.False(PinnedAppsService.LearnRunAsAdministrator([Item()], (_, _) => { }));
+    }
 
     [Fact]
     public void APin_IsNotRunAsAdministrator_UnlessAskedTo()

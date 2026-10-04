@@ -133,6 +133,13 @@ internal static partial class NativeMethods
     internal const int WM_LBUTTONDOWN = 0x0201;
     internal const int WM_LBUTTONUP = 0x0202;
     internal const int WM_RBUTTONUP = 0x0205;
+    internal const int WM_MBUTTONDOWN = 0x0207;
+    internal const int WM_MBUTTONUP = 0x0208;
+
+    /// <summary>In a mouse message's <c>wParam</c>: Shift, and Ctrl, held as it was sent.</summary>
+    internal const int MK_SHIFT = 0x0004;
+
+    internal const int MK_CONTROL = 0x0008;
 
     // ---- system colour changes -----------------------------------------------
     //

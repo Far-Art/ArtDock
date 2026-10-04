@@ -43,7 +43,10 @@ public enum MenuGlyph
     Defaults,
 
     /// <summary>The symbol font's <em>Admin</em>, for what starts a program as administrator.</summary>
-    Administrator
+    Administrator,
+
+    /// <summary>The symbol font's <em>OpenInNewWindow</em>, for what opens another window of an app.</summary>
+    NewWindow
 }
 
 /// <summary>
@@ -155,6 +158,7 @@ public static class MenuIcons
         MenuGlyph.Taskbar => "",
         MenuGlyph.Defaults => "",
         MenuGlyph.Administrator => "",
+        MenuGlyph.NewWindow => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };
 

@@ -78,6 +78,13 @@ public sealed class PinnedAppsService
     private static readonly Dictionary<string, bool> RunAsTypes = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Whether Windows can run a Store app as administrator, by its AUMID — asked of the shell's
+    /// menu for it (<see cref="ShellVerbs.ItemHasRunAs"/>), which is slow, so asked once, and off
+    /// the dock's thread (<see cref="LearnRunAsAdministrator"/>).
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, bool> RunAsApps = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Fills an empty pin list with what a new dock starts with — see
     /// <see cref="DockPresets.CreateDefaults"/> — so a fresh install is never an empty bar.
     /// Returns true when it changed anything, which is the caller's cue to persist.
@@ -296,8 +303,9 @@ public sealed class PinnedAppsService
             FolderSymbolTone = app.FolderSymbolTone,
             RunAsAdministrator = app.RunAsAdministrator,
             CanRunAsAdministrator = !app.IsSeparator
-                && app.Aumid is not { Length: > 0 }
-                && CanRunAsAdministrator(app.TargetPath, linkTarget),
+                && (app.Aumid is { Length: > 0 } aumid
+                    ? RunAsApps.TryGetValue(aumid, out var elevates) && elevates
+                    : CanRunAsAdministrator(app.TargetPath, linkTarget)),
             LinkTarget = linkTarget,
             ExplorerFolder = explorerFolder,
             LaunchedProgram = LaunchedProgram(app.TargetPath, linkTarget),
@@ -606,9 +614,8 @@ public sealed class PinnedAppsService
     /// not, whatever it ends in.
     /// </para>
     /// <para>
-    /// Not a Store app, which has no path: whether <c>runas</c> on
-    /// <c>shell:AppsFolder\&lt;AUMID&gt;</c> does what Start's entry does for the few that offer
-    /// it was not tried, and most Store apps cannot be elevated at all.
+    /// Not a Store app, which has no path and no type to ask: that is
+    /// <see cref="CanRunAppAsAdministrator"/>.
     /// </para>
     /// </remarks>
     /// <param name="target">The pin's target.</param>
@@ -633,6 +640,58 @@ public sealed class PinnedAppsService
         }
 
         return elevates;
+    }
+
+    /// <summary>
+    /// Whether Windows can start a Store app as administrator: whether Start's menu for it has
+    /// <em>Run as administrator</em> (<see cref="ShellVerbs.ItemHasRunAs"/>). Asked once per app,
+    /// and then known.
+    /// </summary>
+    /// <remarks>
+    /// Asked on the calling thread, which must be STA, at up to a fifth of a second; the item
+    /// editor asks it so, for the one app it shows. The dock learns its pins' answers off its
+    /// thread instead (<see cref="LearnRunAsAdministrator"/>), and an item made before the answer
+    /// is known says no until it is.
+    /// </remarks>
+    public static bool CanRunAppAsAdministrator(string aumid) =>
+        RunAsApps.GetOrAdd(aumid, id => ShellVerbs.ItemHasRunAs($@"shell:AppsFolder\{id}"));
+
+    /// <summary>
+    /// Asks, on a thread of its own, whether each of the Store apps among some items can be
+    /// started as administrator, for those not yet known, and calls back on that thread with
+    /// each app's answer as it comes.
+    /// </summary>
+    /// <returns>False when there was nothing to ask, and nothing will be called back.</returns>
+    public static bool LearnRunAsAdministrator(IEnumerable<DockItem> items, Action<string, bool> learned)
+    {
+        var asked = items
+            .Select(item => item.Aumid)
+            .OfType<string>()
+            .Where(aumid => aumid.Length > 0 && !RunAsApps.ContainsKey(aumid))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (asked.Count == 0)
+        {
+            return false;
+        }
+
+        var thread = new Thread(() =>
+        {
+            foreach (var aumid in asked)
+            {
+                learned(aumid, CanRunAppAsAdministrator(aumid));
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "Store apps' Run as administrator"
+        };
+
+        // The shell's menus are apartment-threaded.
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return true;
     }
 
     /// <summary>

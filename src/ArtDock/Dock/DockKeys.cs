@@ -24,6 +24,9 @@ public enum DockKeyKind
     /// <summary>Opens the item held up, as a click on it does.</summary>
     Open,
 
+    /// <summary>Opens it as Ctrl+Shift+click does: as administrator, where it is started at all.</summary>
+    OpenAsAdministrator,
+
     /// <summary>
     /// To the item in a place on the dock — <see cref="DockKeyCommand.Place"/> — held up, not
     /// opened: a move, as the arrows are.
@@ -70,9 +73,10 @@ public static class DockKeys
     /// or one set on the page with Alt in it. Alt's combinations are a window's menu, and this
     /// window has none; they were refused here until the hotkeys were Win+Ctrl+Alt for a few hours
     /// on 2026-10-02. Not the Windows key, whose combinations are Windows' own. Opening, with Enter
-    /// or Space, takes nothing held: Ctrl+Shift+Enter is what Windows starts a program as
-    /// administrator with, which the dock leaves to the item's menu — and a launch, unlike a move, is not
-    /// something to do by mistake.
+    /// or Space, takes nothing held — a launch, unlike a move, is not something to do by mistake —
+    /// but Ctrl+Shift+Enter, which is what Start takes for starting a program as administrator,
+    /// and is the dock's Ctrl+Shift+click. A Ctrl still held from the hotkey makes Enter nothing,
+    /// not that: Shift has to be pressed as well.
     /// </para>
     /// <para>
     /// A digit, 1 to 9 on the number row or the keypad, goes to the item in that place and holds it
@@ -114,6 +118,11 @@ public static class DockKeys
                 return new(DockKeyKind.Place, key - Key.D1 + 1);
             case >= Key.NumPad1 and <= Key.NumPad9:
                 return new(DockKeyKind.Place, key - Key.NumPad1 + 1);
+        }
+
+        if (key == Key.Enter && modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            return new(DockKeyKind.OpenAsAdministrator);
         }
 
         if (modifiers != ModifierKeys.None)

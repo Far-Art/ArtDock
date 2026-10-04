@@ -285,6 +285,9 @@ public sealed class DockBar : Canvas
     private int _hoveredIndex = -1;
     private int _pressedIndex = -1;
 
+    /// <summary>The icon the middle button went down on, or -1: a press of its own, which never drags.</summary>
+    private int _middlePressedIndex = -1;
+
     /// <summary>Item currently playing the launch flash, or -1.</summary>
     private int _flashIndex = -1;
     private double _flashElapsedMs;
@@ -574,8 +577,8 @@ public sealed class DockBar : Canvas
         };
     }
 
-    /// <summary>Raised when an icon is activated by click.</summary>
-    public event EventHandler<DockItem>? Activated;
+    /// <summary>Raised when an icon is activated by click, with what the click asked for.</summary>
+    public event EventHandler<(DockItem Item, DockClick Click)>? Activated;
 
     /// <summary>
     /// Raised on every look the dock takes at the pointer, some thirty times a second, whatever it
@@ -1074,6 +1077,7 @@ public sealed class DockBar : Canvas
         // pointer rests on an icon should not blink its label off and on.
         _hoveredIndex = hovered is null ? -1 : _items.IndexOf(hovered);
         _pressedIndex = -1;
+        _middlePressedIndex = -1;
 
         PinFocusPointer(claim: false, ease: previewMoved);
         LayoutAtRest();
@@ -1851,6 +1855,7 @@ public sealed class DockBar : Canvas
         // A drag owns the dock while it is over it: no press can be in flight, and the
         // wave is held flat so the slot the preview sits in does not move underneath it.
         _pressedIndex = -1;
+        _middlePressedIndex = -1;
         _dragging = false;
         _dragIndex = -1;
 
@@ -2076,19 +2081,29 @@ public sealed class DockBar : Canvas
         if (TryGetLocalCursor(out var local))
         {
             _pressX = local.X;
-
-            if (_focusIndex < 0 || _focusIsPreview)
-            {
-                UpdateHovered(IsPointingAtDock(local) ? local : null);
-            }
         }
 
-        _pressedIndex = _hoveredIndex;
+        _pressedIndex = PressedNow();
+    }
+
+    /// <summary>
+    /// The icon a button going down presses: the one under the cursor, read afresh — see
+    /// <see cref="BeginPress"/>.
+    /// </summary>
+    private int PressedNow()
+    {
+        if (TryGetLocalCursor(out var local) && (_focusIndex < 0 || _focusIsPreview))
+        {
+            UpdateHovered(IsPointingAtDock(local) ? local : null);
+        }
+
+        return _hoveredIndex;
     }
 
     /// <summary>Releases a press, activating the icon if the cursor never left it.</summary>
+    /// <param name="click">What the click asks for, by the keys held as the button came up.</param>
     /// <returns>True when the press was consumed — an activation or a reorder.</returns>
-    public bool EndPress()
+    public bool EndPress(DockClick click = DockClick.Open)
     {
         var pressed = _pressedIndex;
         _pressedIndex = -1;
@@ -2098,7 +2113,27 @@ public sealed class DockBar : Canvas
             return EndDrag();
         }
 
+        return Activate(pressed, click);
+    }
 
+    /// <summary>
+    /// Presses whichever icon the cursor is over with the middle button, which opens another
+    /// window of it, as the taskbar's does. Never a drag: only the left button reorders.
+    /// </summary>
+    public void BeginMiddlePress() => _middlePressedIndex = PressedNow();
+
+    /// <summary>Releases a middle press, activating the icon if the cursor never left it.</summary>
+    /// <returns>True when the press was consumed.</returns>
+    public bool EndMiddlePress(DockClick click)
+    {
+        var pressed = _middlePressedIndex;
+        _middlePressedIndex = -1;
+        return Activate(pressed, click);
+    }
+
+    /// <summary>Activates the icon a press began on, if the cursor is still on it.</summary>
+    private bool Activate(int pressed, DockClick click)
+    {
         // Only a press and release on the same icon counts, matching every other button.
         if (pressed < 0 || pressed != _hoveredIndex || pressed >= _items.Count)
         {
@@ -2111,7 +2146,7 @@ public sealed class DockBar : Canvas
             return false;
         }
 
-        Activated?.Invoke(this, item);
+        Activated?.Invoke(this, (item, click));
         return true;
     }
 
@@ -2121,6 +2156,7 @@ public sealed class DockBar : Canvas
     /// </summary>
     public void CancelPress()
     {
+        _middlePressedIndex = -1;
         if (_pressedIndex < 0 && !_dragging)
         {
             return;

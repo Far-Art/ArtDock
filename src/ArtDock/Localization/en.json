@@ -370,6 +370,7 @@
     "EditItem.Symbol.Flag": "Flag",
     "EditItem.Symbol.Bugs": "Bugs",
 
+    "Menu.NewWindow": "New window",
     "Menu.RunAsAdministrator": "Run as administrator",
     "Menu.EditItem": "Edit item…",
     "Menu.RemoveFromDock": "Remove from dock",
