@@ -250,10 +250,25 @@ public static class Autostart
         approved.SetValue(ValueName, flag, RegistryValueKind.Binary);
     }
 
-    /// <summary>Takes off the flag, with the entry it belongs to.</summary>
+    /// <summary>
+    /// Where Windows records that it has told the user an app now starts at sign-in: a value
+    /// named <c>StartupTNoti</c> and the Run value's name. Read off the development machine on
+    /// 2026-10-04, still there after an uninstall.
+    /// </summary>
+    internal const string NotifiedKeyPath = @"Software\Microsoft\Windows\CurrentVersion\RunNotification";
+
+    /// <summary>
+    /// Takes off the flag, with the entry it belongs to — and Windows' note that it said the
+    /// entry was there, so that a later install is announced again as a new one is.
+    /// </summary>
     private static void ClearFlag(RegistryKey root)
     {
-        using var approved = root.OpenSubKey(ApprovedKeyPath, writable: true);
-        approved?.DeleteValue(ValueName, throwOnMissingValue: false);
+        using (var approved = root.OpenSubKey(ApprovedKeyPath, writable: true))
+        {
+            approved?.DeleteValue(ValueName, throwOnMissingValue: false);
+        }
+
+        using var notified = root.OpenSubKey(NotifiedKeyPath, writable: true);
+        notified?.DeleteValue("StartupTNoti" + ValueName, throwOnMissingValue: false);
     }
 }

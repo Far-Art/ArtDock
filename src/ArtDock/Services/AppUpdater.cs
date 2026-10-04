@@ -148,6 +148,14 @@ public sealed class AppUpdater
     /// here is given <see cref="QuestionTime"/> of that and the rest is margin. The 1.2
     /// uninstaller was seen to wait 60 in its log; the documented figure is the one relied on.
     /// </para>
+    /// <para>
+    /// Last, what Windows wrote down about the installation by itself — the tray icon it lists
+    /// in Settings, the launch and switch counts, the jump list, Start's entries — with a second
+    /// pass after Velopack has finished, for what is written after this (<see cref="WindowsTraces"/>).
+    /// Not settings: none of it is the user's, so it goes whatever the answer to the question.
+    /// After the question rather than before, because the question is itself a window Windows
+    /// counts.
+    /// </para>
     /// </remarks>
     public static void OnUninstalling(SemanticVersion version)
     {
@@ -163,6 +171,11 @@ public sealed class AppUpdater
         if (UninstallWindow.AskToDeleteSettings(QuestionTime - clock.Elapsed))
         {
             SettingsStore.DeleteFolder();
+        }
+
+        if (InstallRoot() is { } folder && InstallId.Length > 0)
+        {
+            new WindowsTraces(folder, InstallId).RemoveAll();
         }
     }
 

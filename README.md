@@ -59,7 +59,12 @@ not touch them. Uninstalling asks: *Keep settings*, the default, leaves them for
 install to find; *Delete settings* takes the folder, packs and all, so nothing of ArtDock is
 left. A dock still running is closed before the question — the installed one by Velopack,
 any other copy by the uninstaller asking it to exit. The question keeps them by itself if nobody answers within about 25 seconds, since
-Velopack stops waiting for it at 30.
+Velopack stops waiting for it at 30. Whatever the answer, the uninstaller also takes what
+Windows wrote down about the install by itself: the tray icon it goes on listing in Settings,
+the launch and switch counts, the jump list, Start's entries, Windows Backup's record of the
+install, and Velopack's own log — some of it after Velopack has finished. A copy run
+from anywhere else keeps its own. What Windows keeps for the whole machine — Prefetch and the
+like — needs administrator rights to touch, and stays.
 
 To make a release, bump `<Version>` in `src/ArtDock/ArtDock.csproj` and run
 

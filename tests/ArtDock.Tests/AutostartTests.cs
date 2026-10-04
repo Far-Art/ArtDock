@@ -24,6 +24,7 @@ public sealed class AutostartTests : IDisposable
 {
     private const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+    private const string NotifiedPath = @"Software\Microsoft\Windows\CurrentVersion\RunNotification";
 
     /// <summary>As Task Manager writes them, read off the development machine.</summary>
     private static readonly byte[] OnFlag = [0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -218,6 +219,22 @@ public sealed class AutostartTests : IDisposable
 
         Assert.False(Autostart.IsRegistered(_root));
         Assert.Null(ReadFlag());
+    }
+
+    [Fact]
+    public void RemovingAnEntryIntoTheInstallation_TakesWindowsNoteOfItToo()
+    {
+        WriteEntry(@"C:\Users\someone\AppData\Local\ArtDock.App\ArtDock.exe");
+        using (var notified = _root.CreateSubKey(NotifiedPath))
+        {
+            notified.SetValue("StartupTNotiArtDock", 1);
+            notified.SetValue("StartupTNotiOther", 1);
+        }
+
+        Autostart.RemoveIfUnder(_root, @"C:\Users\someone\AppData\Local\ArtDock.App");
+
+        using var after = _root.OpenSubKey(NotifiedPath);
+        Assert.Equal(["StartupTNotiOther"], after!.GetValueNames());
     }
 
     [Fact]

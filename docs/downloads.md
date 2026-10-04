@@ -165,6 +165,32 @@ answers Keep at 25; Enter, Escape, the close box and anything going wrong on the
 asking all answer Keep too. (The 1.2.158 uninstaller's log says it waits 60 seconds; the
 documented 30 is the figure relied on.)
 
+**Nothing Windows wrote down is left either.** After an uninstall on 2026-10-04 the registry
+still held, about the installed copy: its tray icon (`Control Panel\NotifyIconSettings`, which
+keeps ArtDock listed in Settings' *Other system tray icons*), `MuiCache`'s names for its
+executables, `UserAssist`'s launch counts (names in ROT13), `FeatureUsage`'s, the Program
+Compatibility Assistant's record of each executable, Start's tile properties and jump-list
+timestamp, two entries in Start's cloud store, Windows' note that it had announced the startup
+entry (`RunNotification`), Windows Backup's queued events for the install and the uninstall
+(`AppListBackup`) — and on disk the jump list (`Recent\AutomaticDestinations\ddc8f37c9e9e9633…`,
+a CRC-64 of the app id) and Velopack's log, `%LOCALAPPDATA%\velopack\velopack_ArtDock.App.log`.
+The hook removes them after the question, whatever its answer (`Interop/WindowsTraces`;
+`RunNotification` with the Run entry, in `Autostart`). An entry is the installation's when it
+names a path inside the install folder, the app id `velopack.ArtDock.App`, or the setup by its
+file name; anything about a copy run from elsewhere stays.
+
+Some of it is written after the hook: Velopack logs until it exits; Explorer writes the jump
+list, its timestamp and the launch counts as the question's window and Velopack's closing message
+go; Windows Backup queues the uninstall once Velopack has removed the entry in installed apps. So
+the hook also leaves a hidden Windows PowerShell behind — plain `-Command` text, every name in a
+literal single-quoted string — that waits for Velopack's `Update.exe` to exit, five seconds more,
+and then deletes all it found, what it can name ahead, the backup queue's events for the app
+(matched as text: Windows writes them as JSON with unescaped backslashes), the log, and
+Velopack's folder if nothing else is in it. Waiting for `Update.exe` rather than for a time
+because an interactive uninstall ends on Velopack's *Uninstall Complete* box, which stays until
+dismissed. Machine-wide records — Prefetch, the Amcache, the background activity moderator — need
+administrator rights, which the uninstaller does not have, and stay.
+
 **No dock is left running.** Velopack stops every process running from the install folder
 before it runs the hook — its log says *Killing process* — so the copy being uninstalled is
 gone, though not by its own Exit. A copy running from anywhere else, such as a build from the
