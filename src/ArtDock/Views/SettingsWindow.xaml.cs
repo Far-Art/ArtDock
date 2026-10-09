@@ -124,6 +124,9 @@ public sealed partial class SettingsWindow : Window
     /// <summary>The version the last check found, while it is on offer.</summary>
     private UpdateInfo? _update;
 
+    /// <summary>The release notes of what <see cref="_update"/> brings, newest first; empty when there are none.</summary>
+    private IReadOnlyList<ReleaseNote> _updateNotes = [];
+
     /// <summary>How far a download has got, 0 to 100.</summary>
     private int _updatePercent;
 
@@ -256,6 +259,9 @@ public sealed partial class SettingsWindow : Window
         _store.Changed += OnStoreChanged;
         UpdateItemButtons();
         _loading = false;
+
+        // What there is to lose from here on is what differs from this.
+        _openedAs = Fingerprint();
 
         // The words built in code — hints, list entries, menus — are said again in a new
         // language; the ones in the XAML follow by themselves.
@@ -606,14 +612,47 @@ public sealed partial class SettingsWindow : Window
         Previewed?.Invoke(this, Compose());
     }
 
-    /// <summary>Commits everything to disk, including the startup registration.</summary>
+    /// <summary>Commits everything to disk, including the startup registration, and closes.</summary>
     private void Save()
     {
-        ApplyAutostart(RunAtLoginCheck.IsChecked == true);
-        _store.Save(Compose());
+        Commit();
         Saved = true;
         Close();
     }
+
+    /// <summary>
+    /// Commits everything to disk, including the startup registration, and leaves the dialog
+    /// open — what Save does before it closes, and what an update asked to save does before it
+    /// closes the dock.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="Saved"/>: a dialog closed after this without Save puts back the stored
+    /// settings, which are these now, so nothing committed is undone and nothing changed since
+    /// is kept — as with any Cancel.
+    /// </remarks>
+    private void Commit()
+    {
+        ApplyAutostart(RunAtLoginCheck.IsChecked == true);
+        _store.Save(Compose());
+        _openedAs = Fingerprint();
+    }
+
+    /// <summary>
+    /// What the dialog would save as it stood when it opened, or was last committed — see
+    /// <see cref="HasUnsavedChanges"/>.
+    /// </summary>
+    private string _openedAs = "";
+
+    private string Fingerprint() => SettingsFingerprint.Of(Compose(), withPins: _pinsEdited);
+
+    /// <summary>
+    /// True when Save would write something the user has changed here: anything the dialog
+    /// shows differing from what it showed when it opened, or <em>Run at login</em> differing
+    /// from what Windows has (<see cref="SettingsFingerprint"/> says why that one is apart).
+    /// </summary>
+    private bool HasUnsavedChanges =>
+        Fingerprint() != _openedAs
+        || (RunAtLoginCheck.IsChecked == true) != Autostart.IsEnabled();
 
     /// <summary>Builds a settings object from the current state of the controls.</summary>
     private DockSettings Compose() =>
@@ -2944,6 +2983,95 @@ public sealed partial class SettingsWindow : Window
             : "Settings.About.Updates.Check");
         UpdateButton.IsEnabled = _updateStage is not (UpdateStage.Checking or UpdateStage.Downloading);
         UpdateButton.Visibility = Visibility.Visible;
+
+        UpdateNotesPanel.Visibility =
+            (_updateStage is UpdateStage.Available or UpdateStage.Downloading) && UpdateNotesHost.Children.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Lays out the release notes of the version on offer, and of each it passes over, under
+    /// the update card — so whoever is offered it can see what it changes before taking it.
+    /// </summary>
+    /// <remarks>
+    /// Built when a check finds a version, not on every look at the card, which the download's
+    /// progress takes many times a second; and again in a new language, for the one heading
+    /// written here — a release whose notes do not open with one is headed by its version.
+    /// The rest is the release's own words, as published.
+    /// </remarks>
+    private void BuildUpdateNotes()
+    {
+        UpdateNotesHost.Children.Clear();
+
+        foreach (var note in _updateNotes)
+        {
+            var blocks = ReleaseNotes.Parse(note.Markdown);
+            if (blocks.Count == 0)
+            {
+                continue;
+            }
+
+            if (blocks[0].Kind != NoteBlockKind.Heading)
+            {
+                UpdateNotesHost.Children.Add(NoteHeading(
+                    [new NoteSpan(Localizer.Format("Settings.About.Updates.NotesVersion", note.Version))]));
+            }
+
+            foreach (var block in blocks)
+            {
+                UpdateNotesHost.Children.Add(block.Kind switch
+                {
+                    NoteBlockKind.Heading => NoteHeading(block.Spans),
+                    NoteBlockKind.Bullet => NoteBullet(block.Spans),
+                    _ => NoteText(block.Spans, new Thickness(0, 4, 0, 0))
+                });
+            }
+        }
+
+        ShowUpdates();
+    }
+
+    /// <summary>A version's heading, set apart from the version before it.</summary>
+    private FrameworkElement NoteHeading(IReadOnlyList<NoteSpan> spans)
+    {
+        var heading = NoteText(spans, new Thickness(0, UpdateNotesHost.Children.Count == 0 ? 0 : 12, 0, 2));
+        heading.FontWeight = FontWeights.SemiBold;
+        return heading;
+    }
+
+    /// <summary>One bullet of a list: a dot, and the text beside it wrapping clear of it.</summary>
+    private static FrameworkElement NoteBullet(IReadOnlyList<NoteSpan> spans)
+    {
+        var dot = new System.Windows.Shapes.Ellipse
+        {
+            Width = 4,
+            Height = 4,
+            Margin = new Thickness(4, 8, 8, 0),
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "TextFillColorPrimaryBrush");
+
+        var row = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+        row.Children.Add(dot);
+        row.Children.Add(NoteText(spans, default));
+        return row;
+    }
+
+    /// <summary>A run of the notes' text, bold and italic where they say, wrapping.</summary>
+    private static TextBlock NoteText(IReadOnlyList<NoteSpan> spans, Thickness margin)
+    {
+        var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = margin };
+        foreach (var span in spans)
+        {
+            text.Inlines.Add(new System.Windows.Documents.Run(span.Text)
+            {
+                FontWeight = span.Bold ? FontWeights.SemiBold : FontWeights.Normal,
+                FontStyle = span.Italic ? FontStyles.Italic : FontStyles.Normal
+            });
+        }
+
+        return text;
     }
 
     private void SetUpdateStage(UpdateStage stage)
@@ -2957,15 +3085,33 @@ public sealed partial class SettingsWindow : Window
     /// that version and handing over to Velopack to put it in place.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Every failure is caught, whatever it is: this is an async void handler, where anything
     /// that escapes takes the dock down with it, and Velopack does not say what it throws — for
     /// a network that is not there, a feed that is not one, a hash that does not match.
+    /// </para>
+    /// <para>
+    /// Before an update, changes made here and not saved are asked about
+    /// (<see cref="UnsavedChangesWindow"/>): the update closes this dialog, which would
+    /// otherwise discard them as Cancel does. Not asked when there are none.
+    /// </para>
     /// </remarks>
     private async void OnUpdateClicked()
     {
         if (_updateStage == UpdateStage.Available && _update is { } update)
         {
-            await InstallUpdateAsync(update);
+            var save = false;
+            if (HasUnsavedChanges)
+            {
+                if (UnsavedChangesWindow.Ask(this) is not { } choice)
+                {
+                    return;
+                }
+
+                save = choice == UnsavedChoice.Save;
+            }
+
+            await InstallUpdateAsync(update, save);
         }
         else
         {
@@ -2980,16 +3126,30 @@ public sealed partial class SettingsWindow : Window
         try
         {
             _update = await _updater.CheckAsync();
+
+            // Asked while the card still says it is checking, so the version and what it
+            // changes are offered together.
+            _updateNotes = _update is { } found ? await _updater.NotesAsync(found) : [];
+            BuildUpdateNotes();
             SetUpdateStage(_update is null ? UpdateStage.UpToDate : UpdateStage.Available);
         }
         catch (Exception)
         {
             _update = null;
+            _updateNotes = [];
+            BuildUpdateNotes();
             SetUpdateStage(UpdateStage.Failed);
         }
     }
 
-    private async Task InstallUpdateAsync(UpdateInfo update)
+    /// <param name="update">The version to fetch and put in place.</param>
+    /// <param name="save">
+    /// Whether to save the changes made here first, as the user answered — once the version is
+    /// fetched, so a download that fails or is stopped saves nothing they did not ask to keep.
+    /// Not saving needs nothing done: the dialog closing on the way out discards them, as
+    /// Cancel does.
+    /// </param>
+    private async Task InstallUpdateAsync(UpdateInfo update, bool save)
     {
         _updateDownload = new CancellationTokenSource();
         _updatePercent = 0;
@@ -3008,6 +3168,11 @@ public sealed partial class SettingsWindow : Window
                     }
                 }),
                 _updateDownload.Token);
+
+            if (save)
+            {
+                Commit();
+            }
 
             // Velopack's updater waits for this process to go, so the dock is closed the way
             // Exit closes it — this dialog first, then the tray icon — and comes back as the
@@ -3333,6 +3498,7 @@ public sealed partial class SettingsWindow : Window
             BuildAddMenu();
             BuildSavedSwatches();
             ShowAbout();
+            BuildUpdateNotes();
             ShowEdgeOffset();
             UpdateItemLocks();
 

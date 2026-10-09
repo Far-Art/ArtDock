@@ -4,6 +4,7 @@ using ArtDock.Interop;
 using ArtDock.Views;
 using Velopack;
 using Velopack.Locators;
+using Velopack.Logging;
 using Velopack.Sources;
 
 namespace ArtDock.Services;
@@ -57,6 +58,47 @@ public sealed class AppUpdater
     /// <returns>What to update to, or null when this is the newest.</returns>
     public Task<UpdateInfo?> CheckAsync() =>
         Manager?.CheckForUpdatesAsync() ?? Task.FromResult<UpdateInfo?>(null);
+
+    /// <summary>
+    /// The release notes of every version <paramref name="update"/> brings, newest first: the
+    /// one it lands on and each it passes over (<see cref="ReleaseNotes.Between"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked of the releases again, after the check: Velopack reads every release's feed to
+    /// decide what to update to, but hands back only the version it chose. The feed of the
+    /// ten newest releases, which is as far back as Velopack looks — and so as far back as an
+    /// update goes in steps rather than whole.
+    /// </para>
+    /// <para>
+    /// The notes are a courtesy, and never what stands between the user and the update: should
+    /// the second ask fail, the version on offer still has its own, which the check brought.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<ReleaseNote>> NotesAsync(UpdateInfo update)
+    {
+        var target = update.TargetFullRelease;
+        IReadOnlyList<ReleaseNote> own = string.IsNullOrWhiteSpace(target.NotesMarkdown)
+            ? []
+            : [new ReleaseNote(target.Version, target.NotesMarkdown)];
+
+        if (Source is not { } source || Manager?.CurrentVersion is not { } current)
+        {
+            return own;
+        }
+
+        try
+        {
+            var feed = await source.GetReleaseFeed(new NullVelopackLogger(), InstallId, Channel());
+            var notes = ReleaseNotes.Between(feed.Assets, current, target.Version);
+            return notes.Count > 0 ? notes : own;
+        }
+        catch (Exception)
+        {
+            // Whatever it was, as for the check: Velopack does not say what it throws.
+            return own;
+        }
+    }
 
     /// <summary>
     /// Fetches a version found by <see cref="CheckAsync"/>, verified against the release feed's
@@ -121,8 +163,18 @@ public sealed class AppUpdater
     /// turned off stays off. A setup run over an installed copy does, and so the entry is only
     /// written, never Task Manager's flag cleared: a dock turned off there stays off through it.
     /// </para>
+    /// <para>
+    /// Not on Windows 10, which the setup lets through (<see cref="SupportedWindows"/>): a dock
+    /// that will not run there would only say so again at every sign-in.
+    /// </para>
     /// </remarks>
-    public static void OnInstalled(SemanticVersion version) => Autostart.Register();
+    public static void OnInstalled(SemanticVersion version)
+    {
+        if (SupportedWindows.IsCurrent)
+        {
+            Autostart.Register();
+        }
+    }
 
     /// <summary>
     /// Velopack's uninstaller is about to remove this installation — the other thing its
@@ -207,9 +259,35 @@ public sealed class AppUpdater
     /// Velopack throws making one reaches the caller, which is already catching the check's.
     /// </summary>
     private UpdateManager? Manager =>
-        _manager ??= IsInstalled && ReleasesRepository.Length > 0
-            ? new UpdateManager(new GithubSource(ReleasesRepository, accessToken: null, prerelease: false))
+        _manager ??= IsInstalled && Source is { } source
+            ? new UpdateManager(source)
             : null;
+
+    /// <summary>The releases, for the check and for their notes alike; null where there are none to ask.</summary>
+    private GithubSource? Source =>
+        _source ??= ReleasesRepository.Length > 0
+            ? new GithubSource(ReleasesRepository, accessToken: null, prerelease: false)
+            : null;
+
+    private GithubSource? _source;
+
+    /// <summary>
+    /// The channel this copy was packed for, which names the feed each release carries — the
+    /// one Velopack checks. Windows' own, <c>win</c>, unless the package says otherwise.
+    /// </summary>
+    private static string Channel()
+    {
+        try
+        {
+            return VelopackLocator.IsCurrentSet && VelopackLocator.Current.Channel is { Length: > 0 } channel
+                ? channel
+                : "win";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return "win";
+        }
+    }
 
     private static string? Metadata(string key) =>
         typeof(AppUpdater).Assembly

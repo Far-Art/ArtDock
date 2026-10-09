@@ -138,6 +138,29 @@ dialog open on the About page, so the new version number is the first thing show
 the setup did not install — a build run from the source tree, as `ArtDock.cmd` runs it —
 says so on the card and offers nothing.
 
+**What it changes is shown before it is taken.** Once a check finds a version, the card lists
+*What's new*: the release notes of that version and of every version it passes over, newest
+first, read from the releases' feeds (`AppUpdater.NotesAsync`, `ReleaseNotes`). Each release
+carries its own, as `tools/release.ps1 -ReleaseNotes` packs them, so a release published
+without notes is simply missing from the list. Velopack hands back only the version it chose,
+so the feeds are read a second time for the rest; should that fail, the version on offer still
+shows its own. The notes are read as the small part of Markdown they are written in —
+headings, bullets, bold, italic — and anything else is shown as the text it is.
+
+**Unsaved settings are asked about.** The update closes the settings dialog, and a dialog
+closed without Save discards what was changed in it. So, when there is something to lose
+(`SettingsFingerprint`), pressing *Update and restart* first asks: save and update, discard
+and update, or cancel. Saving happens once the version has downloaded, just before the dock
+closes, so a download that fails saves nothing the user had not already kept.
+
+**Windows 11 only.** The release is packed for `win11-x64`, and the setup refuses Windows 7,
+8 and 8.1 before installing anything — Velopack builds its setup to run on Windows 7 for this.
+Not Windows 10: Velopack 1.2.158 compares versions with `VerifyVersionInfo` and leaves the
+build number out of what it asks, and the build is all that tells Windows 11 (10.0.22000 and
+on) from 10. So on Windows 10 the setup installs, and the dock itself refuses to run, with a
+message box, each time it is started (`SupportedWindows`); it does not register itself to
+start at sign-in there.
+
 **Skipped versions are skipped.** A copy any number of versions behind is offered the newest
 release and goes straight to it; nothing in between is installed, and a new user's setup is
 the newest one's. Velopack reads the ten newest releases and merges their feeds, so a copy up

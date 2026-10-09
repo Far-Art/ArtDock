@@ -2343,6 +2343,10 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
                                 <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
                                     <TextBlock Text="{DynamicResource Settings.About.Updates}" />
                                     <TextBlock x:Name="UpdateStatusText" Style="{StaticResource CardHint}" />
@@ -2353,6 +2357,29 @@
                                     MinWidth="190"
                                     VerticalAlignment="Center"
                                     Content="{DynamicResource Settings.About.Updates.Check}" />
+
+                                <!-- What the version on offer changes, and each version it passes
+                                     over, newest first, in the releases' own words — so whoever
+                                     is offered it can decide whether to take it. Shown once a
+                                     check has found one, filled in from the code. No scroller of
+                                     its own: the page scrolls, and one inside it would catch the
+                                     wheel. -->
+                                <StackPanel
+                                    x:Name="UpdateNotesPanel"
+                                    Grid.Row="1"
+                                    Grid.ColumnSpan="2"
+                                    Margin="0,12,0,0"
+                                    Visibility="Collapsed">
+                                    <Border
+                                        Margin="0,0,0,10"
+                                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="0,1,0,0" />
+                                    <TextBlock
+                                        Margin="0,0,0,6"
+                                        Style="{StaticResource Hint}"
+                                        Text="{DynamicResource Settings.About.Updates.Notes}" />
+                                    <StackPanel x:Name="UpdateNotesHost" />
+                                </StackPanel>
                             </Grid>
                         </Border>
 
@@ -2388,8 +2415,9 @@
                              behind the overflow arrow, and the dock's own menu has no Exit — only
                              Dock settings…, which leads here. On this page because, like the rest
                              of it, it is about the application rather than a setting of it.
-                             Unsaved changes go the way Cancel sends them, without asking, since
-                             nothing else in this dialog asks either; the hint says so instead. -->
+                             Unsaved changes go the way Cancel sends them, without asking; the hint
+                             says so instead. The update, which reopens this dialog as the new
+                             version, does ask (UnsavedChangesWindow). -->
                         <Border Style="{StaticResource Card}" Margin="0,4,0,4">
                             <Grid>
                                 <Grid.ColumnDefinitions>

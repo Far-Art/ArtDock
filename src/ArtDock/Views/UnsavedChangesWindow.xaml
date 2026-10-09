@@ -1,0 +1,74 @@
+<Window
+    x:Class="ArtDock.Views.UnsavedChangesWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="ArtDock"
+    FlowDirection="{DynamicResource Language.FlowDirection}"
+    Language="{DynamicResource Language.Tag}"
+    Icon="/Assets/ArtDock.ico"
+    Width="480"
+    SizeToContent="Height"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    WindowStartupLocation="CenterOwner">
+
+    <!-- Styled by WPF's own Fluent theme, set in App.xaml, like the other dialogs. -->
+
+    <Window.Resources>
+        <!-- TextBlock is not a Control, and its own default foreground is black; see the
+             same style in EditPinWindow. -->
+        <Style x:Key="TextBase" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        </Style>
+
+        <Style TargetType="TextBlock" BasedOn="{StaticResource TextBase}" />
+    </Window.Resources>
+
+    <Grid Margin="24,20,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            FontSize="20"
+            FontWeight="SemiBold"
+            Text="{DynamicResource UnsavedChanges.Heading}"
+            TextWrapping="Wrap" />
+
+        <TextBlock
+            Grid.Row="1"
+            Margin="0,8,0,0"
+            Text="{DynamicResource UnsavedChanges.Detail}"
+            TextWrapping="Wrap" />
+
+        <!-- Saving is the default, and has the focus: it is the answer that loses nothing, and
+             the update was asked for a moment ago. Cancel first and the acts on the right, as
+             in the other dialogs; Escape is Cancel, and so is the window's own close. -->
+        <StackPanel
+            Grid.Row="2"
+            Margin="0,24,0,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                x:Name="CancelButton"
+                Margin="0,0,8,0"
+                MinWidth="96"
+                Content="{DynamicResource Common.Cancel}"
+                IsCancel="True" />
+            <Button
+                x:Name="DiscardButton"
+                Margin="0,0,8,0"
+                MinWidth="96"
+                Content="{DynamicResource UnsavedChanges.Discard}" />
+            <Button
+                x:Name="SaveButton"
+                MinWidth="96"
+                Content="{DynamicResource UnsavedChanges.Save}"
+                IsDefault="True"
+                Style="{DynamicResource AccentButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

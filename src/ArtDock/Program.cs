@@ -26,6 +26,15 @@ public static class Program
             .OnBeforeUninstallFastCallback(AppUpdater.OnUninstalling)
             .Run();
 
+        // Windows 11 or nothing — said here for Windows 10, which the setup lets through (see
+        // SupportedWindows). After Velopack's launches, so a copy installed there can still be
+        // uninstalled.
+        if (!SupportedWindows.IsCurrent)
+        {
+            SupportedWindows.SayUnsupported();
+            return;
+        }
+
         // Before anything can be launched, and after Velopack's own launches have gone: what the
         // dock opens gets the user's environment, not whatever shell started the dock.
         Interop.SignInEnvironment.Adopt();

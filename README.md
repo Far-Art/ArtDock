@@ -52,7 +52,11 @@ Cancel does.
 Released copies are installed by a setup, `ArtDock.App-win-Setup.exe`, built by
 [Velopack](https://velopack.io). It installs per user into `%LOCALAPPDATA%\ArtDock.App` —
 no administrator rights, then or on any update — with shortcuts on the Start menu and the
-desktop, and an entry in Windows' installed apps to remove it by. The installed dock starts when you sign in; the
+desktop, and an entry in Windows' installed apps to remove it by. It needs Windows 11: on
+Windows 7, 8 and 8.1 the setup refuses before installing anything, in Windows' own error box,
+and on Windows 10 — which the setup lets through, since Velopack compares versions without the
+build number that tells 11 from 10 — the dock says so in a message box each time it is
+started, and does not run. The installed dock starts when you sign in; the
 System page's *Start ArtDock when I sign in* turns that off, and an update leaves it as it
 was. Settings stay in `%LOCALAPPDATA%\ArtDock`, apart from the install, so updating does
 not touch them. Uninstalling asks: *Keep settings*, the default, leaves them for the next
@@ -644,7 +648,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   page names the author as the publisher of the autostart entry.
 - **Updates itself, when asked**: the About page's *Check for updates* looks for a newer
   release and, if there is one, becomes *Update and restart* — which downloads it, closes the
-  dock, and brings the new version back up with the dialog open on the same page. Nothing
+  dock, and brings the new version back up with the dialog open on the same page. Under the
+  button, *What's new* shows the release notes of that version and of each one it passes over,
+  newest first, so you can decide whether to take it. Settings changed in the dialog and not
+  yet saved are asked about first — *Save and update*, *Discard and update* or *Cancel* — and
+  only when there are some. Nothing
   goes online until the button is pressed. A copy the setup did not install, such as one run
   from the source tree, says so and offers nothing. Autostart in an installed copy points at
   Velopack's launcher, which outlasts every update, and uninstalling takes the entry away.
@@ -1348,7 +1356,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand and seventy-five tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1628,6 +1636,16 @@ Three hold the dock's two readings of the displays to each other (`ScreenReading
 machine's own: the full one it is placed by, and the cheap one it asks four times a second to
 see whether its display has changed size. Each display read the first way reads back the same
 the second, and the counts agree — or the dock would be placed again on every look, for good.
+
+Eleven cover the release notes an update shows (`ReleaseNotesTests`): every version it brings,
+newest first, once each, and none for a release that published no notes, nor for the version
+running or one past what is offered; and the notes read as headings, paragraphs and bullets —
+one wrapped over indented lines, as 0.9.9's are, staying one — with bold, italic, code and
+links, while a lone star, an unclosed one and `snake_case` stay as they are. Five cover telling
+whether the settings dialog has anything unsaved (`SettingsFingerprintTests`): a setting
+changed counts, while the open page, *Run at login* and the dock's own changes to the items do
+not until the list is edited there — or every update would ask. Eleven cover telling Windows 11
+from what came before it (`SupportedWindowsTests`), by build, since both call themselves 10.0.
 
 Thirty-five cover the Exclusions page's two questions, the dock's own third, and the handle's
 fourth. Nine are about

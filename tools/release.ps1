@@ -131,11 +131,18 @@ try {
     # The splash is the brand's dark lockup, made at 1x by tools/make-brand.py since
     # the setup scales it to the display itself; its progress bar, green unless told, is the
     # magnified icon's blue.
+    #
+    # The runtime names Windows 11 as the least the setup installs on, and Windows 7, 8 and 8.1
+    # are turned away by the setup before anything is installed, in Windows' own error box:
+    # "This application requires Windows 11 or later." Velopack builds its setup to run on
+    # Windows 7 so that it can. Not Windows 10, though: Velopack compares versions without the
+    # build number, which is all that tells Windows 11 (10.0.22000 and on) from 10. The dock
+    # says so itself on Windows 10, as it starts (SupportedWindows).
     $pack = @(
         'pack',
         '--packId', $installId,
         '--packVersion', $version,
-        '--runtime', 'win-x64',
+        '--runtime', 'win11-x64',
         '--packDir', $publishDir,
         '--mainExe', 'ArtDock.exe',
         '--packTitle', $properties.Product,
