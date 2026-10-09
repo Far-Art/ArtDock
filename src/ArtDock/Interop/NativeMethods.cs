@@ -372,4 +372,36 @@ internal static partial class NativeMethods
     [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetMonitorInfo(nint hMonitor, ref MonitorInfo lpmi);
+
+    /// <summary><see cref="MonitorInfo"/> with the display's device name, such as <c>\\.\DISPLAY1</c>.</summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct MonitorInfoEx
+    {
+        public int cbSize;
+        public NativeRect rcMonitor;
+        public NativeRect rcWork;
+        public uint dwFlags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szDevice;
+    }
+
+    /// <summary>In <see cref="MonitorInfo.dwFlags"/>: Windows' main display.</summary>
+    internal const uint MONITORINFOF_PRIMARY = 1;
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetMonitorInfo(nint hMonitor, ref MonitorInfoEx lpmi);
+
+    internal delegate bool MonitorEnumProc(nint hMonitor, nint hdc, nint lprcMonitor, nint dwData);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnumDisplayMonitors(nint hdc, nint lprcClip, MonitorEnumProc lpfnEnum, nint dwData);
+
+    /// <summary>For <see cref="GetSystemMetrics"/>: how many displays the desktop spans.</summary>
+    internal const int SM_CMONITORS = 80;
+
+    [DllImport("user32.dll")]
+    internal static extern int GetSystemMetrics(int nIndex);
 }

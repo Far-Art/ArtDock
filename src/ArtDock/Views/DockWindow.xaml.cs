@@ -81,6 +81,9 @@ public sealed partial class DockWindow : Window
     /// </summary>
     private Rect _workArea = Rect.Empty;
 
+    /// <summary>How many displays there were when the dock was last placed — see <see cref="KeepOnDisplay"/>.</summary>
+    private int _displayCount;
+
     /// <summary>
     /// The scale of that display, for the handle's own dimensions. Taken from the display, not
     /// from the dock's window, which is no guide to it while the dock is hidden — see
@@ -204,7 +207,11 @@ public sealed partial class DockWindow : Window
         };
         Root.Children.Add(_dock);
 
-        _frontWatch.Tick += (_, _) => CheckFront();
+        _frontWatch.Tick += (_, _) =>
+        {
+            KeepOnDisplay();
+            CheckFront();
+        };
         _onForeground = (_, _, _, _, _, _, _) => CheckFront(foregroundChanged: true);
         _dock.Polled += (_, _) =>
         {
@@ -1917,6 +1924,53 @@ public sealed partial class DockWindow : Window
         });
 
     /// <summary>
+    /// Re-places the dock when its display is not the size it was placed for, or the displays
+    /// are not the ones there were — whether or not anything said so.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reported 2026-10-09: across a wake, Windows brought the display back at a small
+    /// resolution and then grew it to its own, and the dock — auto-hidden — came back up from
+    /// left of the middle, centred on the small display. The display change is announced
+    /// (<see cref="OnDisplaySettingsChanged"/>), but what the dock last heard was the small
+    /// one, and nothing looked again; the displays were also read through WinForms' list then,
+    /// which keeps the size it last saw until its own handler hears of a change (see
+    /// <see cref="Screens"/>). Not reproduced — it takes a real wake — so this does not depend
+    /// on which of the two it was.
+    /// </para>
+    /// <para>
+    /// Asked by the look at what is in front, four times a second, and not from inside
+    /// <see cref="CheckFront"/>, which every re-apply ends with. Two calls and a third, and a
+    /// re-apply only on a difference — after which the dock was placed by the same reading,
+    /// so the next look finds none. Nothing is done with no display at all.
+    /// </para>
+    /// </remarks>
+    private void KeepOnDisplay()
+    {
+        if (_closed || _display.IsEmpty)
+        {
+            return;
+        }
+
+        var count = Screens.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        if (count == _displayCount
+            && Screens.At(_display) is { } now
+            && now.Bounds == _display
+            && now.WorkArea == _workArea)
+        {
+            return;
+        }
+
+        _previews?.Dismiss();
+        ApplySettings(_applied);
+    }
+
+    /// <summary>
     /// Re-anchors when the taskbar takes or gives back room on the dock's display.
     /// </summary>
     /// <remarks>
@@ -3529,6 +3583,7 @@ public sealed partial class DockWindow : Window
         var screen = Screens.Resolve(settings.ScreenDeviceName, settings.ScreenDevicePath);
         _display = screen.Bounds;
         _workArea = screen.WorkArea;
+        _displayCount = Screens.Count;
         _handleScale = MonitorDpi.ScaleAt(
             (int)(screen.Bounds.Left + (screen.Bounds.Width / 2)),
             (int)(screen.Bounds.Top + (screen.Bounds.Height / 2)));

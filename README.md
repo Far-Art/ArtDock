@@ -587,7 +587,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Stays on its display.** Too many items for the display at the size set, and the icons are
   made smaller to fit, down to a smallest size of your choosing; past that the last ones go
   behind a "more" item at the end of the dock, which lists them; and past thirty of those the
-  dock takes no more. Nothing of it is drawn on the display next door.
+  dock takes no more. Nothing of it is drawn on the display next door. When the display
+  changes size — a new resolution, or a wake that brings it back small before it grows to its
+  own — the dock is placed again within a quarter of a second, whether or not Windows said so.
 - **Configurable** live: dock size and the smallest the icons may be made to fit,
   magnification, influence range, gap, bar opacity, bar colour (hex, a colour wheel, a stock
   swatch, one you have saved, or whatever Windows is tinting the taskbar with), corner
@@ -1345,7 +1347,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand and thirty-two tests cover the cosine falloff (peak, range boundary,
+One thousand and seventy-five tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1620,6 +1622,11 @@ the name exactly as it did; a path that finds nothing falls through to the name,
 a monitor Windows gives no path for; nothing found is nothing, which the dock turns into the
 main display; and two identical monitors, whose paths differ only by the connector, are told
 apart.
+
+Three hold the dock's two readings of the displays to each other (`ScreenReadingTests`), on the
+machine's own: the full one it is placed by, and the cheap one it asks four times a second to
+see whether its display has changed size. Each display read the first way reads back the same
+the second, and the counts agree — or the dock would be placed again on every look, for good.
 
 Thirty-five cover the Exclusions page's two questions, the dock's own third, and the handle's
 fourth. Nine are about

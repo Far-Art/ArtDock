@@ -36,9 +36,12 @@ public sealed record ScreenInfo(
 /// The displays attached to this machine.
 /// </summary>
 /// <remarks>
-/// WinForms' <c>Screen</c> rather than a hand-rolled <c>EnumDisplayMonitors</c>: this project
-/// already carries WinForms for the tray icon, and it enumerates the monitors without any
-/// interop at all. Not their work areas, though — see <see cref="WorkAreaOf"/>.
+/// Asked of Windows every time, with <c>EnumDisplayMonitors</c>, and never through WinForms'
+/// <c>Screen.AllScreens</c>. That list is cached, bounds and all, and forgotten only when
+/// WinForms' own handler hears a display change — so a change it did not hear, or heard before
+/// the display had settled, left it describing a display that was no longer there, and every
+/// placement after went by it. Across a wake that comes back at a small resolution first, that
+/// was a dock centred on the small display, for good (see <c>DockWindow.KeepOnDisplay</c>).
 /// </remarks>
 public static class Screens
 {
@@ -52,57 +55,72 @@ public static class Screens
     /// </remarks>
     public static IReadOnlyList<ScreenInfo> All()
     {
-        var screens = System.Windows.Forms.Screen.AllScreens
+        var found = new List<(string Name, Rect Bounds, Rect WorkArea, bool Primary)>();
+        NativeMethods.EnumDisplayMonitors(0, 0, (monitor, _, _, _) =>
+        {
+            var info = new NativeMethods.MonitorInfoEx { cbSize = Marshal.SizeOf<NativeMethods.MonitorInfoEx>() };
+            if (NativeMethods.GetMonitorInfo(monitor, ref info))
+            {
+                found.Add((
+                    info.szDevice,
+                    RectOf(info.rcMonitor),
+                    RectOf(info.rcWork),
+                    (info.dwFlags & NativeMethods.MONITORINFOF_PRIMARY) != 0));
+            }
+
+            return true;
+        }, 0);
+
+        var screens = found
             .OrderBy(screen => screen.Bounds.X)
             .ThenBy(screen => screen.Bounds.Y)
             .ToList();
 
         return [.. screens.Select((screen, index) => new ScreenInfo(
-            screen.DeviceName,
-            Describe(screen, index + 1),
-            WorkAreaOf(screen),
-            new Rect(
-                screen.Bounds.X,
-                screen.Bounds.Y,
-                screen.Bounds.Width,
-                screen.Bounds.Height),
+            screen.Name,
+            Label(screen.Primary, index + 1, (int)screen.Bounds.Width, (int)screen.Bounds.Height),
+            screen.WorkArea,
+            screen.Bounds,
             screen.Primary,
-            DevicePathOf(screen.DeviceName)))];
+            DevicePathOf(screen.Name)))];
     }
+
+    /// <summary>How many displays the desktop spans now.</summary>
+    public static int Count => NativeMethods.GetSystemMetrics(NativeMethods.SM_CMONITORS);
 
     /// <summary>
-    /// The part of <paramref name="screen"/> the taskbar leaves, as Windows has it now.
+    /// The display lying at <paramref name="bounds"/>, as Windows has it now — its whole area
+    /// and the part the taskbar leaves — or null when there is none.
     /// </summary>
     /// <remarks>
-    /// Asked of Windows rather than read from <c>Screen.WorkingArea</c>, which is cached, and
-    /// forgotten only when WinForms' own handler for the work area changing has run. That is
-    /// the very notification the dock re-anchors on, and the order the two handlers run in is
-    /// not ours to choose — whichever came first would place the dock by the stale one.
+    /// Two calls, where <see cref="All"/> asks after every display's device path as well: cheap
+    /// enough to ask a few times a second whether the display the dock was placed on is still
+    /// the size it was.
     /// </remarks>
-    private static Rect WorkAreaOf(System.Windows.Forms.Screen screen)
+    public static (Rect Bounds, Rect WorkArea)? At(Rect bounds)
     {
-        var bounds = new NativeMethods.NativeRect
+        if (bounds.IsEmpty)
         {
-            Left = screen.Bounds.Left,
-            Top = screen.Bounds.Top,
-            Right = screen.Bounds.Right,
-            Bottom = screen.Bounds.Bottom,
-        };
-        var info = new NativeMethods.MonitorInfo { cbSize = Marshal.SizeOf<NativeMethods.MonitorInfo>() };
-        var monitor = NativeMethods.MonitorFromRect(ref bounds, NativeMethods.MONITOR_DEFAULTTONULL);
-
-        if (monitor != 0 && NativeMethods.GetMonitorInfo(monitor, ref info))
-        {
-            return new Rect(
-                info.rcWork.Left,
-                info.rcWork.Top,
-                info.rcWork.Right - info.rcWork.Left,
-                info.rcWork.Bottom - info.rcWork.Top);
+            return null;
         }
 
-        var cached = screen.WorkingArea;
-        return new Rect(cached.X, cached.Y, cached.Width, cached.Height);
+        var rect = new NativeMethods.NativeRect
+        {
+            Left = (int)Math.Round(bounds.Left),
+            Top = (int)Math.Round(bounds.Top),
+            Right = (int)Math.Round(bounds.Right),
+            Bottom = (int)Math.Round(bounds.Bottom),
+        };
+        var info = new NativeMethods.MonitorInfo { cbSize = Marshal.SizeOf<NativeMethods.MonitorInfo>() };
+        var monitor = NativeMethods.MonitorFromRect(ref rect, NativeMethods.MONITOR_DEFAULTTONULL);
+
+        return monitor != 0 && NativeMethods.GetMonitorInfo(monitor, ref info)
+            ? (RectOf(info.rcMonitor), RectOf(info.rcWork))
+            : null;
     }
+
+    private static Rect RectOf(NativeMethods.NativeRect rect) =>
+        new(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
 
     /// <summary>
     /// The device interface path of the monitor on the display output called
@@ -224,9 +242,6 @@ public static class Screens
 
         return null;
     }
-
-    private static string Describe(System.Windows.Forms.Screen screen, int number) =>
-        Label(screen.Primary, number, screen.Bounds.Width, screen.Bounds.Height);
 
     /// <summary>
     /// What to call a display in the settings dialog, in the dock's language — again, for a
