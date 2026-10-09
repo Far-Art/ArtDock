@@ -75,7 +75,8 @@ To make a release, bump `<Version>` in `src/ArtDock/ArtDock.csproj` and run
 which builds the setup, the packages and the update feed into `artifacts\releases` to try.
 `-Publish` also uploads them as a GitHub release of the public
 `Far-Art/ArtDock-Releases`, which installed docks read their updates from; it needs a
-token that can write there in `$env:GITHUB_TOKEN`. The details, and what Velopack does not
+token that can write there, in `$env:GITHUB_TOKEN` or saved once, encrypted to your Windows
+account, with `.\tools\save-release-token.ps1`. The details, and what Velopack does not
 cover, are in [docs/downloads.md](docs/downloads.md).
 
 ## What it does

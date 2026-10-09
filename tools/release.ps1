@@ -14,10 +14,11 @@
     GitHub refuses a tag that has been published already, and an installed dock offers only a
     version newer than its own.
 
-    Publishing needs a GitHub token that can write to the releases repository, in
-    $env:GITHUB_TOKEN. A fine-grained token with Contents: read and write on that one
-    repository is enough. Reading the last release, for the delta, needs no token while the
-    repository is public.
+    Publishing needs a GitHub token that can write to the releases repository: the one in
+    $env:GITHUB_TOKEN, or else the one tools\save-release-token.ps1 saved, encrypted to this
+    Windows account. A fine-grained token with Contents: read and write on that one repository
+    is enough. Reading the last release, for the delta, needs no token while the repository
+    is public.
 
 .PARAMETER Publish
     Upload the release and publish it. Without this, the script only builds it.
@@ -55,6 +56,9 @@ $buildDir = Join-Path $artifacts 'build'
 $publishDir = Join-Path $artifacts 'publish'
 $releasesDir = Join-Path $artifacts 'releases'
 
+# Where tools\save-release-token.ps1 keeps the token, encrypted to this Windows account.
+$tokenFile = Join-Path $HOME '.artdock\release-token.xml'
+
 # Runs a native command and stops the script if it fails. Without this, PowerShell carries
 # on past a failed dotnet or vpk as if nothing had happened.
 function Invoke-Native {
@@ -72,8 +76,17 @@ try {
         throw 'The working tree has uncommitted changes. Commit them first, or pass -AllowDirty.'
     }
 
-    if ($Publish -and -not $env:GITHUB_TOKEN) {
-        throw 'Publishing needs a token that can write to the releases repository, in $env:GITHUB_TOKEN.'
+    # The variable first, then the saved token. Held here rather than put in $env:, which
+    # would outlive the script in the shell that ran it.
+    $githubToken = $env:GITHUB_TOKEN
+    if (-not $githubToken -and (Test-Path $tokenFile)) {
+        $saved = Import-Clixml -Path $tokenFile
+        $githubToken = [System.Net.NetworkCredential]::new('', $saved).Password
+        Write-Host "Using the token saved in $tokenFile."
+    }
+
+    if ($Publish -and -not $githubToken) {
+        throw 'Publishing needs a token that can write to the releases repository: in $env:GITHUB_TOKEN, or saved with tools\save-release-token.ps1.'
     }
 
     if ($ReleaseNotes -and -not (Test-Path $ReleaseNotes)) {
@@ -107,7 +120,7 @@ try {
 
     # The last published release, for vpk to make the delta from. Finding none is not an
     # error: the first release has nothing to be a delta from, and installs whole.
-    $token = if ($env:GITHUB_TOKEN) { @('--token', $env:GITHUB_TOKEN) } else { @() }
+    $token = if ($githubToken) { @('--token', $githubToken) } else { @() }
     dotnet vpk download github --repoUrl $repository --outputDir $releasesDir @token
     if ($LASTEXITCODE -ne 0) {
         Write-Warning 'No earlier release could be read, so this one has no delta, and every update to it downloads it whole.'
@@ -144,7 +157,7 @@ try {
     }
 
     Invoke-Native 'Publishing the release' {
-        dotnet vpk upload github --repoUrl $repository --token $env:GITHUB_TOKEN `
+        dotnet vpk upload github --repoUrl $repository --token $githubToken `
             --outputDir $releasesDir --publish `
             --releaseName "$($properties.Product) $version" --tag "v$version"
     }

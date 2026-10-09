@@ -237,8 +237,11 @@ let go of. The dock answers it with the same `Quit` its Exit uses.
 .\tools\release.ps1 -Publish -ReleaseNotes notes.md  # build and publish
 ```
 
-Publishing needs `$env:GITHUB_TOKEN`: a token that can write to the releases repository — a
-fine-grained one with *Contents: read and write* on that repository alone is enough. The
+Publishing needs a token that can write to the releases repository — a fine-grained one with
+*Contents: read and write* on that repository alone is enough. The script takes it from
+`$env:GITHUB_TOKEN`, or else from `%USERPROFILE%\.artdock\release-token.xml`, which
+`.\tools\save-release-token.ps1` writes encrypted with Windows' data protection, so only the
+account that saved it, on that PC, can read it back (`-Remove` deletes it). The
 script refuses a working tree with uncommitted changes unless given `-AllowDirty`, reads
 every name and address from the project file, and keeps `vpk` at the version of the
 `Velopack` package, which `dotnet-tools.json` pins; raise the two together.
