@@ -162,11 +162,20 @@ public sealed class BackdropWindow : IDisposable
     /// Keeps the sheet in the same z-order band as the dock. They are re-stacked against
     /// each other afterwards, and that only works between windows of the same band.
     /// </summary>
+    /// <remarks>
+    /// Only when the sheet is not in that band already — as the window says, not as last asked,
+    /// so a band changed behind its back is still put right. This runs on every re-apply of the
+    /// settings, every tick of every slider among them, and <c>HWND_TOPMOST</c> does not leave a
+    /// window already in the topmost band where it is: it lifts it to the top, over the dock,
+    /// until the restack that follows puts it back under. The sheet draws the bar, so whatever
+    /// DWM composed in between was the bar over the icons — the icons flickering while the
+    /// colour or the roundness slider was dragged.
+    /// </remarks>
     public void SetTopmost(bool topmost)
     {
         _topmost = topmost;
 
-        if (_visible)
+        if (_visible && WindowChrome.IsTopmostWindow(_hwnd) != topmost)
         {
             ApplyBand();
         }

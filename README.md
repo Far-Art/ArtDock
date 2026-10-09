@@ -1356,15 +1356,16 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and two tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and five tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
 wave does), the bar while the acrylic sheet draws it (the shadow both draw, the invisible
 stand-in that keeps it clickable, the shape the sheet is told once it has been drawn, drawn to
 the fraction of a pixel in a window the twin of the dock's, and a sheet made on any thread),
-what counts as click-through, held against Windows' own hit-testing off every display, and
-the tuning values
+what counts as click-through, held against Windows' own hit-testing off every display, the
+sheet left directly under the dock when it is told the band it is in already — a band asserted
+again lifted it over the icons on every tick of a slider — and the tuning values
 being relative — that the wave is identical at any icon size, that the gap keeps its
 proportions, and that a settings file written in pixels is carried over as the count and
 share it always meant.
