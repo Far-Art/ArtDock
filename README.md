@@ -474,6 +474,16 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the list; one turned off in Windows shows unchecked — at once, if the settings dialog is open
   while it happens; and neither the first run nor the setup turns it back on. Resetting the
   System page checks it again.
+- **Comes up with the sign-in, not after the other startup apps**: Explorer starts its startup
+  apps one after another, after a delay of its own, and the dock was seen coming up 45 s after
+  the desktop behind them. So beside the Run entry the dock keeps a Task Scheduler task,
+  *ArtDock* and your account's SID, which starts it as you sign in — seen up 3 s after the
+  desktop, ahead of every startup app Explorer starts. The entry stays the switch:
+  a dock the task starts goes again at once if the entry is off or belongs to another copy, and
+  the entry's own launch, later, finds the dock up and goes without a word. The task is made
+  and taken away with the entry — by the setup, the first run, the checkbox, and at each start
+  of the dock, so a switch made in Windows reaches it — runs at normal priority, as you, with
+  no time limit and on battery, and goes with an uninstall (`Interop/SignInTask`).
 - **An empty dock is still a dock**: with nothing pinned it draws one empty slot's worth of
   bar rather than disappearing. That is not decoration — the window is per-pixel transparent
   and Windows hit-tests it by what was painted, so a dock that drew nothing would be a window
@@ -1356,7 +1366,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and five tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and forty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1812,7 +1822,8 @@ one, and starts at sign-in from where it is, both before Velopack has looked for
 installation and after, which is the state a build run from the source tree is in whenever
 the settings dialog asks.
 
-Twenty-one cover starting at sign-in, under a scratch registry key and never the real Run key.
+Fifty cover starting at sign-in, under a scratch registry key and never the real Run key, and
+with a record of what was asked of the sign-in task rather than the real one.
 Task Manager's *Startup apps* page turns an entry off by writing a flag beside it rather than
 deleting it, so an entry turned off there reads as registered but not on, and one turned back
 on there reads as on — and so does one turned off in the Settings app's *Apps → Startup*, which
@@ -1822,10 +1833,27 @@ box writes the flags Task Manager writes: unticking keeps the entry and switches
 the time, so the dock stays on Windows' list; with no entry it writes nothing. The setup and the
 first run register without touching the flag, so a setup run over an installed copy leaves a
 dock that was switched off off; and an uninstall takes the flag with an entry into its
-installation, and leaves another copy's alone. The last three are the watch the settings dialog
-keeps while it is open: it hears an entry written and a switch in Windows, and hears the second
-of two in a row — a registration is good for one change, so that one is heard only if the
-watch made it again — and hears nothing once it is stopped.
+installation, and leaves another copy's alone. The entry starts this copy with `--sign-in`,
+and the program is read from the quoted path before it, the switch from what follows. The task
+follows the entry: made, starting this copy with the switch, by the setup, the first run and
+ticking the box; taken away by unticking it, by an entry switched off in Windows, and where
+there is no entry; left to another copy whose entry it is; and an entry written before there
+was a task gains the switch and a task, keeping Task Manager's flag. A task already starting
+this copy, in whatever case, is not written again — that would enable one disabled in Task
+Scheduler — and one starting another program is pointed here. An uninstall takes a task into
+its installation and leaves another copy's. A launch at sign-in goes on only for an entry that
+is on and this copy's. The last three are the watch the settings dialog keeps while it is
+open: it hears an entry written and a switch in Windows, and hears the second of two in a row
+— a registration is good for one change, so that one is heard only if the watch made it again
+— and hears nothing once it is stopped.
+
+Thirteen cover the sign-in task's definition, as XML, since registering a task is the
+machine's: named for the user's SID; a logon trigger for the user; run as them with no
+elevation and no password kept; at normal priority, where a task's default would hand below
+normal to every program the dock starts; never stopped for running long; started and kept on
+battery; and the program quoted, with the switch, from its own folder unquoted. What it starts
+reads back as it was given, and out of the XML Task Scheduler hands back; a definition starting
+nothing, or not XML, reads as none; and a path is the same whatever its case.
 
 Three hold the settings dialog open to a screen reader, reading its XAML, since the dialog
 cannot be built in the test host. The template that draws the page list names its content

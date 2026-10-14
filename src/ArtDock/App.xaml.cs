@@ -26,14 +26,31 @@ public partial class App : Application
         // The dock has no main window in the usual sense; it lives in the tray.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // A launch at sign-in, from the task or from the Run entry, goes at once unless the entry
+        // is on and this copy's: the task cannot be switched off in Windows, and the entry can.
+        // Tidying the task on the way out, so that a dock switched off there stops being started
+        // at all.
+        var request = SingleInstance.RequestOf(e.Args);
+        if (request == LaunchRequest.SignIn && !Interop.Autostart.StartsThisCopy())
+        {
+            Interop.Autostart.Refresh();
+            Shutdown();
+            return;
+        }
+
         // Before anything is created. A second dock would overlap the first on the same
         // screen edge, add a second identical tray icon, and race it for the settings file.
-        var request = SingleInstance.RequestOf(e.Args);
         if (!SingleInstance.TryClaim())
         {
             // Reported rather than acted on: whether this launch wants an answer depends on
-            // whether the dock can be seen, and only the copy already running knows that.
-            SingleInstance.NotifyExisting(request);
+            // whether the dock can be seen, and only the copy already running knows that. Not
+            // a launch at sign-in, though, which is the Run entry arriving after the task has
+            // started the dock — and which nobody asked anything of.
+            if (request != LaunchRequest.SignIn)
+            {
+                SingleInstance.NotifyExisting(request);
+            }
+
             Shutdown();
             return;
         }
@@ -152,6 +169,12 @@ public partial class App : Application
         // Gives back what a dialog, a menu or a run of the wave leaves behind, once the dock
         // has gone quiet again. Without it the dock holds its busiest moment indefinitely.
         _memoryTrim = new MemoryTrim();
+
+        // The sign-in task brought into line with the entry — made for a copy that has had the
+        // entry since before there was a task, gone for one switched off in Windows. Once the dock
+        // is up and off its thread: it asks Task Scheduler, and nothing on screen waits for it.
+        Dispatcher.BeginInvoke(
+            () => Task.Run(Interop.Autostart.Refresh), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 
         // Lets a shortcut open the dialog straight away, rather than making the tray icon
         // the only route to it.

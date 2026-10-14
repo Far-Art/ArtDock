@@ -16,7 +16,13 @@ internal enum LaunchRequest
     Toggle,
 
     /// <summary><c>--keyboard</c>: the dock takes the keyboard, or gives it back, as its hotkey does.</summary>
-    Keyboard
+    Keyboard,
+
+    /// <summary>
+    /// <c>--sign-in</c>: Windows starting the dock as the user signs in — the sign-in task, or the
+    /// Run entry after it. Asks nothing of a dock already up, and is not answered.
+    /// </summary>
+    SignIn
 }
 
 /// <summary>
@@ -140,6 +146,8 @@ internal static class SingleInstance
                     return LaunchRequest.Toggle;
                 case "--keyboard":
                     return LaunchRequest.Keyboard;
+                case Autostart.SignInSwitch:
+                    return LaunchRequest.SignIn;
             }
         }
 

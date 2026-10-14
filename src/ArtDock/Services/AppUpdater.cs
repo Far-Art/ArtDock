@@ -162,6 +162,8 @@ public sealed class AppUpdater
     /// <see cref="LaunchPath"/> already finds it. An update does not come here, so autostart
     /// turned off stays off. A setup run over an installed copy does, and so the entry is only
     /// written, never Task Manager's flag cleared: a dock turned off there stays off through it.
+    /// The sign-in task follows the entry (<see cref="Autostart.Refresh()"/>); an update gains one
+    /// at the dock's next start instead.
     /// </para>
     /// <para>
     /// Not on Windows 10, which the setup lets through (<see cref="SupportedWindows"/>): a dock
@@ -182,9 +184,9 @@ public sealed class AppUpdater
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The autostart entry goes with it, or Windows goes on trying to start a program that is
-    /// no longer there. Only an entry that points into this installation, so uninstalling one
-    /// copy cannot turn off autostart for another. First, and before anything that could be
+    /// The autostart entry goes with it, and the sign-in task, or Windows goes on trying to start
+    /// a program that is no longer there. Only an entry or a task that points into this
+    /// installation, so uninstalling one copy cannot turn off autostart for another. First, and before anything that could be
     /// slow, so that it happens whatever becomes of the question.
     /// </para>
     /// <para>

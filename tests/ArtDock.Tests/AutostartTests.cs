@@ -17,11 +17,22 @@ namespace ArtDock.Tests;
 /// <para>
 /// Every test works under a scratch key of its own beneath <c>HKCU\Software</c>, with the same
 /// paths under it that the dock uses under <c>HKCU</c>, and deletes it afterwards. The user's
-/// real Run key is never read or written here.
+/// real Run key is never read or written here. Nor is their sign-in task: the task kept beside
+/// the entry is a record of what was asked of it (<see cref="RecordingTask"/>).
+/// </para>
+/// <para>
+/// "This copy" is the test host, which is what <see cref="ArtDock.Services.AppUpdater.LaunchPath"/>
+/// names in a process Velopack did not install.
 /// </para>
 /// </remarks>
 public sealed class AutostartTests : IDisposable
 {
+    private static string ThisCopy => ArtDock.Services.AppUpdater.LaunchPath!;
+
+    private static readonly SignInCommand StartsThisCopy = new(ThisCopy, Autostart.SignInSwitch);
+
+    private readonly RecordingTask _task = new();
+
     private const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ApprovedPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
     private const string NotifiedPath = @"Software\Microsoft\Windows\CurrentVersion\RunNotification";
@@ -131,7 +142,7 @@ public sealed class AutostartTests : IDisposable
         WriteEntry(@"C:\Apps\ArtDock\ArtDock.exe");
         WriteFlag(OffFlag);
 
-        Assert.True(Autostart.SetEnabled(_root, true));
+        Assert.True(Autostart.SetEnabled(_root, _task,true));
 
         Assert.True(Autostart.IsEnabled(_root));
         Assert.Equal(OnFlag, ReadFlag());
@@ -140,7 +151,7 @@ public sealed class AutostartTests : IDisposable
     [Fact]
     public void TickingTheBox_WhereThereWasNothing_RegistersItOn()
     {
-        Assert.True(Autostart.SetEnabled(_root, true));
+        Assert.True(Autostart.SetEnabled(_root, _task,true));
 
         Assert.True(Autostart.IsEnabled(_root));
         Assert.Equal(OnFlag, ReadFlag());
@@ -153,7 +164,7 @@ public sealed class AutostartTests : IDisposable
         // rather than vanishing from it.
         WriteEntry(@"C:\Apps\ArtDock\ArtDock.exe");
 
-        Assert.True(Autostart.SetEnabled(_root, false));
+        Assert.True(Autostart.SetEnabled(_root, _task,false));
 
         Assert.True(Autostart.IsRegistered(_root));
         Assert.False(Autostart.IsEnabled(_root));
@@ -163,7 +174,7 @@ public sealed class AutostartTests : IDisposable
     [Fact]
     public void UntickingTheBox_WithNoEntry_WritesNothing()
     {
-        Assert.True(Autostart.SetEnabled(_root, false));
+        Assert.True(Autostart.SetEnabled(_root, _task,false));
 
         Assert.False(Autostart.IsRegistered(_root));
         Assert.Null(ReadFlag());
@@ -188,7 +199,7 @@ public sealed class AutostartTests : IDisposable
     [Fact]
     public void Registering_WhereThereWasNothing_IsEnabled()
     {
-        Assert.True(Autostart.Register(_root));
+        Assert.True(Autostart.Register(_root, _task));
 
         Assert.True(Autostart.IsEnabled(_root));
     }
@@ -201,7 +212,7 @@ public sealed class AutostartTests : IDisposable
         WriteEntry(@"C:\Apps\ArtDock\ArtDock.exe");
         WriteFlag(OffFlag);
 
-        Assert.True(Autostart.Register(_root));
+        Assert.True(Autostart.Register(_root, _task));
 
         Assert.True(Autostart.IsRegistered(_root));
         Assert.False(Autostart.IsEnabled(_root));
@@ -215,7 +226,7 @@ public sealed class AutostartTests : IDisposable
         WriteEntry(@"C:\Users\someone\AppData\Local\ArtDock.App\ArtDock.exe");
         WriteFlag(OffFlag);
 
-        Autostart.RemoveIfUnder(_root, @"C:\Users\someone\AppData\Local\ArtDock.App");
+        Autostart.RemoveIfUnder(_root, _task,@"C:\Users\someone\AppData\Local\ArtDock.App");
 
         Assert.False(Autostart.IsRegistered(_root));
         Assert.Null(ReadFlag());
@@ -231,7 +242,7 @@ public sealed class AutostartTests : IDisposable
             notified.SetValue("StartupTNotiOther", 1);
         }
 
-        Autostart.RemoveIfUnder(_root, @"C:\Users\someone\AppData\Local\ArtDock.App");
+        Autostart.RemoveIfUnder(_root, _task,@"C:\Users\someone\AppData\Local\ArtDock.App");
 
         using var after = _root.OpenSubKey(NotifiedPath);
         Assert.Equal(["StartupTNotiOther"], after!.GetValueNames());
@@ -243,11 +254,225 @@ public sealed class AutostartTests : IDisposable
         WriteEntry(@"E:\Projects\ArtDock\bin\x64\Release\ArtDock.exe");
         WriteFlag(OffFlag);
 
-        Autostart.RemoveIfUnder(_root, @"C:\Users\someone\AppData\Local\ArtDock.App");
+        Autostart.RemoveIfUnder(_root, _task,@"C:\Users\someone\AppData\Local\ArtDock.App");
 
         Assert.True(Autostart.IsRegistered(_root));
         Assert.Equal(OffFlag, ReadFlag());
     }
+
+    [Fact]
+    public void RemovingAnEntryWithTheSwitch_ReadsThePathBeforeIt()
+    {
+        WriteValue(@"""C:\Users\some one\AppData\Local\ArtDock.App\ArtDock.exe"" --sign-in");
+
+        Autostart.RemoveIfUnder(_root, _task, @"C:\Users\some one\AppData\Local\ArtDock.App");
+
+        Assert.False(Autostart.IsRegistered(_root));
+    }
+
+    [Fact]
+    public void Uninstalling_TakesATaskIntoTheInstallation()
+    {
+        _task.Command = new SignInCommand(@"C:\Users\someone\AppData\Local\ArtDock.App\ArtDock.exe", "--sign-in");
+
+        Autostart.RemoveIfUnder(_root, _task, @"C:\Users\someone\AppData\Local\ArtDock.App");
+
+        Assert.Null(_task.Command);
+    }
+
+    [Fact]
+    public void Uninstalling_LeavesATaskForAnotherCopy()
+    {
+        var other = new SignInCommand(@"E:\Projects\ArtDock\bin\x64\Release\ArtDock.exe", "--sign-in");
+        _task.Command = other;
+
+        Autostart.RemoveIfUnder(_root, _task, @"C:\Users\someone\AppData\Local\ArtDock.App");
+
+        Assert.Equal(other, _task.Command);
+        Assert.Equal(0, _task.Removals);
+    }
+
+    // ---- the entry's switch ----------------------------------------------------------
+
+    [Fact]
+    public void TheEntry_StartsThisCopyWithTheSwitch()
+    {
+        Assert.True(Autostart.Register(_root, _task));
+
+        Assert.Equal($"\"{ThisCopy}\" --sign-in", ReadValue());
+    }
+
+    [Theory]
+    [InlineData(@"""C:\Apps\ArtDock\ArtDock.exe"" --sign-in", @"C:\Apps\ArtDock\ArtDock.exe")]
+    [InlineData(@"""C:\Program Files\ArtDock\ArtDock.exe""", @"C:\Program Files\ArtDock\ArtDock.exe")]
+    [InlineData(@"  ""C:\Apps\ArtDock.exe""  ", @"C:\Apps\ArtDock.exe")]
+    [InlineData(@"C:\Apps\ArtDock.exe", @"C:\Apps\ArtDock.exe")]
+    public void TheProgramAnEntryStarts_IsItsQuotedPath(string value, string program) =>
+        Assert.Equal(program, Autostart.CommandPath(value));
+
+    [Theory]
+    [InlineData(@"""C:\Apps\ArtDock.exe"" --sign-in", true)]
+    [InlineData(@"""C:\Apps\ArtDock.exe"" --SIGN-IN", true)]
+    [InlineData(@"""C:\Apps\ArtDock.exe""", false)]
+    [InlineData(@"""C:\Apps\--sign-in\ArtDock.exe""", false)]
+    [InlineData(@"""C:\Apps\ArtDock.exe"" --sign-inside", false)]
+    public void TheSwitch_IsReadFromTheArgumentsAlone(string value, bool has) =>
+        Assert.Equal(has, Autostart.HasSignInSwitch(value));
+
+    // ---- the sign-in task: following the entry -----------------------------------------
+
+    [Fact]
+    public void Registering_MakesTheTask_StartingThisCopyWithTheSwitch()
+    {
+        Assert.True(Autostart.Register(_root, _task));
+
+        Assert.Equal(StartsThisCopy, _task.Command);
+    }
+
+    [Fact]
+    public void Registering_OverATaskManagerOff_MakesNoTask()
+    {
+        WriteEntry(ThisCopy);
+        WriteFlag(OffFlag);
+        _task.Command = StartsThisCopy;
+
+        Assert.True(Autostart.Register(_root, _task));
+
+        Assert.Null(_task.Command);
+    }
+
+    [Fact]
+    public void TickingTheBox_MakesTheTask()
+    {
+        Assert.True(Autostart.SetEnabled(_root, _task, true));
+
+        Assert.Equal(StartsThisCopy, _task.Command);
+    }
+
+    [Fact]
+    public void UntickingTheBox_TakesTheTaskAway()
+    {
+        Assert.True(Autostart.SetEnabled(_root, _task, true));
+
+        Assert.True(Autostart.SetEnabled(_root, _task, false));
+
+        Assert.Null(_task.Command);
+        Assert.True(Autostart.IsRegistered(_root));
+    }
+
+    [Fact]
+    public void Refreshing_AnEntryFromBeforeTheTask_GivesItTheSwitch_AndMakesTheTask()
+    {
+        // As every copy wrote it until there was a task: a copy updated from one has the entry,
+        // and would otherwise meet the dock the task started and say it was already running.
+        WriteEntry(ThisCopy);
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.True(Autostart.HasSignInSwitch(ReadValue()!));
+        Assert.Equal(StartsThisCopy, _task.Command);
+    }
+
+    [Fact]
+    public void Refreshing_AnEntryFromBeforeTheTask_KeepsTaskManagersFlag()
+    {
+        WriteEntry(ThisCopy);
+        WriteFlag(OnFlag);
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Equal(OnFlag, ReadFlag());
+    }
+
+    [Fact]
+    public void Refreshing_AnEntrySwitchedOffInWindows_TakesTheTaskAway()
+    {
+        WriteValue($"\"{ThisCopy}\" --sign-in");
+        WriteFlag(SettingsOffFlag);
+        _task.Command = StartsThisCopy;
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Null(_task.Command);
+    }
+
+    [Fact]
+    public void Refreshing_WithNoEntry_TakesTheTaskAway()
+    {
+        _task.Command = StartsThisCopy;
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Null(_task.Command);
+    }
+
+    [Fact]
+    public void Refreshing_AnotherCopysEntry_LeavesTheTaskToIt()
+    {
+        var other = new SignInCommand(@"E:\Projects\ArtDock\bin\x64\Release\ArtDock.exe", "--sign-in");
+        WriteEntry(other.Path);
+        _task.Command = other;
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Equal(other, _task.Command);
+        Assert.Equal(0, _task.Writes);
+        Assert.Equal(0, _task.Removals);
+        Assert.Equal($"\"{other.Path}\"", ReadValue());
+    }
+
+    [Fact]
+    public void Refreshing_ATaskAlreadyStartingThisCopy_WritesNothing()
+    {
+        // So that one disabled in Task Scheduler stays disabled: writing it again would enable it.
+        WriteValue($"\"{ThisCopy}\" --sign-in");
+        _task.Command = new SignInCommand(ThisCopy.ToUpperInvariant(), Autostart.SignInSwitch);
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Equal(0, _task.Writes);
+    }
+
+    [Fact]
+    public void Refreshing_ATaskStartingAnotherCopy_PointsItHere()
+    {
+        WriteValue($"\"{ThisCopy}\" --sign-in");
+        _task.Command = new SignInCommand(@"C:\Users\someone\AppData\Local\ArtDock.App\ArtDock.exe", "--sign-in");
+
+        Autostart.Refresh(_root, _task);
+
+        Assert.Equal(StartsThisCopy, _task.Command);
+    }
+
+    // ---- a launch at sign-in ---------------------------------------------------------
+
+    [Fact]
+    public void ALaunchAtSignIn_GoesOn_WhenTheEntryIsThisCopysAndOn()
+    {
+        WriteValue($"\"{ThisCopy}\" --sign-in");
+
+        Assert.True(Autostart.StartsThisCopy(_root));
+    }
+
+    [Fact]
+    public void ALaunchAtSignIn_Goes_WhenTheEntryIsSwitchedOff()
+    {
+        WriteValue($"\"{ThisCopy}\" --sign-in");
+        WriteFlag(OffFlag);
+
+        Assert.False(Autostart.StartsThisCopy(_root));
+    }
+
+    [Fact]
+    public void ALaunchAtSignIn_Goes_WhenTheEntryIsAnotherCopys()
+    {
+        WriteEntry(@"C:\Users\someone\AppData\Local\ArtDock.App\ArtDock.exe");
+
+        Assert.False(Autostart.StartsThisCopy(_root));
+    }
+
+    [Fact]
+    public void ALaunchAtSignIn_Goes_WhenThereIsNoEntry() => Assert.False(Autostart.StartsThisCopy(_root));
 
     // ---- the watch: the settings dialog following a switch made in Windows --------------
 
@@ -299,10 +524,19 @@ public sealed class AutostartTests : IDisposable
 
     // ---- helpers ---------------------------------------------------------------------
 
-    private void WriteEntry(string path)
+    /// <summary>The entry as every copy wrote it before there was a sign-in task: the quoted path alone.</summary>
+    private void WriteEntry(string path) => WriteValue($"\"{path}\"");
+
+    private void WriteValue(string value)
     {
         using var run = _root.CreateSubKey(RunPath);
-        run.SetValue("ArtDock", $"\"{path}\"");
+        run.SetValue("ArtDock", value);
+    }
+
+    private string? ReadValue()
+    {
+        using var run = _root.OpenSubKey(RunPath);
+        return run?.GetValue("ArtDock") as string;
     }
 
     private void WriteFlag(byte[] flag)
@@ -315,5 +549,29 @@ public sealed class AutostartTests : IDisposable
     {
         using var approved = _root.OpenSubKey(ApprovedPath);
         return approved?.GetValue("ArtDock") as byte[];
+    }
+
+    /// <summary>A sign-in task that is only a record of what it was asked.</summary>
+    private sealed class RecordingTask : ISignInTask
+    {
+        public SignInCommand? Command { get; set; }
+
+        public int Writes { get; private set; }
+
+        public int Removals { get; private set; }
+
+        public SignInCommand? Read() => Command;
+
+        public void Write(SignInCommand command)
+        {
+            Command = command;
+            Writes++;
+        }
+
+        public void Remove()
+        {
+            Command = null;
+            Removals++;
+        }
     }
 }

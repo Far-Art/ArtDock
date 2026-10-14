@@ -188,6 +188,14 @@ the launcher there before it calls the hook. The uninstaller removes the entry o
 out — only if it points into that installation, so uninstalling one copy cannot turn
 autostart off for another.
 
+The entry starts the launcher with `--sign-in`, which it hands on, and beside it is a Task
+Scheduler task that starts the same launcher the same way as the user signs in, ahead of
+Explorer's queue of startup apps (`Interop/SignInTask`). The task follows the entry and never
+leads it: the hook makes it with the entry, the uninstaller takes it with the entry, by the
+same rule of pointing into the installation, and a copy updated from before there was a task
+gains one — and the switch on its entry — at its next start rather than in an update hook,
+since every start brings the task into line (`Autostart.Refresh`).
+
 **Uninstalling asks about the settings.** They live outside the installation, so they outlive
 it — which is what lets a reinstall bring the dock back as it was. The same before-uninstall
 hook, `AppUpdater.OnUninstalling`, asks with `Views/UninstallWindow`: *Keep settings*, the
