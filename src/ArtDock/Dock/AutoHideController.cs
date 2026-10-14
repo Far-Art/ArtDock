@@ -172,6 +172,27 @@ public sealed class AutoHideController
     public bool IsEnabled { get; private set; }
 
     /// <summary>
+    /// False until the dock's window first goes up on the screen — the owner's to say — and until
+    /// then nothing slides: a dock that hides is hidden at once, and starts where it hides.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For auto-hide, and for a window in front filling the display, which both used to send the
+    /// dock away from where it shows: auto-hide once the hide delay had run out, the window at once.
+    /// So a dock set to keep out of the way came up at every sign-in, stood for a moment and slid
+    /// off — seen arriving only to leave. Reported 2026-10-14. Making the arrival deliberate was the
+    /// other way offered; a dock that hides was asked to keep out of the way, and the Mac's starts
+    /// hidden too.
+    /// </para>
+    /// <para>
+    /// The owner places a hidden dock, in physical pixels, so it is the owner that puts this one
+    /// where it hides. Whatever brings the dock up as it starts — the settings dialog asked for on
+    /// the command line, the keyboard — comes after the window is up, and slides it up as ever.
+    /// </para>
+    /// </remarks>
+    public bool HasAppeared { get; set; }
+
+    /// <summary>
     /// True while a window in front fills the dock's display — maximized there or fullscreen —
     /// and the dock hides as auto-hide would, whatever the setting; see <see cref="Yield"/>.
     /// </summary>
@@ -366,6 +387,15 @@ public sealed class AutoHideController
         {
             // Auto-hide has the dock from here, and the edge brings it back whatever put it away.
             IsPutAway = false;
+
+            // Turned on as the dock starts, it starts where auto-hide keeps it — see HasAppeared.
+            // Turned on later, it hides in its own time, once the pointer has been away for the
+            // hide delay.
+            if (!HasAppeared && _holds == 0)
+            {
+                Hide();
+            }
+
             return;
         }
 
@@ -821,7 +851,9 @@ public sealed class AutoHideController
         // Before the change of visibility, which the handle hears about and asks this.
         IsPutAway = putAway;
 
-        Visibility = DockVisibility.Hiding;
+        // Not on the screen yet, it is not slid anywhere but counted hidden from the start, and
+        // the owner, hearing so, puts it where it hides — see HasAppeared.
+        Visibility = HasAppeared ? DockVisibility.Hiding : DockVisibility.Hidden;
         _outsideSince = DateTime.MaxValue;
 
         // A dock hidden while lifted — from the tray, with auto-hide off — is not lifted any
@@ -832,6 +864,12 @@ public sealed class AutoHideController
         // Click-through the moment it starts leaving, so the sliding window never swallows a
         // click meant for whatever is underneath.
         _chrome.SetClickThrough(true);
+
+        if (!HasAppeared)
+        {
+            _atEdgeSince = DateTime.MaxValue;
+            return;
+        }
 
         Slide(_hiddenTop, () =>
         {

@@ -52,7 +52,8 @@ public class PutAwayTests
 
     /// <summary>
     /// Runs a test on the dock's auto-hide, off as a new dock has it, with nothing over the dock,
-    /// the pointer nowhere near it, and no program in front that the edge stands down for.
+    /// the pointer nowhere near it, and no program in front that the edge stands down for — on a
+    /// dock that is up and running, so it slides (see <see cref="StartHiddenTests"/> for the start).
     /// </summary>
     private static void WithDock(Action<AutoHideController> body) => OnStaThread(() =>
     {
@@ -79,7 +80,10 @@ public class PutAwayTests
                 holdAbove: () => { },
                 lower: _ => { },
                 standDown: () => false,
-                restingBar: () => Rect.Empty));
+                restingBar: () => Rect.Empty)
+            {
+                HasAppeared = true
+            });
         }
         finally
         {

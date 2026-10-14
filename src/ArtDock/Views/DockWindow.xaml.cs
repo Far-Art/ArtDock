@@ -351,6 +351,11 @@ public sealed partial class DockWindow : Window
         // too — a dock that has just arrived may have arrived under something.
         _autoHide.VisibilityChanged += (_, _) =>
         {
+            // A dock hidden before its window first goes up is not slid away but put away, here
+            // (AutoHideController.HasAppeared); one that slid has landed within a pixel of it.
+            // First, so that what follows finds the dock where it is.
+            KeepHiddenInPlace();
+
             if (!CheckSight())
             {
                 SyncHandle();
@@ -395,6 +400,11 @@ public sealed partial class DockWindow : Window
             (hold, lingers) => _autoHide?.HoldRevealed(hold, lingers));
 
         ApplySettings(_settings.Current);
+
+        // The window goes up as this returns, where the first ApplySettings has left it: where it
+        // hides, for auto-hide or a window in front filling the display, and otherwise where it
+        // shows. From here, the dock slides.
+        _autoHide.HasAppeared = true;
 
         // Started after the window exists so the WinEvent hooks land on a thread with a
         // running message loop.

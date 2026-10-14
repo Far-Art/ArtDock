@@ -135,7 +135,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the bar and no wider, so it lines up with a handle as wide as the dock, and the strip below a
   dock that is up keeps it up across the same width. Until 2026-09-30 it was the dock's whole
   window and 80 pixels more at each end — the window keeps room beside the bar for the wave —
-  about half as wide again as the dock.
+  about half as wide again as the dock. A dock that hides **starts hidden** — auto-hide on, or
+  a window in front filling its display — rather than coming up as it starts and sliding off a
+  moment later, which it did at every sign-in until 2026-10-14.
 - **Marks itself with a handle while it is out of sight**, unless told not to on the Behaviour
   page: a slim bar just above the taskbar, centred under where the dock will come up — the
   phone's home indicator, on a desktop. Out of sight means slid away — by auto-hide, or for a
@@ -1366,7 +1368,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and forty-six tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and fifty-three tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1950,6 +1952,13 @@ turned on meanwhile has the dock from then on; turned off again before the hold 
 dock is put away as before. And two read the source, to keep the hotkeys that hide the dock and
 open the settings asking before the keyboard lets go of it — the other order puts the dock away
 as the keys let go, and the toggle then brings it straight back, or the dialog a moment later.
+
+Seven cover a dock that hides as it starts (`StartHiddenTests`), on the same controller: with
+auto-hide on, or a window filling the display in front, it is hidden before its window goes up
+and not put away; with nothing hiding it, it starts shown. Once up, auto-hide turned on leaves it
+to hide in its own time and a window filling the display slides it away; started hidden, it
+slides up when brought back. One reads the source, to keep the window said to have gone up only
+after the first settings are applied.
 
 Forty-three cover the window previews. Their layout: a window's shape kept inside the picture
 box, whatever its size or a size that could not be read; a narrow window still given room for
