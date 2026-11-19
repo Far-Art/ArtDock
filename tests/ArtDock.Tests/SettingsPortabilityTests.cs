@@ -65,6 +65,17 @@ public class SettingsPortabilityTests : IDisposable
         Assert.Equal(250, SettingsStore.Import(Write("before-delay.json", """{ "WindowPreviews": true }""")).PreviewDelayMs);
     }
 
+    /// <summary>
+    /// The slide's speed is the stock pace for a new dock and for one from before it could be
+    /// set, so nobody's dock changes pace by updating.
+    /// </summary>
+    [Fact]
+    public void SlideSpeed_Is100ForANewDock_AndForAFileFromBeforeIt()
+    {
+        Assert.Equal(100, new DockSettings().SlideSpeed);
+        Assert.Equal(100, SettingsStore.Import(Write("before-speed.json", """{ "AutoHide": true }""")).SlideSpeed);
+    }
+
     [Fact]
     public void AFreshSettingsObject_CarriesTheCurrentFormat()
     {
@@ -82,6 +93,7 @@ public class SettingsPortabilityTests : IDisposable
             BarOpacity = 0.5,
             AutoHide = true,
             HideDelayMs = 900,
+            SlideSpeed = 170,
             WindowPreviews = false,
             PreviewDelayMs = 620,
             BottomMargin = 21,
@@ -109,6 +121,7 @@ public class SettingsPortabilityTests : IDisposable
         Assert.Equal(original.BarOpacity, back.BarOpacity);
         Assert.Equal(original.AutoHide, back.AutoHide);
         Assert.Equal(original.HideDelayMs, back.HideDelayMs);
+        Assert.Equal(original.SlideSpeed, back.SlideSpeed);
         Assert.Equal(original.WindowPreviews, back.WindowPreviews);
         Assert.Equal(original.PreviewDelayMs, back.PreviewDelayMs);
 

@@ -350,6 +350,7 @@ public sealed partial class SettingsWindow : Window
         AutoHideCheck.IsChecked = settings.AutoHide;
         HideDelaySlider.Value = settings.HideDelayMs;
         RevealDelaySlider.Value = settings.RevealDelayMs;
+        RevealSpeedSlider.Value = settings.SlideSpeed;
         WindowPreviewsCheck.IsChecked = settings.WindowPreviews;
         PreviewDelaySlider.Value = settings.PreviewDelayMs;
         UpdatePreviewControls();
@@ -396,7 +397,7 @@ public sealed partial class SettingsWindow : Window
                  {
                      BaseSizeSlider, MinIconSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
                      OpacitySlider, RoundnessSlider, LabelSizeSlider, HideDelaySlider,
-                     RevealDelaySlider, PreviewDelaySlider, HandleWidthSlider
+                     RevealDelaySlider, RevealSpeedSlider, PreviewDelaySlider, HandleWidthSlider
                  })
         {
             slider.ValueChanged += (_, _) => Preview();
@@ -691,6 +692,7 @@ public sealed partial class SettingsWindow : Window
             AutoHide = AutoHideCheck.IsChecked == true,
             HideDelayMs = (int)HideDelaySlider.Value,
             RevealDelayMs = (int)RevealDelaySlider.Value,
+            SlideSpeed = (int)Math.Round(RevealSpeedSlider.Value),
             WindowPreviews = WindowPreviewsCheck.IsChecked == true,
             PreviewDelayMs = (int)PreviewDelaySlider.Value,
             ShowHandle = HandleCheck.IsChecked == true,
@@ -2140,6 +2142,7 @@ public sealed partial class SettingsWindow : Window
         AutoHideCheck.IsChecked = defaults.AutoHide;
         HideDelaySlider.Value = defaults.HideDelayMs;
         RevealDelaySlider.Value = defaults.RevealDelayMs;
+        RevealSpeedSlider.Value = defaults.SlideSpeed;
         WindowPreviewsCheck.IsChecked = defaults.WindowPreviews;
         PreviewDelaySlider.Value = defaults.PreviewDelayMs;
         UpdatePreviewControls();

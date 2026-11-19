@@ -889,6 +889,39 @@
                             </Grid>
                         </Border>
 
+                        <!-- Never greyed out either: the dock slides for a maximized window in
+                             front and for the tray's Hide dock, auto-hide or not. The range is
+                             DockSlide.SlowestSpeed to FastestSpeed. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Behaviour.RevealSpeed}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Behaviour.RevealSpeed.Hint}" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="RevealSpeedSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Behaviour.RevealSpeed}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Behaviour.RevealSpeed.Hint}"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="200"
+                                    Minimum="50"
+                                    TickFrequency="10" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Behaviour.RevealSpeed.Value"
+                                    loc:Localized.Value="{Binding ElementName=RevealSpeedSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
                         <Border Style="{StaticResource Card}">
                             <Grid>
                                 <Grid.ColumnDefinitions>

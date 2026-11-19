@@ -45,8 +45,11 @@ namespace ArtDock.Views;
 /// </remarks>
 public sealed class HandleWindow : IDisposable
 {
-    /// <summary>The same as the dock's slide, so the handle arrives as the dock goes.</summary>
-    private static readonly Duration FadeInDuration = new(TimeSpan.FromMilliseconds(220));
+    /// <summary>
+    /// The same as the dock's slide away, so the handle arrives as the dock goes — set by the
+    /// dock from <c>DockSettings.SlideSpeed</c>.
+    /// </summary>
+    public TimeSpan FadeInDuration { get; set; } = DockSlide.HideDuration;
 
     /// <summary>
     /// Far quicker the other way: gone before the dock coming back has risen past it.
@@ -56,7 +59,8 @@ public sealed class HandleWindow : IDisposable
     /// dock had arrived — reported on 2026-09-30. The handle sits just under where the bar comes
     /// to rest (the bar's bottom at 1380 on the main display, the handle from 1381), so the
     /// rising bar covers it about 40 ms into the slide's ease and uncovers it again about
-    /// 180 ms in, settling just above it — and a handle a fifth of the way from gone, in colours
+    /// 180 ms in, settling just above it (with the 220 ms cubic the slide had then; about 85 and
+    /// 260 ms into today's, <see cref="DockSlide"/>) — and a handle a fifth of the way from gone, in colours
     /// pushed away from whatever is behind, is plain to see. Eighty milliseconds has it all but
     /// gone before the bar reaches it.
     /// </remarks>
@@ -373,7 +377,7 @@ public sealed class HandleWindow : IDisposable
     private void Fade(double to)
     {
         var generation = ++_fade;
-        var animation = new DoubleAnimation(to, to > 0 ? FadeInDuration : FadeOutDuration);
+        var animation = new DoubleAnimation(to, to > 0 ? new Duration(FadeInDuration) : FadeOutDuration);
 
         animation.Completed += (_, _) =>
         {

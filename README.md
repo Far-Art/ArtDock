@@ -612,7 +612,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   swatch, one you have saved, or whatever Windows is tinting the taskbar with), corner
   roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
-  displays — and where along its edge, always-on-top, hide/reveal delays, the excluded apps
+  displays — and where along its edge, always-on-top, hide/reveal delays, how fast the dock
+  slides away and back (half to twice the standard pace), the excluded apps
   the edge and the hotkeys stand down for, pinned apps, the icon set, the icons' shadow, the
   labels' font, emphasis and size, the hotkeys, the language, run-at-login. The dialog is paged
   — Size, Appearance (the bar), Behaviour, Icons, Items, Hotkeys, Exclusions, Position, System,

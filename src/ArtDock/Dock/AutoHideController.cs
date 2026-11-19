@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -305,8 +306,14 @@ public sealed class AutoHideController
     /// </summary>
     public TimeSpan HideDelay { get; set; } = TimeSpan.FromMilliseconds(700);
 
-    /// <summary>Duration of the slide in each direction.</summary>
-    public TimeSpan SlideDuration { get; set; } = TimeSpan.FromMilliseconds(220);
+    /// <summary>
+    /// How fast the slide is, in percent of the stock pace (<c>DockSettings.SlideSpeed</c>). A
+    /// slide under way keeps the pace it set off at.
+    /// </summary>
+    public int SlideSpeed { get; set; } = 100;
+
+    /// <summary>The clock of the slide under way; null while the dock is still.</summary>
+    private CompositorClock? _sliding;
 
     public DockVisibility Visibility
     {
@@ -871,7 +878,7 @@ public sealed class AutoHideController
             return;
         }
 
-        Slide(_hiddenTop, () =>
+        Slide(reveal: false, () =>
         {
             Visibility = DockVisibility.Hidden;
             _atEdgeSince = DateTime.MaxValue;
@@ -927,32 +934,73 @@ public sealed class AutoHideController
             _outsideSince = DateTime.MaxValue;
         }
 
-        Slide(_shownTop, () =>
+        Slide(reveal: true, () =>
         {
             Visibility = DockVisibility.Shown;
             _outsideSince = DateTime.MaxValue;
         });
     }
 
-    private void Slide(double targetTop, Action onCompleted)
+    /// <summary>
+    /// Slides the dock from wherever it is to where it shows or hides, one step on every frame
+    /// Windows composes — the curve and the time are <see cref="DockSlide"/>'s.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not a <c>DoubleAnimation</c>, as it was until 2026-11-20: WPF runs those at 60 frames a
+    /// second, and the 120 Hz display saw the dock move on every other frame. Nor
+    /// <c>CompositionTarget.Rendering</c>, which it was next, for a day: each move of the window
+    /// raised it again a millisecond later, and the slide went in bursts — see
+    /// <see cref="CompositorClock"/>, which it is timed by now. Each step goes by the time of its
+    /// frame, so one late or missed puts the next where it belongs rather than behind.
+    /// </para>
+    /// <para>
+    /// The place it heads for is read on every frame, so a dock placed again on its way — its
+    /// display changing scale, say — goes where it now belongs. A new slide takes over from
+    /// wherever the last one had got to, and the last one's end is never reached.
+    /// </para>
+    /// </remarks>
+    private void Slide(bool reveal, Action onCompleted)
     {
-        var animation = new DoubleAnimation
-        {
-            To = targetTop,
-            Duration = SlideDuration,
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
-            FillBehavior = FillBehavior.Stop
-        };
+        StopSlide();
 
-        animation.Completed += (_, _) =>
+        var from = _window.Top;
+        var duration = DockSlide.Duration(reveal, SlideSpeed).TotalMilliseconds;
+        var start = Stopwatch.GetTimestamp();
+
+        void Finish()
         {
-            // Stop the animation holding the property, then commit the value ourselves so
-            // later assignments to Top are not silently ignored.
-            _window.BeginAnimation(Window.TopProperty, null);
-            _window.Top = targetTop;
+            StopSlide();
+            _window.Top = reveal ? _shownTop : _hiddenTop;
             onCompleted();
-        };
+        }
 
-        _window.BeginAnimation(Window.TopProperty, animation);
+        void OnFrame(long now)
+        {
+            // Not on the screen, nothing is drawn and no frame will tell it to move on.
+            if (!_window.IsVisible)
+            {
+                Finish();
+                return;
+            }
+
+            var t = Stopwatch.GetElapsedTime(start, now).TotalMilliseconds / duration;
+            if (t >= 1)
+            {
+                Finish();
+                return;
+            }
+
+            var to = reveal ? _shownTop : _hiddenTop;
+            _window.Top = from + ((to - from) * DockSlide.Progress(reveal, t));
+        }
+
+        _sliding = new CompositorClock(_window.Dispatcher, OnFrame);
+    }
+
+    private void StopSlide()
+    {
+        _sliding?.Dispose();
+        _sliding = null;
     }
 }

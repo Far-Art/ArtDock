@@ -606,6 +606,13 @@ public sealed class DockSettings
     public int RevealDelayMs { get; set; } = 300;
 
     /// <summary>
+    /// How fast the dock slides away and back, as a percentage of the stock pace: 100 is
+    /// <c>Dock/DockSlide</c>'s 280 ms up and 320 ms away, 200 — the most — half of each, 50 twice. Read through
+    /// <c>DockSlide.Duration</c>, which holds a hand-edited value to the slider's range.
+    /// </summary>
+    public int SlideSpeed { get; set; } = 100;
+
+    /// <summary>
     /// Whether resting the pointer on a running app's icon shows its windows, live, above it —
     /// the taskbar's previews, on the dock.
     /// </summary>
@@ -1113,6 +1120,7 @@ public sealed class DockSettings
         AutoHide = AutoHide,
         HideDelayMs = HideDelayMs,
         RevealDelayMs = RevealDelayMs,
+        SlideSpeed = SlideSpeed,
         WindowPreviews = WindowPreviews,
         PreviewDelayMs = PreviewDelayMs,
         ShowHandle = ShowHandle,

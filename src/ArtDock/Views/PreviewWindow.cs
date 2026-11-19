@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -106,6 +107,7 @@ internal sealed class PreviewWindow : IDisposable
     private Int32Rect _target;
 
     private Int32Rect _slideFrom;
+    /// <summary>When the slide started, as a <see cref="Stopwatch"/> timestamp.</summary>
     private long _slideStart;
     private double _slideMs;
     private bool _sliding;
@@ -115,7 +117,11 @@ internal sealed class PreviewWindow : IDisposable
 
     private bool _fadingIn;
     private bool _fading;
+    /// <summary>When the fade started, as a <see cref="Stopwatch"/> timestamp.</summary>
     private long _fadeStart;
+
+    /// <summary>What steps the rise and the fade; null while neither is under way.</summary>
+    private CompositorClock? _clock;
     private double _fadeMs;
 
     /// <summary>True once it is fading out to close: nothing more is shown in it.</summary>
@@ -294,8 +300,8 @@ internal sealed class PreviewWindow : IDisposable
         _disposed = true;
         _source.ContentRendered -= OnFirstRender;
         CompositionTarget.Rendering -= OnRenderingThumbnails;
-        CompositionTarget.Rendering -= OnRenderingSlide;
-        CompositionTarget.Rendering -= OnRenderingFade;
+        _clock?.Dispose();
+        _clock = null;
         CompositionTarget.Rendering -= OnRenderingReveal;
         foreach (var thumbnail in _thumbnails)
         {
@@ -333,9 +339,11 @@ internal sealed class PreviewWindow : IDisposable
     private byte CurrentAlpha() =>
         _fading && _fadingIn ? (byte)Math.Round(255 * FadeProgress()) : (byte)255;
 
-    private double FadeProgress()
+    private double FadeProgress() => FadeProgress(Stopwatch.GetTimestamp());
+
+    private double FadeProgress(long now)
     {
-        var t = _fadeMs <= 0 ? 1 : Math.Clamp((Environment.TickCount64 - _fadeStart) / _fadeMs, 0, 1);
+        var t = _fadeMs <= 0 ? 1 : Math.Clamp(Stopwatch.GetElapsedTime(_fadeStart, now).TotalMilliseconds / _fadeMs, 0, 1);
         return 1 - Math.Pow(1 - t, 3);
     }
 
@@ -345,22 +353,15 @@ internal sealed class PreviewWindow : IDisposable
         var reached = CurrentAlpha() / 255.0;
         _fadingIn = fadeIn;
         _fadeMs = fadeIn ? ms : ms * reached;
-        _fadeStart = Environment.TickCount64;
-        if (!_fading)
-        {
-            _fading = true;
-            CompositionTarget.Rendering += OnRenderingFade;
-        }
+        _fadeStart = Stopwatch.GetTimestamp();
+        _fading = true;
+        StartClock();
     }
 
-    private void OnRenderingFade(object? sender, EventArgs e)
+    /// <summary>One frame of a fade, at the time of the frame.</summary>
+    private void StepFade(long now)
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        var progress = FadeProgress();
+        var progress = FadeProgress(now);
         var alpha = _fadingIn ? progress : 1 - progress;
         NativeMethods.SetLayeredWindowAttributes(Hwnd, 0, (byte)Math.Round(255 * Math.Clamp(alpha, 0, 1)), NativeMethods.LWA_ALPHA);
 
@@ -370,7 +371,6 @@ internal sealed class PreviewWindow : IDisposable
         }
 
         _fading = false;
-        CompositionTarget.Rendering -= OnRenderingFade;
 
         if (_fadingIn)
         {
@@ -446,34 +446,56 @@ internal sealed class PreviewWindow : IDisposable
     private void SlideTo(double ms)
     {
         _slideFrom = _placed;
-        _slideStart = Environment.TickCount64;
+        _slideStart = Stopwatch.GetTimestamp();
         _slideMs = ms;
-        if (!_sliding)
-        {
-            _sliding = true;
-            CompositionTarget.Rendering += OnRenderingSlide;
-        }
+        _sliding = true;
+        StartClock();
     }
 
-    private void StopSlide()
+    private void StopSlide() => _sliding = false;
+
+    /// <summary>
+    /// Starts the clock the rise and the fade are stepped by, if it is not going already.
+    /// </summary>
+    /// <remarks>
+    /// DWM's frames (<see cref="CompositorClock"/>), not <c>CompositionTarget.Rendering</c>,
+    /// which they were stepped by until 2026-11-20: a move of the window has WPF draw again at
+    /// once and raise it again a millisecond later, which put auto-hide's slide in bursts with
+    /// half the frames standing still. And timed by the frame's <see cref="Stopwatch"/>
+    /// timestamp, not <c>Environment.TickCount64</c>, which ticks every 15.6 ms and at 120 Hz
+    /// moved by two steps or none.
+    /// </remarks>
+    private void StartClock() => _clock ??= new CompositorClock(_source.Dispatcher, OnFrame);
+
+    private void OnFrame(long now)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         if (_sliding)
         {
-            _sliding = false;
-            CompositionTarget.Rendering -= OnRenderingSlide;
+            StepSlide(now);
+        }
+
+        // The fade out's end disposes the window, clock and all.
+        if (_fading)
+        {
+            StepFade(now);
+        }
+
+        if (!_sliding && !_fading && !_disposed)
+        {
+            _clock?.Dispose();
+            _clock = null;
         }
     }
 
     /// <summary>One frame of a slide: a cubic ease out, Windows' deceleration, in whole pixels.</summary>
-    private void OnRenderingSlide(object? sender, EventArgs e)
+    private void StepSlide(long now)
     {
-        if (_disposed)
-        {
-            StopSlide();
-            return;
-        }
-
-        var t = _slideMs <= 0 ? 1 : Math.Clamp((Environment.TickCount64 - _slideStart) / _slideMs, 0, 1);
+        var t = _slideMs <= 0 ? 1 : Math.Clamp(Stopwatch.GetElapsedTime(_slideStart, now).TotalMilliseconds / _slideMs, 0, 1);
         var eased = 1 - Math.Pow(1 - t, 3);
         Move(new Int32Rect(
             (int)Math.Round(_slideFrom.X + ((_target.X - _slideFrom.X) * eased)),
@@ -559,6 +581,7 @@ internal sealed class PreviewWindow : IDisposable
         // Not fading: all at once, as soon as WPF's drawing is there with the pictures.
         _panel.InvalidateVisual();
         _revealFrames = 0;
+        _revealDisplay = new DisplayFrames();
         CompositionTarget.Rendering += OnRenderingReveal;
     }
 
@@ -570,6 +593,9 @@ internal sealed class PreviewWindow : IDisposable
 
     private int _revealFrames;
 
+    /// <summary>Counts the frames of the display, not the calls: see <see cref="DisplayFrames"/>.</summary>
+    private DisplayFrames _revealDisplay = new();
+
     /// <summary>Makes a panel shown at nothing opaque once WPF's drawing has had time to reach the screen.</summary>
     private void OnRenderingReveal(object? sender, EventArgs e)
     {
@@ -579,7 +605,7 @@ internal sealed class PreviewWindow : IDisposable
             return;
         }
 
-        if (++_revealFrames <= RevealAfterFrames)
+        if (!_revealDisplay.IsNewFrame() || ++_revealFrames <= RevealAfterFrames)
         {
             return;
         }

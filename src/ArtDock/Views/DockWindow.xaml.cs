@@ -451,6 +451,7 @@ public sealed partial class DockWindow : Window
         {
             autoHide.HideDelay = TimeSpan.FromMilliseconds(settings.HideDelayMs);
             autoHide.RevealDelay = TimeSpan.FromMilliseconds(settings.RevealDelayMs);
+            autoHide.SlideSpeed = settings.SlideSpeed;
             autoHide.SetEnabled(settings.AutoHide);
         }
 
@@ -911,9 +912,12 @@ public sealed partial class DockWindow : Window
         _backdropLeaving = true;
         var frames = 0;
 
+        // Frames of the display, not calls: see DisplayFrames.
+        var display = new DisplayFrames();
+
         void OnRendering(object? sender, EventArgs e)
         {
-            if (++frames < BackdropLeavingFrames && !_closed)
+            if (!_closed && (!display.IsNewFrame() || ++frames < BackdropLeavingFrames))
             {
                 return;
             }
@@ -2605,6 +2609,7 @@ public sealed partial class DockWindow : Window
             _applied.HandleWidth);
 
         _handle ??= new HandleWindow();
+        _handle.FadeInDuration = DockSlide.Duration(reveal: false, _applied.SlideSpeed);
         _handle.SetLook(_applied.HandleInverts, fallback: BarPalette.Parse(EffectiveBarColor(_applied)));
         _handle.Place(bounds);
         _handle.Show();
@@ -3645,11 +3650,12 @@ public sealed partial class DockWindow : Window
 
         // A hidden dock is put where it hides as surely as a shown one where it shows, rather
         // than left where it happens to be — which is what kept that wrong place. One on its
-        // way out is left to its slide.
+        // way out or in is left to its slide, which heads for the places given below: put
+        // where it shows now, it would jump there for a frame and back.
         var y = _autoHide?.Visibility switch
         {
             DockVisibility.Hidden => hidden,
-            DockVisibility.Hiding => CurrentTop(),
+            DockVisibility.Hiding or DockVisibility.Revealing => CurrentTop(),
             _ => top
         };
 
