@@ -445,6 +445,22 @@ internal sealed class PreviewWindow : IDisposable
         _cards.Hover(card, card >= 0 && Contains(_cards.Arrangement.Cards[card].Close, x, y));
     }
 
+    /// <summary>The window whose card is under a point on the screen, in physical pixels; zero for none, or while closing.</summary>
+    public nint WindowAt(int screenX, int screenY)
+    {
+        if (_disposed || _closing)
+        {
+            return 0;
+        }
+
+        var (x, y) = _cards.Local(screenX - _stage.X, screenY - _stage.Y);
+        var card = _cards.CardAt(x, y);
+        return card >= 0 && card < _cards.Entries.Count ? _cards.Entries[card].Window : 0;
+    }
+
+    /// <summary>The panel's windows: the one it is drawn in and the one that takes the pointer.</summary>
+    public (nint Drawing, nint Input) Windows => (_hwnd, _input);
+
     /// <summary>Keeps the panel above the dock, its sheet and its handle: topmost, and at the top of the topmost band.</summary>
     public void BringToTop()
     {

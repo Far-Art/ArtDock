@@ -398,7 +398,8 @@ public sealed partial class DockWindow : Window
             id => _items.FirstOrDefault(item => item.Id == id),
             PreviewPlaceFor,
             (hold, lingers) => _autoHide?.HoldRevealed(hold, lingers),
-            () => _autoHide?.Hides == true);
+            () => _autoHide?.Hides == true,
+            () => [_chrome?.Hwnd ?? 0, _backdrop?.Hwnd ?? 0]);
 
         ApplySettings(_settings.Current);
 

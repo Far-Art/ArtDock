@@ -45,11 +45,21 @@ internal sealed class WindowPreviews(
     Func<string, DockItem?> findItem,
     Func<DockItem, PreviewPlace?> placeFor,
     Action<bool, bool> holdRevealed,
-    Func<bool> dockHides) : IDisposable
+    Func<bool> dockHides,
+    Func<nint[]> dockWindows) : IDisposable
 {
     private const int VkLButton = 0x01;
     private const int VkRButton = 0x02;
     private const int VkMButton = 0x04;
+
+    /// <summary>
+    /// Resting on a card shows its window alone on the desktop, as the taskbar's previews do —
+    /// Windows' own peek (<see cref="LivePreview"/>), which does nothing where it is not to be had.
+    /// </summary>
+    private readonly PreviewPeek _peek = new();
+
+    /// <summary>The windows kept out of the peek while it lasts: the dock's and the panel's.</summary>
+    private nint[] _excluded = [];
 
     /// <summary>
     /// The dock's *Hide delay*: what decides whether the previews go with the dock or before it
@@ -161,6 +171,53 @@ internal sealed class WindowPreviews(
         // anywhere else it is the dock's to say when it goes — lingering from now, so it waits its
         // hide delay from the pointer leaving the previews, as it would from leaving the dock.
         SetHolding(onPanel);
+
+        // Resting on a card peeks at its window.
+        Peek(_window?.WindowAt(cursor.X, cursor.Y) ?? 0);
+    }
+
+    /// <summary>One look for the peek: started, moved to another window, or ended, as the pointer says.</summary>
+    private void Peek(nint under)
+    {
+        switch (_peek.Look(Environment.TickCount64, under))
+        {
+            case PeekMove.Show when _window is { } window && LivePreview.IsAllowed():
+                if (!LivePreview.IsActive)
+                {
+                    // The dock and the panel stay as they are, over the glass, as the taskbar does.
+                    var (drawing, input) = window.Windows;
+                    _excluded = [.. dockWindows(), drawing, input];
+                    LivePreview.Exclude(_excluded, excluded: true);
+                }
+
+                if (!LivePreview.Show((nint)_peek.Showing, window.Windows.Drawing))
+                {
+                    // Not to be had: nothing peeks, from now on, and nothing else changes.
+                    EndPeek();
+                }
+
+                break;
+
+            case PeekMove.Show:
+                _peek.Stop();
+                break;
+
+            case PeekMove.End:
+                EndPeek();
+                break;
+        }
+    }
+
+    /// <summary>Ends any peek, every window back as it was, and the windows kept out of it let back in.</summary>
+    private void EndPeek()
+    {
+        _peek.Stop();
+        LivePreview.End();
+        if (_excluded.Length > 0)
+        {
+            LivePreview.Exclude(_excluded, excluded: false);
+            _excluded = [];
+        }
     }
 
     /// <summary>Holds the dock on the screen, or lets it go, when that is not already so.</summary>
@@ -244,6 +301,9 @@ internal sealed class WindowPreviews(
 
     private void Show(string? id)
     {
+        // Another app's windows: none of them is the one peeked at.
+        EndPeek();
+
         if (id is null || findItem(id) is not { } item || placeFor(item) is not { } place)
         {
             _dwell.Dismiss(null);
@@ -406,6 +466,10 @@ internal sealed class WindowPreviews(
 
     private void Close(bool lingers, bool animate = true)
     {
+        // Before anything else: a card chosen brings its window forward next, and the desktop
+        // must be back as it was by then.
+        EndPeek();
+
         if (_window is { } window)
         {
             Release(window, animate);

@@ -106,7 +106,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   app the card glides over to it as Windows 11's taskbar previews do, measured off them frame by
   frame, taking the new app's shape on the way while the old windows cross-fade into the new —
   none of it animated with *Reduce motion* or Windows' animations off. Too
-  many windows to fit across the display are shrunk alike, then listed by title. The icon
+  many windows to fit across the display are shrunk alike, then listed by title. Resting on a
+  card for a moment shows that window alone on the desktop, the rest faded to glass, as the
+  taskbar's previews do — unless Windows' own *Peek* is turned off. The icon
   stays magnified, its label showing, under the panel while the pointer is on it or on its way
   up, holding still against a hand that wanders sideways, and a click on the icon still
   cycles. On by default, on the Behaviour page, with the delay beside it.
@@ -1291,9 +1293,11 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   covers that, at the cost of a possible false positive between two different apps that share
   an executable name — which the window previews show plainly, with the other app's windows
   under the icon.
-- **The window previews do not peek.** Resting on one of the taskbar's previews shows that
-  window alone on the desktop; what does that is not public, and the dock does not use it. Nor
-  are the pictures' corners rounded: DWM draws a thumbnail over everything in its rectangle.
+- **The window previews peek through a function Windows does not document.** Resting on a card
+  shows its window alone on the desktop, as the taskbar's previews do, by the same call the
+  taskbar makes, which Windows exports by number only. If a Windows update moves or removes it,
+  the previews simply stop peeking. Nor are the pictures' corners rounded: DWM draws a
+  thumbnail over everything in its rectangle.
 - **No previews of windows on another virtual desktop**, which Windows hides from the census.
 - **A folder in a tab behind another shows the tab in front.** Windows pictures a window as it
   is, and a File Explorer window shows one tab at a time, so a folder pin whose folder is open in
@@ -1376,7 +1380,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and eighty-eight tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and ninety-four tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1968,7 +1972,9 @@ to hide in its own time and a window filling the display slides it away; started
 slides up when brought back. One reads the source, to keep the window said to have gone up only
 after the first settings are applied.
 
-Sixty-three cover the window previews. Their motion: the easing curve, checked against CSS's own
+Sixty-nine cover the window previews. Their peek: after a rest on a card and not on passing
+over it, from card to card at once and through the gap between them, and over once the pointer
+has left the cards. Their motion: the easing curve, checked against CSS's own
 and against the taskbar's recorded glide; the rise kept within the gap above the dock; the card's
 edges each moved on their own, so a bottom both ends share never moves; a set of cards standing on
 the card's bottom; and a window's picture cut to what of the card shows — by an edge, or by a
