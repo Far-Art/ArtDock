@@ -170,6 +170,7 @@ public sealed partial class DockWindow : Window
         _dock.Reordered += OnItemReordered;
         _dock.DragOffChanged += OnDragOffChanged;
         _dock.DraggedOff += OnDraggedOff;
+        _dock.DroppedBack += OnDroppedBack;
 
         // The dock decides how big a window it needs — a drop preview adds a slot, a taller
         // label wants more headroom — and neither is a settings change, so neither reaches
@@ -244,6 +245,8 @@ public sealed partial class DockWindow : Window
             _previews?.Dispose();
             _lifted?.Dispose();
             _lifted = null;
+            _flying?.Dispose();
+            _flying = null;
             _runningApps.Dispose();
             _backdrop?.Dispose();
             _binWatch?.Dispose();
@@ -3543,6 +3546,10 @@ public sealed partial class DockWindow : Window
 
         if (_lifted is null && _chrome is { } chrome)
         {
+            // An icon still flying home from the last drag lands at once.
+            _flying?.Dispose();
+            _flying = null;
+
             // As big as the dock's magnified icon, in the dock's display's pixels.
             _lifted = new LiftedIconWindow(
                 change.Item, _dock.Metrics.MaxSize, _dock.LabelLettering, MonitorDpi.ScaleForWindow(chrome.Hwnd));
@@ -3553,6 +3560,39 @@ public sealed partial class DockWindow : Window
         }
 
         _lifted?.SetArmed(change.State == DragOffState.Armed);
+    }
+
+    /// <summary>An icon let go of short of <i>Remove</i>, flying home to its slot; null while none is.</summary>
+    private LiftedIconWindow? _flying;
+
+    /// <summary>
+    /// Flies an icon let go of short of <i>Remove</i> home to its slot, as the macOS dock does,
+    /// and shows the dock's own once it is there.
+    /// </summary>
+    private void OnDroppedBack(object? sender, DockItem item)
+    {
+        _flying?.Dispose();
+        _flying = _lifted;
+        _lifted = null;
+
+        if (_flying is not { } flying)
+        {
+            _dock.Land();
+            return;
+        }
+
+        flying.FlyHome(
+            () => _dock.LandingRect() is { } rect && PresentationSource.FromVisual(_dock) is not null
+                ? new Rect(_dock.PointToScreen(rect.TopLeft), _dock.PointToScreen(rect.BottomRight))
+                : null,
+            () =>
+            {
+                _dock.Land();
+                if (ReferenceEquals(_flying, flying))
+                {
+                    _flying = null;
+                }
+            });
     }
 
     /// <summary>Takes an icon off the dock that was pulled far enough from it that <i>Remove</i> showed, and let go.</summary>

@@ -289,10 +289,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Drag an icon off the dock to remove it**, as the macOS dock does: pull it up, clear of the
   dock, and it leaves the row and follows the pointer, with a gap where it was; take it **far
   enough** and *Remove* shows over it; let go there, and it goes up in a puff of cloud and the
-  row closes up. Let go nearer the dock and it drops back where it was; bring it back into the
+  row closes up. Let go nearer the dock and it flies back into its place, shrinking to fit as it
+lands; bring it back into the
   dock and it is a reorder again. Only pulling **away from the edge** counts — past the ends of
   the bar the icon stays on it. The icon leaves the row half an icon above the space the
-  magnified icons fill, and *Remove* shows three icons above it. It does not ask, as the
+  magnified icons fill, and *Remove* shows five icons above it. It does not ask, as the
   menu's *Remove from dock* does: taking it that far, with *Remove* showing, is the asking. While the items are
   locked nothing drags, so nothing is removed this way either. The gesture was here once, as
   letting go anywhere clear of the bar, and was taken away because it fired on drags that only

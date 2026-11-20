@@ -648,6 +648,44 @@ public sealed class DockBar : Canvas
     public bool IsDragging => _dragging;
 
     /// <summary>
+    /// Raised when an icon off the dock is let go of short of <i>Remove</i>'s distance: it goes
+    /// back to its slot, and stays hidden there until <see cref="Land"/>, so whatever is carrying
+    /// it can fly it home first (<see cref="LandingRect"/>).
+    /// </summary>
+    public event EventHandler<DockItem>? DroppedBack;
+
+    /// <summary>The icon dropped back and still hidden, waiting for <see cref="Land"/>; null when none is.</summary>
+    private DockItemVisual? _landing;
+
+    /// <summary>
+    /// Where the icon dropped back is drawn now, hidden, in this element's coordinates — read on
+    /// every frame of its flight home, since the wave may still be settling under it. Null once
+    /// it has landed, or if it has left the row.
+    /// </summary>
+    public Rect? LandingRect()
+    {
+        var index = _landing is null ? -1 : _items.IndexOf(_landing);
+        if (index < 0 || index >= _sizes.Length || index >= _offsets.Length)
+        {
+            return null;
+        }
+
+        var size = _sizes[index];
+        var left = _iconsLeft + _offsets[index] + SlotShift(index);
+        return new Rect(left, BarBottom - Metrics.PaddingY - size, size, size);
+    }
+
+    /// <summary>Shows the icon dropped back in its slot: its flight home is over, or was cut short.</summary>
+    public void Land()
+    {
+        if (_landing is { } landing)
+        {
+            _landing = null;
+            landing.Opacity = 1;
+        }
+    }
+
+    /// <summary>
     /// Raised when the window this dock needs has changed size — a drop preview appearing,
     /// or a label tall enough to want more headroom.
     /// </summary>
@@ -2201,6 +2239,7 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public void BeginPress()
     {
+        Land();
         EndDragOff();
         _dragging = false;
         _dragIndex = -1;
@@ -2329,10 +2368,11 @@ public sealed class DockBar : Canvas
             DragStarted?.Invoke(this, EventArgs.Empty);
         }
 
-        // Half an icon past the space the magnified icons fill, the icon leaves the row; three
-        // icons, letting go removes it — an icon and a half at first, doubled on request.
+        // Half an icon past the space the magnified icons fill, the icon leaves the row; five
+        // icons, letting go removes it — an icon and a half at first, then three, each raised
+        // on request.
         _dragOff.LiftDistance = Metrics.BaseSize / 2;
-        _dragOff.RemoveDistance = Metrics.BaseSize * 3;
+        _dragOff.RemoveDistance = Metrics.BaseSize * 5;
         _dragOff.Slack = Metrics.BaseSize / 4;
         var state = _dragOff.Look(HoverTop - local.Y);
 
@@ -2448,6 +2488,24 @@ public sealed class DockBar : Canvas
             // Gone from the row by now, which rebuilt as the removal was saved — or, if it was
             // not, still there, and it must not stay invisible.
             visual.Opacity = 1;
+            return true;
+        }
+
+        // Let go off the dock, short of Remove's distance: home to the gap it left, as the macOS
+        // dock flies it, still hidden in its slot until the flight lands.
+        if (_dragOff.State == DragOffState.Lifted && from >= 0 && from < _items.Count)
+        {
+            Land();
+            _landing = _items[from];
+            _dragOff.Reset();
+            _dragOffShown = DragOffState.OnBar;
+            _dragging = false;
+            _dragIndex = -1;
+            _dragTarget = -1;
+            ResetDisplayOrder();
+            SettleSlots();
+
+            DroppedBack?.Invoke(this, _landing.Item);
             return true;
         }
 

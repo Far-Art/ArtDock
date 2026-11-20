@@ -50,7 +50,8 @@ public sealed class DragOff
 
     /// <summary>
     /// How far past the same line the pointer has to be before letting go removes the icon. The
-    /// dock sets it to three icons: an icon and a half at first, doubled on 2026-11-20 on request.
+    /// dock sets it to five icons: an icon and a half at first, then three, then five, each raised
+    /// on 2026-11-20 on request.
     /// </summary>
     public double RemoveDistance { get; set; } = 54;
 

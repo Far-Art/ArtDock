@@ -42,6 +42,9 @@ public sealed class LiftedIconWindow : IDisposable
     /// <summary>How long the cloud it goes up in takes to burst and clear.</summary>
     private static readonly Duration PoofTime = new(TimeSpan.FromMilliseconds(450));
 
+    /// <summary>How long an icon let go of short of <i>Remove</i> takes to fly home to its slot.</summary>
+    private static readonly TimeSpan FlightTime = TimeSpan.FromMilliseconds(300);
+
     /// <summary>How far past the icon's edge the cloud reaches, as a share of the icon.</summary>
     private const double PoofMargin = 0.45;
 
@@ -60,7 +63,30 @@ public sealed class LiftedIconWindow : IDisposable
     /// <summary>From the window's top to the icon's middle, in device pixels: where the pointer is held.</summary>
     private readonly int _hotY;
 
+    /// <summary>The icon's size, in device pixels, as carried.</summary>
+    private readonly double _iconPixels;
+
     private (int X, int Y)? _placed;
+
+    // ---- flying home ----------------------------------------------------------------------
+
+    /// <summary>Ticks the flight home, with DWM's frames: the window moves each frame.</summary>
+    private CompositorClock? _clock;
+
+    /// <summary>Where the flight is going, asked again each frame, in device pixels; null when the slot has gone.</summary>
+    private Func<Rect?>? _home;
+
+    /// <summary>Called once the icon is home, or the flight is cut short.</summary>
+    private Action? _landed;
+
+    /// <summary>Where the icon's middle was as the flight began, in device pixels.</summary>
+    private Point _flightFrom;
+
+    /// <summary>When the flight began, as a <see cref="System.Diagnostics.Stopwatch"/> timestamp; null before its first frame.</summary>
+    private long? _flightStart;
+
+    /// <summary>Frames left to wait, once landed, before the window goes — see <see cref="OnFlightFrame"/>.</summary>
+    private int _afterLanding = -1;
     private bool _armed;
     private bool _going;
     private bool _disposed;
@@ -134,6 +160,7 @@ public sealed class LiftedIconWindow : IDisposable
         _width = Math.Max(1, (int)Math.Ceiling(design.Width * scale));
         _height = Math.Max(1, (int)Math.Ceiling(design.Height * scale));
         _hotY = (int)Math.Round(iconMiddle * scale);
+        _iconPixels = iconSize * scale;
 
         _source = new HwndSource(new HwndSourceParameters("ArtDock.LiftedIcon")
         {
@@ -223,6 +250,99 @@ public sealed class LiftedIconWindow : IDisposable
         _poof.BeginAnimation(PoofCloud.ProgressProperty, poof);
     }
 
+    /// <summary>
+    /// Flies the icon home to its slot, as the macOS dock does with an icon let go of short of
+    /// <i>Remove</i>: from where it was let go, shrinking to the size it is drawn there, then
+    /// gone, with <paramref name="landed"/> called to show the dock's own.
+    /// </summary>
+    /// <param name="home">The icon's box in the dock, in device pixels — asked each frame, since the wave may still be settling.</param>
+    /// <param name="landed">Called once, when the icon is home or the flight is cut short.</param>
+    /// <remarks>
+    /// Moved with DWM's frames (<see cref="CompositorClock"/>), never <c>CompositionTarget.Rendering</c>,
+    /// and by the time each is given rather than by counting them. Eased out, fast away from the
+    /// pointer and settling into the slot.
+    /// </remarks>
+    public void FlyHome(Func<Rect?> home, Action landed)
+    {
+        if (_disposed || _going || _placed is not { } placed)
+        {
+            landed();
+            Dispose();
+            return;
+        }
+
+        _going = true;
+        _home = home;
+        _landed = landed;
+        _flightFrom = new Point(placed.X + (_width / 2.0), placed.Y + _hotY);
+        _bubble.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, BubbleFade));
+        _clock = new CompositorClock(_source.Dispatcher, OnFlightFrame);
+    }
+
+    private void OnFlightFrame(long now)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        // Landed: the dock's icon is showing under this one. The window waits two of the
+        // display's frames for the dock to have drawn it before going, so there is no frame with
+        // neither; the two are the same picture in the same place meanwhile.
+        if (_afterLanding >= 0)
+        {
+            if (_afterLanding-- == 0)
+            {
+                Dispose();
+            }
+
+            return;
+        }
+
+        _flightStart ??= now;
+        var progress = Math.Clamp(
+            System.Diagnostics.Stopwatch.GetElapsedTime(_flightStart.Value, now) / FlightTime, 0, 1);
+
+        if (_home?.Invoke() is not { } home || home.Width <= 0)
+        {
+            Dispose();
+            return;
+        }
+
+        var eased = 1 - Math.Pow(1 - progress, 3);
+        var x = _flightFrom.X + ((home.X + (home.Width / 2) - _flightFrom.X) * eased);
+        var y = _flightFrom.Y + ((home.Y + (home.Height / 2) - _flightFrom.Y) * eased);
+        var size = _iconPixels + ((home.Width - _iconPixels) * eased);
+
+        var left = (int)Math.Round(x - (_width / 2.0));
+        var top = (int)Math.Round(y - _hotY);
+        if (_placed != (left, top))
+        {
+            _placed = (left, top);
+            NativeMethods.SetWindowPos(
+                _hwnd, 0, left, top, 0, 0,
+                NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOSIZE);
+        }
+
+        // About the icon's middle, which is where the window is held.
+        var scale = size / Math.Max(1, _iconPixels);
+        _shrink.ScaleX = scale;
+        _shrink.ScaleY = scale;
+
+        if (progress >= 1)
+        {
+            CallLanded();
+            _afterLanding = 2;
+        }
+    }
+
+    private void CallLanded()
+    {
+        var landed = _landed;
+        _landed = null;
+        landed?.Invoke();
+    }
+
     private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
         // Swallowed, as the handle's is: its size is the dock's to set, and WPF's handling of a
@@ -243,6 +363,11 @@ public sealed class LiftedIconWindow : IDisposable
         }
 
         _disposed = true;
+        _clock?.Dispose();
+        _clock = null;
+
+        // A flight cut short still lands: the dock's icon must not be left hidden.
+        CallLanded();
         _bubble.BeginAnimation(UIElement.OpacityProperty, null);
         _icon.BeginAnimation(UIElement.OpacityProperty, null);
         _poof.BeginAnimation(PoofCloud.ProgressProperty, null);
