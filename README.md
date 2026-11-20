@@ -1371,7 +1371,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and eighty-three tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and eighty-eight tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1963,7 +1963,7 @@ to hide in its own time and a window filling the display slides it away; started
 slides up when brought back. One reads the source, to keep the window said to have gone up only
 after the first settings are applied.
 
-Fifty-eight cover the window previews. Their motion: the easing curve, checked against CSS's own
+Sixty-three cover the window previews. Their motion: the easing curve, checked against CSS's own
 and against the taskbar's recorded glide; the rise kept within the gap above the dock; the card's
 edges each moved on their own, so a bottom both ends share never moves; a set of cards standing on
 the card's bottom; and a window's picture cut to what of the card shows — by an edge, or by a
@@ -1975,7 +1975,8 @@ own coordinates, scaled by half again at 150%, and always standing clear of the 
 wide shrunk alike until it fits, then a list, and a list too tall cut to what fits. Their timing:
 opening after the hover time and not before, the wait starting again on another icon, never
 with a button down; staying open on the panel however long, closing after the leave time
-elsewhere and not while on another icon; moving to another app only after resting on it, so
+elsewhere and not while on another icon; that leave time their own short one, or the dock's
+when it is due to hide soon after, so the two go together; moving to another app only after resting on it, so
 cutting across a neighbour on the way up does not; and a dismissed item staying shut until the
 pointer has left it, while another still opens. The windows kept in the order first seen, a
 new one last and a closed one forgotten; the held icon drawn where the wave puts it, carried
