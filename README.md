@@ -1294,6 +1294,10 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   window alone on the desktop; what does that is not public, and the dock does not use it. Nor
   are the pictures' corners rounded: DWM draws a thumbnail over everything in its rectangle.
 - **No previews of windows on another virtual desktop**, which Windows hides from the census.
+- **A folder in a tab behind another shows the tab in front.** Windows pictures a window as it
+  is, and a File Explorer window shows one tab at a time, so a folder pin whose folder is open in
+  a background tab gets the front tab's picture and title. A click on the card still brings the
+  folder's own tab forward.
 - **A document is known by its window's title.** An app that titles its windows otherwise — by
   a document's own title rather than its file name, as a browser may for a PDF — leaves the
   pin dark, and two files of the same name in different folders light each other's pins.
