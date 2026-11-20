@@ -405,6 +405,7 @@
     "Drop.Locked": "Items are locked",
     "Drop.AlreadyPinned": "Already on the dock",
     "Drop.Full": "The dock is full",
+    "Drag.Remove": "Remove",
     "Overflow.Items.one": "{0:0} more item",
     "Overflow.Items.other": "{0:0} more items",
     "Overflow.Full.one": "The dock has room for {0:0} more item on its display, not {1:0}. Take some off, or lower the smallest icon size on the Size page.",

@@ -168,6 +168,8 @@ public sealed partial class DockWindow : Window
         _dock = new DockBar(settings.Current.Metrics);
         _dock.Activated += OnItemActivated;
         _dock.Reordered += OnItemReordered;
+        _dock.DragOffChanged += OnDragOffChanged;
+        _dock.DraggedOff += OnDraggedOff;
 
         // The dock decides how big a window it needs — a drop preview adds a slot, a taller
         // label wants more headroom — and neither is a settings change, so neither reaches
@@ -240,6 +242,8 @@ public sealed partial class DockWindow : Window
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _previews?.Dispose();
+            _lifted?.Dispose();
+            _lifted = null;
             _runningApps.Dispose();
             _backdrop?.Dispose();
             _binWatch?.Dispose();
@@ -343,7 +347,7 @@ public sealed partial class DockWindow : Window
         var source = (HwndSource)PresentationSource.FromVisual(this)!;
         source.AddHook(OnWindowMessage);
         _autoHide = new AutoHideController(
-            this, _chrome, _dock.IsPointerOverDock, IsCovered, Raise, HoldAbove, Lower,
+            this, _chrome, () => _dock.IsDragging || _dock.IsPointerOverDock(), IsCovered, Raise, HoldAbove, Lower,
             IsFullscreenAppInFront, RestingBarOnScreen);
 
         // The handle arrives as the dock slides away and goes as it slides back. Whether the
@@ -1129,6 +1133,16 @@ public sealed partial class DockWindow : Window
                 // very gesture that is about to be applied.
                 handled = _dock.EndPress(ClickOf(middle: false, wParam));
                 NativeMethods.ReleaseCapture();
+                break;
+
+            case NativeMethods.WM_MOUSEMOVE:
+                // Sent here, captured, wherever the pointer is: an icon pulled off the dock is
+                // moved by the pointer's own moves.
+                if (_lifted is { } lifted && NativeMethods.GetCursorPos(out var cursor))
+                {
+                    lifted.Follow(cursor.X, cursor.Y);
+                }
+
                 break;
 
             case NativeMethods.WM_MBUTTONDOWN:
@@ -3511,7 +3525,45 @@ public sealed partial class DockWindow : Window
         _settings.Save(settings);
     }
 
-    /// <summary>Persists an icon removed from the dock's own menu.</summary>
+    /// <summary>The icon pulled off the dock, carried under the pointer; null while none is.</summary>
+    private LiftedIconWindow? _lifted;
+
+    /// <summary>
+    /// Carries a dragged icon under the pointer once it is off the dock, with <i>Remove</i> over it
+    /// once letting go will take it off, and puts it away when it comes back.
+    /// </summary>
+    private void OnDragOffChanged(object? sender, (DockItem Item, DragOffState State) change)
+    {
+        if (change.State == DragOffState.OnBar)
+        {
+            _lifted?.Dispose();
+            _lifted = null;
+            return;
+        }
+
+        if (_lifted is null && _chrome is { } chrome)
+        {
+            // As big as the dock's magnified icon, in the dock's display's pixels.
+            _lifted = new LiftedIconWindow(
+                change.Item, _dock.Metrics.MaxSize, _dock.LabelLettering, MonitorDpi.ScaleForWindow(chrome.Hwnd));
+            if (NativeMethods.GetCursorPos(out var cursor))
+            {
+                _lifted.Follow(cursor.X, cursor.Y);
+            }
+        }
+
+        _lifted?.SetArmed(change.State == DragOffState.Armed);
+    }
+
+    /// <summary>Takes an icon off the dock that was pulled far enough from it that <i>Remove</i> showed, and let go.</summary>
+    private void OnDraggedOff(object? sender, DockItem item)
+    {
+        _lifted?.Vanish();
+        _lifted = null;
+        OnItemUnpinned(this, item);
+    }
+
+    /// <summary>Persists an icon removed from the dock's own menu, or dragged off it.</summary>
     private void OnItemUnpinned(object? sender, DockItem item)
     {
         var settings = ContentsToSave();

@@ -130,6 +130,7 @@ internal static partial class NativeMethods
     // Read straight from the window procedure. WS_EX_NOACTIVATE stops WPF delivering mouse
     // input to this window, but the messages themselves still arrive at the HWND.
 
+    internal const int WM_MOUSEMOVE = 0x0200;
     internal const int WM_LBUTTONDOWN = 0x0201;
     internal const int WM_LBUTTONUP = 0x0202;
     internal const int WM_RBUTTONUP = 0x0205;

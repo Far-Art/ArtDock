@@ -48,11 +48,11 @@ public sealed class DockBar : Canvas
     private const double MinTooltipReserve = 34;
 
     /// <summary>Gap between an icon's top and the bubble above it.</summary>
-    private const double TooltipGap = 8;
+    internal const double TooltipGap = 8;
 
     /// <summary>Padding inside the tooltip bubble.</summary>
-    private const double TooltipPadX = 9;
-    private const double TooltipPadY = 4;
+    internal const double TooltipPadX = 9;
+    internal const double TooltipPadY = 4;
 
     /// <summary>
     /// Headroom actually reserved above the bar, measured from the labels in the dock.
@@ -141,8 +141,8 @@ public sealed class DockBar : Canvas
     /// <summary>The label bubble. Keep it all but opaque: the labels are ClearType, which
     /// is blended against this colour, and any of the desktop showing through would show
     /// through with coloured fringes.</summary>
-    private static readonly Brush TooltipFill = Frozen(Color.FromArgb(0xF0, 0x14, 0x16, 0x20));
-    private static readonly Brush TooltipText = Frozen(Colors.White);
+    internal static readonly Brush TooltipFill = Frozen(Color.FromArgb(0xF0, 0x14, 0x16, 0x20));
+    internal static readonly Brush TooltipText = Frozen(Colors.White);
 
     private readonly Pen _barBorder;
     private readonly List<DockItemVisual> _items = [];
@@ -368,7 +368,16 @@ public sealed class DockBar : Canvas
     /// <summary>Where the press started, for measuring against the threshold.</summary>
     private double _pressX;
 
+    /// <summary>Where the press started, down the dock — a drag can begin by pulling the icon straight off.</summary>
+    private double _pressY;
+
     private bool _dragging;
+
+    /// <summary>Whether the dragged icon has been pulled clear of the dock, and held there long enough to go.</summary>
+    private readonly DragOff _dragOff = new();
+
+    /// <summary>The state last announced by <see cref="DragOffChanged"/>.</summary>
+    private DragOffState _dragOffShown;
 
     /// <summary>
     /// The hovered item's label, laid out once and reused.
@@ -623,6 +632,20 @@ public sealed class DockBar : Canvas
 
     /// <summary>Raised when a drag has moved an icon to a new position.</summary>
     public event EventHandler<(int From, int To)>? Reordered;
+
+    /// <summary>
+    /// Raised when the dragged icon leaves the dock, is held clear of it long enough to be
+    /// removed, or comes back — <see cref="DragOffState.OnBar"/> too when a drag that had lifted
+    /// it ends without removing it. The dock's own icon is hidden while it is off, so whatever
+    /// carries it under the pointer is the listener's.
+    /// </summary>
+    public event EventHandler<(DockItem Item, DragOffState State)>? DragOffChanged;
+
+    /// <summary>Raised when an icon pulled far enough from the dock that <i>Remove</i> showed is let go of: it is to come off the dock.</summary>
+    public event EventHandler<DockItem>? DraggedOff;
+
+    /// <summary>True from a press becoming a drag until it ends.</summary>
+    public bool IsDragging => _dragging;
 
     /// <summary>
     /// Raised when the window this dock needs has changed size — a drop preview appearing,
@@ -1959,6 +1982,7 @@ public sealed class DockBar : Canvas
         // wave is held flat so the slot the preview sits in does not move underneath it.
         _pressedIndex = -1;
         _middlePressedIndex = -1;
+        EndDragOff();
         _dragging = false;
         _dragIndex = -1;
 
@@ -2177,6 +2201,7 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public void BeginPress()
     {
+        EndDragOff();
         _dragging = false;
         _dragIndex = -1;
         _dragTarget = -1;
@@ -2184,6 +2209,7 @@ public sealed class DockBar : Canvas
         if (TryGetLocalCursor(out var local))
         {
             _pressX = local.X;
+            _pressY = local.Y;
         }
 
         _pressedIndex = PressedNow();
@@ -2266,6 +2292,7 @@ public sealed class DockBar : Canvas
         }
 
         _pressedIndex = -1;
+        EndDragOff();
         _dragging = false;
         _dragIndex = -1;
         _dragTarget = -1;
@@ -2288,17 +2315,63 @@ public sealed class DockBar : Canvas
 
         if (!_dragging)
         {
-            if (Math.Abs(local.X - _pressX) < DragThreshold)
+            // Either way: along the bar is a reorder, and straight up is the start of pulling
+            // the icon off.
+            if (Math.Abs(local.X - _pressX) < DragThreshold && Math.Abs(local.Y - _pressY) < DragThreshold)
             {
                 return;
             }
 
             _dragging = true;
             _dragIndex = _pressedIndex;
+            _dragOff.Reset();
+            _dragOffShown = DragOffState.OnBar;
             DragStarted?.Invoke(this, EventArgs.Empty);
         }
 
-        _dragTarget = SlotAt(local.X);
+        // Half an icon past the space the magnified icons fill, the icon leaves the row; three
+        // icons, letting go removes it — an icon and a half at first, doubled on request.
+        _dragOff.LiftDistance = Metrics.BaseSize / 2;
+        _dragOff.RemoveDistance = Metrics.BaseSize * 3;
+        _dragOff.Slack = Metrics.BaseSize / 4;
+        var state = _dragOff.Look(HoverTop - local.Y);
+
+        // Off the dock, the gap stays where the icon came from, which is where letting go
+        // short of Remove's distance drops it back.
+        _dragTarget = state == DragOffState.OnBar ? SlotAt(local.X) : _dragIndex;
+
+        if (state != _dragOffShown)
+        {
+            AnnounceDragOff(state);
+        }
+    }
+
+    /// <summary>
+    /// Hides the dragged icon in the row while it is off the dock, or shows it again, and says
+    /// so — the window that carries it under the pointer is the dock window's.
+    /// </summary>
+    private void AnnounceDragOff(DragOffState state)
+    {
+        _dragOffShown = state;
+        if (_dragIndex < 0 || _dragIndex >= _items.Count)
+        {
+            return;
+        }
+
+        var visual = _items[_dragIndex];
+        visual.Opacity = state == DragOffState.OnBar ? 1 : 0;
+        DragOffChanged?.Invoke(this, (visual.Item, state));
+    }
+
+    /// <summary>Puts a dragged icon that is off the dock back in the row, for a drag ending or abandoned.</summary>
+    private void EndDragOff()
+    {
+        var wasOff = _dragOffShown != DragOffState.OnBar;
+        _dragOff.Reset();
+        if (wasOff)
+        {
+            AnnounceDragOff(DragOffState.OnBar);
+        }
     }
 
     /// <summary>The slot the cursor sits over, clamped to the dock.</summary>
@@ -2338,19 +2411,47 @@ public sealed class DockBar : Canvas
         return 0;
     }
 
-    /// <summary>Ends a drag, moving the icon to whatever slot it was let go over.</summary>
+    /// <summary>
+    /// Ends a drag: moving the icon to whatever slot it was let go over, dropping it back where
+    /// it came from when it was let go clear of the dock but not far enough, or taking it off the
+    /// dock when it was far enough that <i>Remove</i> showed.
+    /// </summary>
     /// <remarks>
-    /// A drag has one outcome now. Letting go clear of the bar used to unpin the icon, and
-    /// that gesture is gone: it fired on a drag that wandered rather than on one that meant
-    /// it, and losing a pin to a slip of the hand is a poor trade for a shortcut that the
-    /// right-click menu and the settings dialog both already offer. Dragging away and letting
-    /// go now simply puts the icon back in the row.
+    /// Taking it off was here once, as letting go anywhere clear of the bar, and was taken away:
+    /// it fired on a drag that wandered rather than on one that meant it. It came back on
+    /// 2026-11-20 as the macOS dock does it, which a slip of the hand does not do — see
+    /// <see cref="DragOff"/>. It does not ask, as the menu's <i>Remove from dock</i> does: taking
+    /// it that far, with <i>Remove</i> showing, is the asking.
     /// </remarks>
     private bool EndDrag()
     {
         var from = _dragIndex;
         var to = _dragTarget;
+        var armed = _dragOff.State == DragOffState.Armed;
 
+        if (armed && from >= 0 && from < _items.Count)
+        {
+            var visual = _items[from];
+
+            // Quietly: the icon stays hidden, and nothing is announced, so it does not flash
+            // back into its slot before the row closes over it.
+            _dragOff.Reset();
+            _dragOffShown = DragOffState.OnBar;
+            _dragging = false;
+            _dragIndex = -1;
+            _dragTarget = -1;
+            ResetDisplayOrder();
+            SettleSlots();
+
+            DraggedOff?.Invoke(this, visual.Item);
+
+            // Gone from the row by now, which rebuilt as the removal was saved — or, if it was
+            // not, still there, and it must not stay invisible.
+            visual.Opacity = 1;
+            return true;
+        }
+
+        EndDragOff();
         _dragging = false;
         _dragIndex = -1;
         _dragTarget = -1;
@@ -2580,6 +2681,18 @@ public sealed class DockBar : Canvas
         }
 
         UpdateDrag(local);
+
+        if (_dragging && _dragOff.IsLifted)
+        {
+            // The icon has left the dock, and the dock settles flat behind it with the gap it
+            // left — nothing on it is being pointed at.
+            if (_rampTo > 0)
+            {
+                EndGesture();
+            }
+
+            return;
+        }
 
         if (_dragging)
         {
@@ -3057,6 +3170,15 @@ public sealed class DockBar : Canvas
         }
 
         var slot = DisplaySlot(index);
+
+        // Off the dock it is carried by a window of its own, and the hidden one in the row
+        // goes home to the gap it left, ready to be shown there if it comes back.
+        if (_dragOff.IsLifted)
+        {
+            _items[index].MoveToSlot(slot);
+            return;
+        }
+
         var pitch = Metrics.Pitch;
         if (pitch <= 0)
         {
@@ -3458,7 +3580,8 @@ public sealed class DockBar : Canvas
         for (var i = 0; i < _items.Count; i++)
         {
             var item = _items[i].Item;
-            if (!item.IsRunning && !item.IsClosing)
+            // Not under an icon pulled off the dock: the dot is the icon's, and goes with it.
+            if ((!item.IsRunning && !item.IsClosing) || (_dragging && _dragOff.IsLifted && i == _dragIndex))
             {
                 continue;
             }
@@ -3606,7 +3729,9 @@ public sealed class DockBar : Canvas
             : PreviewedItem is not null && _driver == WaveDriver.Parked ? _focusIndex
             : -1;
 
-        if (labelled < 0 || labelled >= _items.Count || _progress < 0.5)
+        // An icon pulled off the dock is labelled by the window carrying it, if at all.
+        if (labelled < 0 || labelled >= _items.Count || _progress < 0.5
+            || (_dragging && _dragOff.IsLifted && labelled == _dragIndex))
         {
             return;
         }
@@ -3755,6 +3880,9 @@ public sealed class DockBar : Canvas
         _tooltipLayouts[signature] = layout;
         return layout;
     }
+
+    /// <summary>The labels' lettering as drawn, for a label drawn anywhere else in the dock's manner.</summary>
+    internal (Typeface Typeface, double Size) LabelLettering => (LabelTypeface(), LabelEmSize);
 
     /// <summary>The labels' size as drawn, kept within what the bubble can hold.</summary>
     private double LabelEmSize => Math.Clamp(_labelSize ?? DefaultTooltipSize, 6, 48);

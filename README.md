@@ -285,10 +285,18 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   slots rather than jumping, whether they are making room for a
   drop or swapping places in a reorder. A dragged icon **stays on the bar**: it follows the
   pointer exactly, but only as far as the end slots, so a drag that wanders leaves the icon
-  where it can still be dropped instead of stranding it beside the dock. Dragging an icon off the bar no longer removes it:
-  the gesture fired on a drag that wandered rather than on one that meant it, and losing a
-  pin to a slip of the hand is a poor trade for a shortcut the right-click menu and the
-  settings dialog both already offer.
+  where it can still be dropped instead of stranding it beside the dock.
+- **Drag an icon off the dock to remove it**, as the macOS dock does: pull it up, clear of the
+  dock, and it leaves the row and follows the pointer, with a gap where it was; take it **far
+  enough** and *Remove* shows over it; let go there, and it goes up in a puff of cloud and the
+  row closes up. Let go nearer the dock and it drops back where it was; bring it back into the
+  dock and it is a reorder again. Only pulling **away from the edge** counts — past the ends of
+  the bar the icon stays on it. The icon leaves the row half an icon above the space the
+  magnified icons fill, and *Remove* shows three icons above it. It does not ask, as the
+  menu's *Remove from dock* does: taking it that far, with *Remove* showing, is the asking. While the items are
+  locked nothing drags, so nothing is removed this way either. The gesture was here once, as
+  letting go anywhere clear of the bar, and was taken away because it fired on drags that only
+  wandered; it came back in this form.
 - **Right-click an icon** to edit it or remove it, add another item beside it, or open the
   dock's settings — the item's own entries first, then the dock's; or, while the items are
   locked, a greyed *Locked* and the settings alone. *Remove from dock* is
@@ -1380,7 +1388,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and ninety-four tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and seven tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the

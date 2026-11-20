@@ -10,8 +10,8 @@ namespace ArtDock.Tests;
 /// that let a drag which wandered carry the icon clean off the bar. The slot it would land in
 /// was always clamped, so the row still reordered sensibly — it was only what the eye follows
 /// that escaped, leaving an icon floating outside the dock, over the desktop, still driving a
-/// reorder. Dragging an icon off does not unpin it either, so there was nothing the excursion
-/// could ever amount to.
+/// reorder. Past the ends nothing comes of it: only pulling an icon up, away from the edge,
+/// takes it off the dock (<c>DragOffTests</c>).
 /// </remarks>
 public class DragClampTests
 {
