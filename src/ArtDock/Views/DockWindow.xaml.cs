@@ -397,7 +397,8 @@ public sealed partial class DockWindow : Window
             _runningApps,
             id => _items.FirstOrDefault(item => item.Id == id),
             PreviewPlaceFor,
-            (hold, lingers) => _autoHide?.HoldRevealed(hold, lingers));
+            (hold, lingers) => _autoHide?.HoldRevealed(hold, lingers),
+            () => _autoHide?.Hides == true);
 
         ApplySettings(_settings.Current);
 

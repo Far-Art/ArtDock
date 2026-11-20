@@ -1564,8 +1564,9 @@ public sealed class DockBar : Canvas
     public bool IsHoldingLabel => _focusIndex >= 0 && _focusShowsLabel && !_focusIsPreview;
 
     /// <summary>
-    /// Holds the wave on the item whose window previews are open, with no label, for as long as
-    /// the pointer is off the dock — on its way up to the previews, or on them; null lets go.
+    /// Holds the wave on the item whose window previews are open, with no label, while the pointer
+    /// is off the dock — the previews ask for it only while the pointer is on its way up to them,
+    /// or on them; null lets go.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1578,6 +1579,10 @@ public sealed class DockBar : Canvas
     /// Without it the icon falls back into the row as the pointer climbs off it, and the previews
     /// are left floating over a dock that no longer reaches them. The label gives way: the
     /// previews' own titles say what it would, and it would stand where they stand.
+    /// </para>
+    /// <para>
+    /// Not held for the pointer leaving the dock any other way, which until 2026-11-20 it was:
+    /// the wave swung back to the item on its own and stayed there until the previews timed out.
     /// </para>
     /// </remarks>
     public void HoldForPreviews(DockItem? item)

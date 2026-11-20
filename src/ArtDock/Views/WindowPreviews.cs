@@ -26,8 +26,10 @@ internal readonly record struct PreviewPlace(Int32Rect WorkArea, double Scale, i
 /// is one more call rather than one more copy of the rules.
 /// </para>
 /// <para>
-/// While they are open the item is held under them (<see cref="DockBar.HoldForPreviews"/>) and
-/// the dock is held on screen, as a menu holds it; the panel is kept above the dock and its
+/// While the pointer is on them or on its way up, the dock is held on screen, as a menu holds it,
+/// and the item held under them (<see cref="DockBar.HoldForPreviews"/>) — not while it is
+/// anywhere else off the dock, when a dock that hides goes in its own time and takes the previews
+/// with it (<see cref="DockLeadMs"/>); the panel is kept above the dock and its
 /// sheet. What a window is called and how big it is are read again on every look, and the panel
 /// laid out again only when either has changed — every part of it checks before acting.
 /// </para>
@@ -37,11 +39,36 @@ internal sealed class WindowPreviews(
     RunningAppsService running,
     Func<string, DockItem?> findItem,
     Func<DockItem, PreviewPlace?> placeFor,
-    Action<bool, bool> holdRevealed) : IDisposable
+    Action<bool, bool> holdRevealed,
+    Func<bool> dockHides) : IDisposable
 {
     private const int VkLButton = 0x01;
     private const int VkRButton = 0x02;
     private const int VkMButton = 0x04;
+
+    /// <summary>
+    /// How much longer the previews wait, once the pointer has gone, while the dock is one that
+    /// hides: long enough for the dock to go first, and take them with it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The dock leads, as the user asked on 2026-11-20. Both used to wait the *Hide delay* from the
+    /// pointer leaving, each on its own clock, and measured from outside the dock over eight hides
+    /// the previews started fading 46 to 194 ms before the dock started sliding, 120 on average —
+    /// close enough to look like a mistake. The previews' own wait runs to the frame (the dock's
+    /// look at the pointer); auto-hide's is a 32 ms timer that waits behind the dock's drawing,
+    /// so the gap is not a fixed one that a delay could take out. Now the previews close as the
+    /// dock starts to slide (<c>DockWindow</c>'s <c>VisibilityChanged</c> dismisses them), and their
+    /// own wait is only for a dock that does not go — held up by the settings dialog, say.
+    /// </para>
+    /// <para>
+    /// The latest the dock was seen to start was 230 ms after the previews' own wait had run out.
+    /// </para>
+    /// </remarks>
+    private const int DockLeadMs = 500;
+
+    /// <summary>The *Hide delay*, which the previews wait out themselves where the dock does not hide.</summary>
+    private int _leaveMs = 700;
 
     private readonly PreviewDwell _dwell = new();
     private readonly PreviewMetrics _metrics = new();
@@ -63,7 +90,8 @@ internal sealed class WindowPreviews(
     {
         _animate = animate;
         _dwell.HoverTime = Math.Max(0, delayMs);
-        _dwell.LeaveTime = Math.Max(0, leaveMs);
+        _leaveMs = Math.Max(0, leaveMs);
+        _dwell.LeaveTime = _leaveMs;
 
         _enabled = enabled;
         if (!enabled)
@@ -103,6 +131,9 @@ internal sealed class WindowPreviews(
         var under = RunningUnder();
         var pressed = IsDown(VkLButton) || IsDown(VkRButton) || IsDown(VkMButton);
 
+        // A dock that hides goes first, and takes the previews with it: see DockLeadMs.
+        _dwell.LeaveTime = dockHides() ? _leaveMs + DockLeadMs : _leaveMs;
+
         switch (_dwell.Look(Environment.TickCount64, under?.Id, IsOnPanel(cursor.X, cursor.Y), pressed))
         {
             case PreviewMove.Open:
@@ -120,6 +151,31 @@ internal sealed class WindowPreviews(
             Refresh();
             _window?.PointAt(cursor.X, cursor.Y);
         }
+
+        // The wave held on the item only while the pointer is on the previews or on its way up
+        // to them, which is what the hold is for: keeping the icon under them as the pointer
+        // climbs. Held whenever the pointer was off the dock, it swung the wave back to the item
+        // when the pointer left the dock any other way, and held it there until the previews
+        // timed out — the wave moving on its own, under a pointer that was elsewhere.
+        var onPanel = _window is not null && IsOnPanel(cursor.X, cursor.Y);
+        dock.HoldForPreviews(onPanel ? _item : null);
+
+        // And the dock held up only then too: on the dock the pointer keeps it up itself, and
+        // anywhere else it is the dock's to say when it goes — lingering from now, so it waits its
+        // hide delay from the pointer leaving the previews, as it would from leaving the dock.
+        SetHolding(onPanel);
+    }
+
+    /// <summary>Holds the dock on the screen, or lets it go, when that is not already so.</summary>
+    private void SetHolding(bool hold)
+    {
+        if (hold == _holding)
+        {
+            return;
+        }
+
+        _holding = hold;
+        holdRevealed(hold, true);
     }
 
     /// <summary>
@@ -206,14 +262,6 @@ internal sealed class WindowPreviews(
 
         _item = item;
         _place = place;
-
-        if (!_holding)
-        {
-            _holding = true;
-            holdRevealed(true, true);
-        }
-
-        dock.HoldForPreviews(item);
 
         if (_window is not null)
         {
