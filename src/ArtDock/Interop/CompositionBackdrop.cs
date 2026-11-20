@@ -289,7 +289,7 @@ internal sealed class CompositionBackdrop : IDisposable
     /// threw. The dock makes its sheet on its one UI thread and never met that; tests, each on a
     /// thread of its own, did at once.
     /// </remarks>
-    private static void EnsureDispatcherQueue()
+    internal static void EnsureDispatcherQueue()
     {
         if (Windows.System.DispatcherQueue.GetForCurrentThread() is not null)
         {

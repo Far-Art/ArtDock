@@ -101,9 +101,11 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   under its title — Windows' own thumbnails, which cost the dock nothing however fast the
   window changes. Click a card to go to that window; its close button, or a middle click,
   closes it, except a window of a program running as administrator, which the dock cannot
-  close and offers no button for. The panel rises and fades in as it opens and fades out as it
-  closes, and moves to another running app at once when the pointer rests on that one, as
-  Windows' does — none of it animated with *Reduce motion* or Windows' animations off. Too
+  close and offers no button for. The panel rises a little and fades in as it opens, and fades
+  out gliding up, away from the dock, as it closes. When the pointer rests on another running
+  app the card glides over to it as Windows 11's taskbar previews do, measured off them frame by
+  frame, taking the new app's shape on the way while the old windows cross-fade into the new —
+  none of it animated with *Reduce motion* or Windows' animations off. Too
   many windows to fit across the display are shrunk alike, then listed by title. The icon
   stays magnified under the panel while the pointer is on it, and a click on the icon still
   cycles. On by default, on the Behaviour page, with the delay beside it.
@@ -1369,7 +1371,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand one hundred and fifty-three tests cover the cosine falloff (peak, range boundary,
+One thousand one hundred and eighty-three tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1961,7 +1963,11 @@ to hide in its own time and a window filling the display slides it away; started
 slides up when brought back. One reads the source, to keep the window said to have gone up only
 after the first settings are applied.
 
-Forty-three cover the window previews. Their layout: a window's shape kept inside the picture
+Fifty-eight cover the window previews. Their motion: the easing curve, checked against CSS's own
+and against the taskbar's recorded glide; the rise kept within the gap above the dock; the card's
+edges each moved on their own, so a bottom both ends share never moves; a set of cards standing on
+the card's bottom; and a window's picture cut to what of the card shows — by an edge, or by a
+narrower card. Their layout: a window's shape kept inside the picture
 box, whatever its size or a size that could not be read; a narrow window still given room for
 its title; every part inside its card and every card inside the panel, in order and apart; the
 panel centred on the icon, kept on the display at both ends and on the left-hand display in its

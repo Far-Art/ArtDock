@@ -72,8 +72,13 @@ internal sealed class DwmThumbnail : IDisposable
     [DllImport("dwmapi.dll")]
     private static extern int DwmQueryThumbnailSourceSize(nint thumbnail, out Size32 size);
 
+    private const int DwmTnpRectSource = 0x2;
+
     private nint _handle;
-    private Int32Rect? _shown;
+    private (Int32Rect Where, Int32Rect? Part, byte Opacity)? _shown;
+
+    /// <summary>Whether DWM holds a source rectangle short of the whole window.</summary>
+    private bool _cut;
 
     private DwmThumbnail(nint handle, nint source)
     {
@@ -108,18 +113,42 @@ internal sealed class DwmThumbnail : IDisposable
 
     /// <summary>
     /// Draws the picture in a rectangle of the destination's client area, in pixels; an empty
-    /// one hides it. Does nothing when that is where it already is.
+    /// one hides it. Does nothing when that is where, and how, it already is.
     /// </summary>
-    public void Show(Int32Rect where)
+    /// <param name="where">Where it goes.</param>
+    /// <param name="part">
+    /// Which part of the window it shows there, in the window's own pixels; null for the whole.
+    /// The only way to cut a picture: nothing in the destination window cuts it, not its region
+    /// and not what the compositor draws (TODO.md item 25).
+    /// </param>
+    /// <param name="opacity">How opaque it is, 0 to 255.</param>
+    public void Show(Int32Rect where, Int32Rect? part = null, byte opacity = 255)
     {
-        if (_handle == 0 || _shown == where)
+        var visible = !where.IsEmpty && where.Width > 0 && where.Height > 0 && opacity > 0;
+        if (!visible)
+        {
+            where = Int32Rect.Empty;
+            part = null;
+            opacity = 0;
+        }
+
+        if (_handle == 0 || _shown == (where, part, opacity))
         {
             return;
         }
 
+        // DWM keeps the last source rectangle it was given, so going back to the whole window is
+        // saying so: the whole, as large as DWM reports it.
+        var asked = part;
+        if (part is null && _cut && SourceSize() is { IsEmpty: false } whole)
+        {
+            part = new Int32Rect(0, 0, (int)whole.Width, (int)whole.Height);
+        }
+
         var properties = new Properties
         {
-            Flags = DwmTnpRectDestination | DwmTnpOpacity | DwmTnpVisible | DwmTnpSourceClientAreaOnly,
+            Flags = DwmTnpRectDestination | DwmTnpOpacity | DwmTnpVisible | DwmTnpSourceClientAreaOnly
+                | (part is null ? 0 : DwmTnpRectSource),
             Destination = new Rect32
             {
                 Left = where.X,
@@ -127,14 +156,29 @@ internal sealed class DwmThumbnail : IDisposable
                 Right = where.X + where.Width,
                 Bottom = where.Y + where.Height,
             },
-            Opacity = 255,
-            Visible = where.IsEmpty || where.Width <= 0 || where.Height <= 0 ? 0 : 1,
+            Opacity = visible ? opacity : (byte)255,
+            Visible = visible ? 1 : 0,
             SourceClientAreaOnly = 0,
         };
 
+        if (part is { } source)
+        {
+            properties.Source = new Rect32
+            {
+                Left = source.X,
+                Top = source.Y,
+                Right = source.X + source.Width,
+                Bottom = source.Y + source.Height,
+            };
+        }
+
         if (DwmUpdateThumbnailProperties(_handle, ref properties) == 0)
         {
-            _shown = where;
+            _shown = (where, asked, opacity);
+            if (part is not null)
+            {
+                _cut = asked is not null;
+            }
         }
     }
 

@@ -56,8 +56,12 @@ public sealed class PreviewDwell
     /// <summary>How long the pointer rests on an item before its previews open, in milliseconds.</summary>
     public long HoverTime { get; set; } = 400;
 
-    /// <summary>How long it rests on another item before the open previews move to it.</summary>
-    public long SwitchTime { get; set; } = 150;
+    /// <summary>
+    /// How long it rests on another item before the open previews move to it: the taskbar's,
+    /// measured at 210 to 230 ms from the pointer entering a button to the glide starting, a frame
+    /// or two of which is the measuring (TODO.md item 25).
+    /// </summary>
+    public long SwitchTime { get; set; } = 200;
 
     /// <summary>How long it may be away before the previews close.</summary>
     public long LeaveTime { get; set; } = 700;

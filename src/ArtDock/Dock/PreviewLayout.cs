@@ -51,8 +51,8 @@ public sealed record PreviewMetrics
     public double ListWidth { get; init; } = 320;
 
     /// <summary>
-    /// Space between the panel and the line it must stay above — and how far it rises into place
-    /// as it opens, since it may not start below that line.
+    /// Space between the panel and the line it must stay above. It rises into place from below
+    /// that line, which hides it until it is above (<see cref="PreviewMotion.RiseDips"/>).
     /// </summary>
     public double Lift { get; init; } = 12;
 

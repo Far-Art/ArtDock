@@ -48,12 +48,6 @@ internal sealed class WindowPreviews(
     private readonly Dictionary<nint, bool> _canClose = [];
 
     private PreviewWindow? _window;
-
-    /// <summary>
-    /// The panel a new one is taking over from, left on the screen until the new one is on it:
-    /// gone first, it would leave a frame or two with no panel at all.
-    /// </summary>
-    private PreviewWindow? _outgoing;
     private DockItem? _item;
     private PreviewPlace _place;
     private IReadOnlyList<Size> _sizes = [];
@@ -166,8 +160,8 @@ internal sealed class WindowPreviews(
         }
     }
 
-    /// <summary>Closes at once, without the fade: the dock is going.</summary>
-    public void Dispose() => Close(lingers: true, fade: false);
+    /// <summary>Closes at once, without the sink: the dock is going.</summary>
+    public void Dispose() => Close(lingers: true, animate: false);
 
     private DockItem? RunningUnder() =>
         dock.IsPointerOverDock() && dock.ItemUnderCursor() is { IsRunning: true, RunningTarget: not null } item ? item : null;
@@ -202,16 +196,16 @@ internal sealed class WindowPreviews(
             return;
         }
 
-        // A panel is made for one display: another one's is a new panel (see PreviewWindow).
-        if (_window is not null && (place.Scale != _place.Scale || place.WorkArea != _place.WorkArea))
+        // A panel is made for one display and the line it stands above: another one's is a new
+        // panel (see PreviewWindow), and the old one simply goes.
+        if (_window is not null && !_window.Fits(place))
         {
-            _window.Dispose();
+            Release(_window, animate: false);
             _window = null;
         }
 
         _item = item;
         _place = place;
-        _sizes = [];
 
         if (!_holding)
         {
@@ -221,47 +215,28 @@ internal sealed class WindowPreviews(
 
         dock.HoldForPreviews(item);
 
-        // Another item's panel is not changed into this one's: a new panel takes over from it,
-        // made at its own size, and is simply there — no slide, no fade, as Windows' previews
-        // move between buttons. Changing it in place meant resizing a window on the screen, and
-        // Windows showed the space it gained, and the old pictures, for a frame or two before WPF
-        // had drawn the new cards — a blink at the start of every switch, the worse the wider
-        // the new panel.
-        var previous = _window;
-        if (previous is not null)
+        if (_window is not null)
         {
-            previous.Chosen -= OnChosen;
-            previous.CloseRequested -= OnCloseRequested;
-
-            // One panel on its way out at a time: a third app in quick succession sends the first
-            // on its way at once.
-            ReleaseOutgoing(fade: false);
-            _outgoing = previous;
-            _window = null;
+            // Another item's windows on the same panel: the card glides over to them and takes
+            // their shape, as Windows' previews move between buttons (TODO.md item 25).
+            _window.Show(entries, Arrange);
         }
-
-        // It rises the whole gap it keeps from the dock, and no further: see PreviewWindow.
-        var rise = (int)Math.Round(_metrics.Lift * place.Scale);
-        _window = new PreviewWindow(Arrange(entries), entries, _animate, rise, takesOver: previous is not null);
-        _window.Chosen += OnChosen;
-        _window.CloseRequested += OnCloseRequested;
-
-        // The old one goes the moment the new one is there, over it.
-        if (previous is not null)
+        else
         {
-            _window.Shown += (_, _) =>
+            _window = PreviewWindow.TryCreate(place, entries, Arrange, _animate);
+            if (_window is null)
             {
-                if (ReferenceEquals(_outgoing, previous))
-                {
-                    ReleaseOutgoing(fade: false);
-                }
-            };
+                // No compositor to draw with: no previews, rather than trying again on every look.
+                _enabled = false;
+                Close(lingers: true, animate: false);
+                return;
+            }
+
+            _window.Chosen += OnChosen;
+            _window.CloseRequested += OnCloseRequested;
         }
 
-        // The windows' real shapes are DWM's to say, once their pictures are registered — before
-        // anything has been drawn, so the first frame is already the right one.
         _sizes = _window.SourceSizes();
-        _window.Update(Arrange(entries), entries);
     }
 
     /// <summary>Reads the windows, their titles and their sizes again, and lays out again on any change.</summary>
@@ -287,7 +262,7 @@ internal sealed class WindowPreviews(
             return;
         }
 
-        if (place.Scale != _place.Scale || place.WorkArea != _place.WorkArea)
+        if (!window.Fits(place))
         {
             Show(item.Id);
             return;
@@ -303,18 +278,12 @@ internal sealed class WindowPreviews(
             return;
         }
 
+        // A window opened or closed changes which pictures are registered, and so their sizes:
+        // the panel registers them first and lays out with what they say.
         _item = item;
         _place = place;
-        _sizes = sizes;
-        window.Update(Arrange(entries), entries);
-
-        // A window opened or closed changes which pictures are registered, and so their sizes.
-        var registered = window.SourceSizes();
-        if (!registered.SequenceEqual(_sizes))
-        {
-            _sizes = registered;
-            window.Update(Arrange(entries), entries);
-        }
+        window.Update(entries, Arrange);
+        _sizes = window.SourceSizes();
     }
 
     private List<PreviewEntry> EntriesFor(DockItem item)
@@ -335,11 +304,9 @@ internal sealed class WindowPreviews(
         return entries;
     }
 
-    private PreviewArrangement Arrange(IReadOnlyList<PreviewEntry> entries)
-    {
-        var sizes = entries.Count == _sizes.Count ? _sizes : [.. entries.Select(_ => Size.Empty)];
-        return PreviewLayout.Arrange(sizes, _metrics, _place.Scale, _place.WorkArea, _place.AnchorX, _place.Floor);
-    }
+    /// <summary>Lays out windows of these sizes at the place in force — what the panel asks once their pictures say how big they are.</summary>
+    private PreviewArrangement Arrange(IReadOnlyList<Size> sizes) =>
+        PreviewLayout.Arrange(sizes, _metrics, _place.Scale, _place.WorkArea, _place.AnchorX, _place.Floor);
 
     private void OnChosen(object? sender, nint window)
     {
@@ -367,42 +334,26 @@ internal sealed class WindowPreviews(
         WindowsApi.RequestClose(window);
     }
 
-    /// <summary>Sends the panel being taken over from on its way: faded out, or at once without animation.</summary>
-    private void ReleaseOutgoing(bool fade = true)
+    /// <summary>Sends a panel on its way: sinking out of sight, or at once.</summary>
+    private void Release(PreviewWindow window, bool animate)
     {
-        if (_outgoing is not { } outgoing)
+        window.Chosen -= OnChosen;
+        window.CloseRequested -= OnCloseRequested;
+        if (animate)
         {
-            return;
-        }
-
-        _outgoing = null;
-        if (fade)
-        {
-            outgoing.FadeAway();
+            window.Close();
         }
         else
         {
-            outgoing.Dispose();
+            window.Dispose();
         }
     }
 
-    private void Close(bool lingers, bool fade = true)
+    private void Close(bool lingers, bool animate = true)
     {
-        ReleaseOutgoing(fade);
-
         if (_window is { } window)
         {
-            window.Chosen -= OnChosen;
-            window.CloseRequested -= OnCloseRequested;
-            if (fade)
-            {
-                window.FadeAway();
-            }
-            else
-            {
-                window.Dispose();
-            }
-
+            Release(window, animate);
             _window = null;
         }
 
