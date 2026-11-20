@@ -10,6 +10,45 @@ public class PreviewDwellTests
 {
     private static PreviewDwell Dwell() => new() { HoverTime = 400, SwitchTime = 150, LeaveTime = 700 };
 
+    [Fact]
+    public void LeaveTime_ADockThatHidesSoon_TakesThePreviewsWithIt()
+    {
+        // The default hide delay: the dock is due 300 ms after the previews' own wait, close enough
+        // to look like one hide gone wrong, so they wait for it, with room for it to go first.
+        Assert.Equal(700 + PreviewDwell.DockLead, PreviewDwell.LeaveTimeFor(700, dockHides: true));
+    }
+
+    [Fact]
+    public void LeaveTime_ADockThatHidesLate_LetsThePreviewsGoFirst()
+    {
+        // A three-second hide delay: the previews go in their own time, not with the dock.
+        Assert.Equal(PreviewDwell.OwnLeaveTime, PreviewDwell.LeaveTimeFor(3000, dockHides: true));
+    }
+
+    [Fact]
+    public void LeaveTime_ADockThatDoesNotHide_LeavesThePreviewsToThemselves()
+    {
+        Assert.Equal(PreviewDwell.OwnLeaveTime, PreviewDwell.LeaveTimeFor(700, dockHides: false));
+        Assert.Equal(PreviewDwell.OwnLeaveTime, PreviewDwell.LeaveTimeFor(3000, dockHides: false));
+    }
+
+    [Fact]
+    public void LeaveTime_IsNeverLongerThanAShortHideDelay()
+    {
+        // Their own wait is cut to a hide delay shorter than it, and a dock that hides that soon
+        // still takes them with it.
+        Assert.Equal(200, PreviewDwell.LeaveTimeFor(200, dockHides: false));
+        Assert.Equal(200 + PreviewDwell.DockLead, PreviewDwell.LeaveTimeFor(200, dockHides: true));
+    }
+
+    [Fact]
+    public void LeaveTime_TheEdgeOfTogether()
+    {
+        var edge = PreviewDwell.OwnLeaveTime + PreviewDwell.TogetherWithin;
+        Assert.Equal(edge + PreviewDwell.DockLead, PreviewDwell.LeaveTimeFor(edge, dockHides: true));
+        Assert.Equal(PreviewDwell.OwnLeaveTime, PreviewDwell.LeaveTimeFor(edge + 1, dockHides: true));
+    }
+
     /// <summary>Opens the previews of <paramref name="item"/>, as resting on it does, and returns the time.</summary>
     private static long Opened(PreviewDwell dwell, string item = "a")
     {

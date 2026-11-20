@@ -66,6 +66,44 @@ public sealed class PreviewDwell
     /// <summary>How long it may be away before the previews close.</summary>
     public long LeaveTime { get; set; } = 700;
 
+    /// <summary>
+    /// How long the previews wait on their own once the pointer has gone: the taskbar's, measured
+    /// at 350 to 450 ms (TODO.md item 25) — and never longer than the dock's own hide delay.
+    /// </summary>
+    public const long OwnLeaveTime = 400;
+
+    /// <summary>
+    /// How soon after the previews' own wait the dock must be due to hide for them to wait for it
+    /// and go with it, rather than go first.
+    /// </summary>
+    /// <remarks>
+    /// Close together they look like one hide gone wrong — measured 46 to 194 ms apart, the eye
+    /// caught it (2026-11-20) — so the dock leads. Far apart they are two things: with a *Hide
+    /// delay* of three seconds, previews waiting for the dock stood over the desktop all that time.
+    /// </remarks>
+    public const long TogetherWithin = 400;
+
+    /// <summary>
+    /// How much longer than the dock's hide delay previews waiting for the dock wait on their own:
+    /// long enough for the dock always to go first and take them with it, and short enough to close
+    /// them anyway when it does not go — held up by the settings dialog, say. The dock was measured
+    /// starting up to 230 ms after its delay.
+    /// </summary>
+    public const long DockLead = 500;
+
+    /// <summary>
+    /// The <see cref="LeaveTime"/> to use: the previews' own wait, or — when the dock hides, and
+    /// soon after that — the dock's hide delay and a margin, so the dock goes first and takes the
+    /// previews with it.
+    /// </summary>
+    /// <param name="dockHideDelay">The dock's *Hide delay*, in milliseconds.</param>
+    /// <param name="dockHides">Whether the dock hides when the pointer leaves it: auto-hide on, or yielding to a window in front.</param>
+    public static long LeaveTimeFor(long dockHideDelay, bool dockHides)
+    {
+        var own = Math.Min(Math.Max(0, dockHideDelay), OwnLeaveTime);
+        return dockHides && dockHideDelay - own <= TogetherWithin ? dockHideDelay + DockLead : own;
+    }
+
     /// <summary>The item whose previews are open; null while they are closed.</summary>
     public string? Showing { get; private set; }
 
