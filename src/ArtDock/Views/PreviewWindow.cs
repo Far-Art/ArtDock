@@ -35,8 +35,9 @@ internal sealed record PreviewEntry(nint Window, string Title, ImageSource? Icon
 /// <remarks>
 /// <para>
 /// <b>A window that never moves or resizes</b>, lying over the dock's display from the top of
-/// its work area down to the line the previews stay above (<see cref="PreviewPlace.Floor"/>),
-/// with no redirection bitmap: everything in it is drawn by the compositor, and it is clear
+/// its work area down to the dock's hover zone (<see cref="PreviewPlace.DockTop"/>) — below the
+/// line the card stands above (<see cref="PreviewPlace.Floor"/>), for its shadow — with no
+/// redirection bitmap: everything in it is drawn by the compositor, and it is clear
 /// wherever nothing is drawn. Resizing a window on the screen every frame cannot be done without
 /// Windows showing the space it gained before it is drawn — found as a blink at every switch on
 /// 2026-10-03 — so the card moves inside a window that stays put.
@@ -258,11 +259,15 @@ internal sealed class PreviewWindow : IDisposable
         Func<IReadOnlyList<Size>, PreviewArrangement> arrange,
         bool animate)
     {
+        // Down to the dock's hover zone, not only to the line the card stands above: the card's
+        // shadow falls below it, and a window ending at that line cut it off (seen 2026-11-20).
+        // The window lets the pointer through, so reaching over the held item's label costs
+        // nothing; it must not reach into the hover zone, where the dock counts it as covering.
         var stage = new Int32Rect(
             place.WorkArea.X,
             place.WorkArea.Y,
             Math.Max(1, place.WorkArea.Width),
-            Math.Max(1, place.Floor - place.WorkArea.Y));
+            Math.Max(1, Math.Max(place.Floor, place.DockTop) - place.WorkArea.Y));
 
         if (SharedCompositor() is not { } compositor)
         {
@@ -347,7 +352,8 @@ internal sealed class PreviewWindow : IDisposable
 
     /// <summary>Whether this panel can show previews at <paramref name="place"/>: the same display, scale and floor.</summary>
     public bool Fits(PreviewPlace place) =>
-        place.WorkArea == _place.WorkArea && place.Scale == _place.Scale && place.Floor == _place.Floor;
+        place.WorkArea == _place.WorkArea && place.Scale == _place.Scale && place.Floor == _place.Floor
+        && place.DockTop == _place.DockTop;
 
     /// <summary>Each window's size as DWM pictures it, in pixels, for laying the cards out.</summary>
     public IReadOnlyList<Size> SourceSizes() => _cards.SourceSizes();

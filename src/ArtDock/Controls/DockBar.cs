@@ -1564,10 +1564,17 @@ public sealed class DockBar : Canvas
     public bool IsHoldingLabel => _focusIndex >= 0 && _focusShowsLabel && !_focusIsPreview;
 
     /// <summary>
-    /// Holds the wave on the item whose window previews are open, with no label, while the pointer
-    /// is off the dock — the previews ask for it only while the pointer is on its way up to them,
-    /// or on them; null lets go.
+    /// Holds the wave on the item whose window previews are open, labelled, while the pointer is
+    /// off the dock and inside <paramref name="reach"/> — on its way up to them, or on them; null
+    /// lets go.
     /// </summary>
+    /// <param name="item">The item whose previews are open; null when they are closed.</param>
+    /// <param name="reach">
+    /// The previews and the way up to them, in physical screen pixels. The dock tests the pointer
+    /// against it itself, on every frame: asked by the previews on their own look at the pointer,
+    /// every 32 ms, the hold arrived a frame or more after the pointer left the icon, and the label
+    /// blinked off and the icon sank on the way up (seen 2026-11-20).
+    /// </param>
     /// <remarks>
     /// <para>
     /// Not a <see cref="FocusItem"/> hold, which would lock the pointer out of the dock: the
@@ -1577,32 +1584,87 @@ public sealed class DockBar : Canvas
     /// </para>
     /// <para>
     /// Without it the icon falls back into the row as the pointer climbs off it, and the previews
-    /// are left floating over a dock that no longer reaches them. The label gives way: the
-    /// previews' own titles say what it would, and it would stand where they stand.
+    /// are left floating over a dock that no longer reaches them. The label stays up, under them:
+    /// they stand above it (<see cref="PreviewFloor"/>).
     /// </para>
     /// <para>
     /// Not held for the pointer leaving the dock any other way, which until 2026-11-20 it was:
     /// the wave swung back to the item on its own and stayed there until the previews timed out.
     /// </para>
     /// </remarks>
-    public void HoldForPreviews(DockItem? item)
+    public void HoldForPreviews(DockItem? item, Int32Rect reach = default)
     {
         var id = item?.Id;
-        if (id == _previewsFor)
+
+        // Down to the bar's top, over the dock's own space: between a magnified icon's top and
+        // the top of the hover zone is a strip that is on the dock but on no icon, where the
+        // hovered label had gone and the held one not yet come, so the label blinked off on the
+        // way up (seen 2026-11-20). Pointing at the dock still drives the wave there, as it is
+        // asked first; only the label goes by this.
+        if (id is not null && reach is { Width: > 0, Height: > 0 } && PresentationSource.FromVisual(this) is not null)
+        {
+            var barTop = (int)Math.Ceiling(PointToScreen(new Point(0, BarBottom - Metrics.BarHeight)).Y);
+            reach = new Int32Rect(reach.X, reach.Y, reach.Width, Math.Max(reach.Height, barTop - reach.Y));
+        }
+
+        var inReach = id is not null && NativeMethods.GetCursorPos(out var cursor) && InReach(reach, cursor);
+        if (id == _previewsFor && reach == _previewsReach && inReach == _previewsInReach)
         {
             return;
         }
 
         _previewsFor = id;
+        _previewsReach = reach;
+        _previewsInReach = inReach;
 
         // The hold is applied by the frame loop, which may be idle with the pointer away.
         EnsureRendering();
         InvalidateVisual();
     }
 
-    /// <summary>Where the item <see cref="HoldForPreviews"/> holds is in the row; -1 for none.</summary>
+    /// <summary>The previews and the way up to them, in physical screen pixels: see <see cref="HoldForPreviews"/>.</summary>
+    private Int32Rect _previewsReach;
+
+    /// <summary>Whether the pointer was in reach when the previews last said where it is.</summary>
+    private bool _previewsInReach;
+
+    /// <summary>
+    /// The item the wave stays on while the pointer is on the dock: the one whose window previews
+    /// are open, while the pointer is on its icon or in the strip just above it; -1 otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Asked for on 2026-11-20. Following the pointer to the pixel, the wave moved with every
+    /// sideways wobble of a hand reaching up for the previews, and the icon under them with it.
+    /// Resting on the icon's middle instead, it does not move at all until the pointer is on
+    /// another icon — the handover easing the change both ways (<see cref="SetWaveCentre"/>).
+    /// </remarks>
+    private int SteadyIndex()
+    {
+        if (_previewsFor is null)
+        {
+            return -1;
+        }
+
+        var index = _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
+        if (index < 0)
+        {
+            return -1;
+        }
+
+        return _hoveredIndex == index || (_hoveredIndex < 0 && PreviewsIndex == index) ? index : -1;
+    }
+
+    private static bool InReach(Int32Rect reach, NativeMethods.NativePoint point) =>
+        point.X >= reach.X && point.X < reach.X + reach.Width && point.Y >= reach.Y && point.Y < reach.Y + reach.Height;
+
+    /// <summary>
+    /// Where the item <see cref="HoldForPreviews"/> holds is in the row, while the pointer — as the
+    /// frame loop last read it — is in reach of the previews; -1 otherwise.
+    /// </summary>
     private int PreviewsIndex =>
-        _previewsFor is null ? -1 : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
+        _previewsFor is null || !InReach(_previewsReach, _screenCursor)
+            ? -1
+            : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
 
     /// <summary>Releases a claim taken by <see cref="FocusItem"/>, if it is still the current one.</summary>
     public void ReleaseFocus(int claim)
@@ -2507,8 +2569,18 @@ public sealed class DockBar : Canvas
             // Whoever is actually pointing at the dock outranks the demonstration.
             _sweepYielded = true;
 
-            SetWaveCentre(local.X - RestingBarLeft(), WaveDriver.Pointer);
+            // Hovered first, from the icons as they are drawn: whether the pointer is still on
+            // the previews' icon decides where the wave goes.
             UpdateHovered(local);
+            if (SteadyIndex() is var steady and >= 0)
+            {
+                SetWaveCentre(_layout.RestingCentre(steady), WaveDriver.Parked);
+            }
+            else
+            {
+                SetWaveCentre(local.X - RestingBarLeft(), WaveDriver.Pointer);
+            }
+
             if (_rampTo < 1)
             {
                 StartRamp(1, EnterRampMs);
@@ -2730,6 +2802,18 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public double HoverTop =>
         BarBottom - Metrics.BarHeight - Math.Max(0, Metrics.MaxSize - Metrics.BaseSize);
+
+    /// <summary>
+    /// The line the window previews stand above, in this element's coordinates: the top of the
+    /// tallest label over a fully magnified icon, so the label of the item whose previews are open
+    /// shows under them (asked for on 2026-11-20). The label's own top, not the top of the room
+    /// the window keeps for it, which has a floor of its own and stood the previews too high.
+    /// </summary>
+    public double PreviewFloor =>
+        Math.Min(HoverTop, BarBottom - Metrics.PaddingY - Metrics.MaxSize - TooltipGap - _labelHeight);
+
+    /// <summary>The tallest label's bubble, padding included, as <see cref="RefreshTooltipReserve"/> last measured it.</summary>
+    private double _labelHeight;
 
     /// <summary>
     /// Where an item's middle is drawn while the wave is parked on it, in this element's
@@ -3460,14 +3544,16 @@ public sealed class DockBar : Canvas
 
         // The item selected in the settings dialog is labelled as a hovered one would be, for
         // as long as the wave is parked on it: a pointer on the dock takes the wave, and the
-        // label goes with it.
+        // label goes with it. The item whose window previews are open keeps its label while the
+        // pointer is up on them: they stand above it (PreviewFloor). Until 2026-11-20 they stood
+        // where it would, and it gave way.
         var held = PreviewsIndex;
         var labelled = _hoveredIndex >= 0 ? _hoveredIndex
-            : PreviewedItem is not null && _driver == WaveDriver.Parked && held < 0 ? _focusIndex
+            : held >= 0 ? held
+            : PreviewedItem is not null && _driver == WaveDriver.Parked ? _focusIndex
             : -1;
 
-        // The window previews stand where the label would, and their titles say what it would.
-        if (labelled < 0 || labelled >= _items.Count || labelled == held || _progress < 0.5)
+        if (labelled < 0 || labelled >= _items.Count || _progress < 0.5)
         {
             return;
         }
@@ -3541,6 +3627,8 @@ public sealed class DockBar : Canvas
         {
             tallest = Math.Max(tallest, GetTooltipLayout(preview).Height);
         }
+
+        _labelHeight = tallest + (TooltipPadY * 2);
 
         // The bubble, the gap under it, and a couple of pixels so it is not flush against
         // the window edge the content is clipped to.

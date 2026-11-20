@@ -3368,6 +3368,7 @@ public sealed partial class DockWindow : Window
         }
 
         var anchor = _dock.PointToScreen(new Point(centre, _dock.HoverTop));
+        var floor = _dock.PointToScreen(new Point(centre, _dock.PreviewFloor));
         var lift = _shownTop is { } shown && NativeMethods.GetWindowRect(_chrome.Hwnd, out var actual)
             ? shown - actual.Top
             : 0;
@@ -3382,6 +3383,7 @@ public sealed partial class DockWindow : Window
             work,
             MonitorDpi.ScaleForWindow(_chrome.Hwnd),
             (int)Math.Round(anchor.X),
+            (int)Math.Floor(floor.Y) + lift,
             (int)Math.Floor(anchor.Y) + lift);
     }
 

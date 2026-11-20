@@ -10,8 +10,12 @@ namespace ArtDock.Views;
 /// <param name="WorkArea">The dock's display's work area, in physical pixels.</param>
 /// <param name="Scale">That display's scale.</param>
 /// <param name="AnchorX">The held icon's middle, in physical pixels.</param>
-/// <param name="Floor">The top of the dock's hover zone, in physical pixels: the line they stay above.</param>
-internal readonly record struct PreviewPlace(Int32Rect WorkArea, double Scale, int AnchorX, int Floor);
+/// <param name="Floor">The line they stay above, in physical pixels: over the held item's label.</param>
+/// <param name="DockTop">
+/// The top of the dock's hover zone, in physical pixels: where the way up to them starts, which
+/// counts as on them — the label's room between it and <paramref name="Floor"/> included.
+/// </param>
+internal readonly record struct PreviewPlace(Int32Rect WorkArea, double Scale, int AnchorX, int Floor, int DockTop);
 
 /// <summary>
 /// The previews of an app's windows, from the dock's side: when they open, for which item, what
@@ -148,8 +152,10 @@ internal sealed class WindowPreviews(
         // climbs. Held whenever the pointer was off the dock, it swung the wave back to the item
         // when the pointer left the dock any other way, and held it there until the previews
         // timed out — the wave moving on its own, under a pointer that was elsewhere.
+        // Said whenever they are open, with where they reach: the dock tests the pointer against
+        // that itself, every frame, so the hold is there the moment the pointer leaves the icon.
         var onPanel = _window is not null && IsOnPanel(cursor.X, cursor.Y);
-        dock.HoldForPreviews(onPanel ? _item : null);
+        dock.HoldForPreviews(_window is not null ? _item : null, Reach());
 
         // And the dock held up only then too: on the dock the pointer keeps it up itself, and
         // anywhere else it is the dock's to say when it goes — lingering from now, so it waits its
@@ -216,14 +222,24 @@ internal sealed class WindowPreviews(
     /// <summary>Whether a point is on the panel, or in the gap between it and the dock.</summary>
     private bool IsOnPanel(int x, int y)
     {
+        var reach = Reach();
+        return x >= reach.X && x < reach.X + reach.Width && y >= reach.Y && y < reach.Y + reach.Height;
+    }
+
+    /// <summary>
+    /// The panel and the way up to it from the dock — the label's room included — in physical
+    /// screen pixels; empty while there is no panel.
+    /// </summary>
+    private Int32Rect Reach()
+    {
         if (_window is null)
         {
-            return false;
+            return Int32Rect.Empty;
         }
 
         var panel = _window.Bounds;
-        var bottom = Math.Max(panel.Y + panel.Height, _place.Floor);
-        return x >= panel.X && x < panel.X + panel.Width && y >= panel.Y && y < bottom;
+        var bottom = Math.Max(panel.Y + panel.Height, Math.Max(_place.Floor, _place.DockTop));
+        return new Int32Rect(panel.X, panel.Y, panel.Width, Math.Max(0, bottom - panel.Y));
     }
 
     private void Show(string? id)
