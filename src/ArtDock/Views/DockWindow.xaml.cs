@@ -1519,10 +1519,10 @@ public sealed partial class DockWindow : Window
     /// else.
     /// </para>
     /// <para>
-    /// Right-clicking the bar between icons gets the same menu without the per-item
-    /// commands, which is the only way to add anything to a dock that has been emptied —
-    /// unless the contents are locked, in which case the menu carries no commands at all
-    /// beyond <em>Dock settings…</em>, and that is the way back.
+    /// An item's menu is about that item alone. Right-clicking the bar between icons gets the
+    /// dock's own menu instead — <em>Add</em> and <em>Dock settings…</em> — which is the only
+    /// way to add anything to a dock that has been emptied, unless the contents are locked, in
+    /// which case it carries <em>Dock settings…</em> alone, and that is the way back.
     /// </para>
     /// </remarks>
     /// <param name="at">
@@ -1552,8 +1552,17 @@ public sealed partial class DockWindow : Window
 
         var menu = new ContextMenu();
 
-        // What the item can *do* comes first, above what can be done *to* it: opening another
-        // window, starting a program as administrator, and emptying the Recycle Bin.
+        // The app's own entries come first of all — its jump list, the tasks and files the
+        // taskbar shows above its own entries — and survive the contents lock with the rest of
+        // what the item can do.
+        if (item is not null
+            && JumpListMenu.AddTo(menu, JumpListOf(item), item.Icon, entry => OpenJumpListEntry(item, entry)))
+        {
+            menu.Items.Add(new Separator());
+        }
+
+        // What the item can *do* comes next, above what can be done *to* it: opening another
+        // window, starting a program as administrator, ending it, and emptying the Recycle Bin.
         //
         // These survive the contents lock, and have to: that lock is about what is on the
         // dock, and neither changes anything about that. A locked dock still launches what
@@ -1585,6 +1594,18 @@ public sealed partial class DockWindow : Window
             acts = true;
         }
 
+        // End task, while the app is open, asked first. Greyed where every process it would end
+        // runs as administrator, which Windows does not let the dock end.
+        if (item is { IsRunning: true, ExplorerFolder: null, Document: null }
+            && EndTask.TargetsOf(_runningApps.WindowsOf(item.RunningTarget)) is { Count: > 0 } targets)
+        {
+            var header = Localizer.Get("Menu.EndTask");
+            menu.Items.Add(EndTask.CanEndAny(targets)
+                ? MenuHost.Item(header, MenuGlyph.EndTask, () => ConfirmEndTask(item))
+                : MenuHost.Note(header, MenuGlyph.EndTask));
+            acts = true;
+        }
+
         if (acts)
         {
             menu.Items.Add(new Separator());
@@ -1596,73 +1617,49 @@ public sealed partial class DockWindow : Window
             menu.Items.Add(new Separator());
         }
 
-        // Every remaining command changes the dock, so the lock takes all of them and
-        // leaves Dock settings… — which is what keeps the lock one right-click from being
-        // undone. The commands go rather than grey, because a menu of disabled entries
-        // invites the click that will not work; what replaces them is one greyed word saying
-        // why the menu is nearly empty, which greying five entries would say five times.
+        // Every remaining command changes the dock, so the lock takes all of them. They go
+        // rather than grey, because a menu of disabled entries invites the click that will not
+        // work; what replaces them is one greyed word saying why the menu is nearly empty,
+        // which greying every entry would say over and over.
         if (_applied.LockItemContents)
         {
             menu.Items.Add(MenuHost.Note(LockedMenuNote, MenuGlyph.Locked));
             menu.Items.Add(new Separator());
         }
+        else if (item is not null)
+        {
+            // A separator has no name, no icon and nothing to launch, so it has nothing the
+            // edit dialog could act on.
+            if (!item.IsSeparator)
+            {
+                menu.Items.Add(MenuHost.Item(
+                    Localizer.Get("Menu.EditItem"), MenuGlyph.Edit, () => ShowEditDialog(item)));
+            }
+
+            // Unpin rather than a bin: nothing is deleted, and the bin is the Empty Recycle
+            // Bin entry's, which can be in this same menu.
+            menu.Items.Add(MenuHost.DangerItem(
+                Localizer.Get("Menu.RemoveFromDock"), MenuGlyph.Unpin, () => ConfirmRemove(item)));
+        }
         else
         {
-            // What you right-clicked comes first, then what it sits on. The two were
-            // interleaved — edit, add, settings, remove — so the two things you can do to
-            // one icon sat at opposite ends with the dock's own entries between them.
-            if (item is not null)
-            {
-                // A separator has no name, no icon and nothing to launch, so it has nothing
-                // the edit dialog could act on.
-                if (!item.IsSeparator)
-                {
-                    menu.Items.Add(MenuHost.Item(
-                        Localizer.Get("Menu.EditItem"), MenuGlyph.Edit, () => ShowEditDialog(item)));
-                }
-
-                // Unpin rather than a bin: nothing is deleted, and the bin is the Empty
-                // Recycle Bin entry's, which can be in this same menu.
-                menu.Items.Add(MenuHost.DangerItem(
-                    Localizer.Get("Menu.RemoveFromDock"), MenuGlyph.Unpin, () => ConfirmRemove(item)));
-                menu.Items.Add(new Separator());
-            }
-
-            var add = new MenuItem
-            {
-                Header = Localizer.Get("Menu.Add"),
-                Icon = MenuIcons.Glyph(MenuGlyph.Add)
-            };
-
-            // A dock that takes no more says so where its Add menu would be, as the lock does.
-            if (RoomFor(_pins.Count) <= 0)
-            {
-                add = MenuHost.Note(Localizer.Get("Menu.Full"), MenuGlyph.Add);
-            }
-
-            var insertAt = InsertIndexAfter(item);
-            foreach (var group in add.IsEnabled ? DockPresets.Menu() : Array.Empty<IReadOnlyList<DockPreset>>())
-            {
-                if (add.Items.Count > 0)
-                {
-                    add.Items.Add(new Separator());
-                }
-
-                foreach (var preset in group)
-                {
-                    var key = preset.Key;
-                    add.Items.Add(MenuHost.Item(
-                        preset.Label, MenuIcons.For(preset), () => AddPreset(key, insertAt)));
-                }
-            }
-
-            menu.Items.Add(add);
+            AddDockEntries(menu);
         }
 
-        menu.Items.Add(MenuHost.Item(
-            Localizer.Get("Menu.DockSettings"),
-            MenuGlyph.Settings,
-            () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        // An item's menu is about that item alone. Adding to the dock and the dock's settings
+        // are the dock's own menu's, on the bar between icons, which keeps Dock settings… —
+        // and so the way out of the lock — one right-click away.
+        if (item is null)
+        {
+            menu.Items.Add(MenuHost.Item(
+                Localizer.Get("Menu.DockSettings"),
+                MenuGlyph.Settings,
+                () => SettingsRequested?.Invoke(this, EventArgs.Empty)));
+        }
+        else if (menu.Items.Count > 0 && menu.Items[^1] is Separator)
+        {
+            menu.Items.RemoveAt(menu.Items.Count - 1);
+        }
 
         // Hold the icon the menu belongs to: magnified, label showing, so it is obvious
         // which one is about to be edited or removed. Released when the menu goes, whether
@@ -1694,6 +1691,44 @@ public sealed partial class DockWindow : Window
 
         _menus.ShowMenu(menu, cursor.X, cursor.Y);
         return true;
+    }
+
+    /// <summary>
+    /// The dock's own <em>Add</em> menu, for the bar's right-click menu: what can be put on the
+    /// dock, added at its end — or, on a dock that takes no more, a greyed word saying so.
+    /// </summary>
+    private void AddDockEntries(ContextMenu menu)
+    {
+        // A dock that takes no more says so where its Add menu would be, as the lock does.
+        if (RoomFor(_pins.Count) <= 0)
+        {
+            menu.Items.Add(MenuHost.Note(Localizer.Get("Menu.Full"), MenuGlyph.Add));
+            return;
+        }
+
+        var add = new MenuItem
+        {
+            Header = Localizer.Get("Menu.Add"),
+            Icon = MenuIcons.Glyph(MenuGlyph.Add)
+        };
+
+        var insertAt = _applied.PinnedApps.Count;
+        foreach (var group in DockPresets.Menu())
+        {
+            if (add.Items.Count > 0)
+            {
+                add.Items.Add(new Separator());
+            }
+
+            foreach (var preset in group)
+            {
+                var key = preset.Key;
+                add.Items.Add(MenuHost.Item(
+                    preset.Label, MenuIcons.For(preset), () => AddPreset(key, insertAt)));
+            }
+        }
+
+        menu.Items.Add(add);
     }
 
     /// <summary>
@@ -1757,22 +1792,6 @@ public sealed partial class DockWindow : Window
 
     /// <summary>Shows a name being typed on the held label.</summary>
     public void PreviewItemLabel(string? label) => _dock.PreviewLabel(label);
-
-    /// <summary>
-    /// Where an addition made from an item's menu belongs: immediately after that item, so
-    /// it lands where the user was pointing rather than at the end of the dock.
-    /// </summary>
-    private int InsertIndexAfter(DockItem? item)
-    {
-        var pins = _applied.PinnedApps;
-        if (item is null)
-        {
-            return pins.Count;
-        }
-
-        var index = pins.FindIndex(pin => pin.Id == item.Id);
-        return index < 0 ? pins.Count : index + 1;
-    }
 
     /// <summary>Adds one of the ready-made entries, or browses or searches for targets.</summary>
     private void AddPreset(string key, int index)
@@ -1945,6 +1964,74 @@ public sealed partial class DockWindow : Window
         if (confirmed)
         {
             OnItemUnpinned(this, item);
+        }
+    }
+
+    /// <summary>
+    /// Asks before ending an app, and ends it when told to — the processes its windows lead to
+    /// as they are then, not as they were when the menu opened.
+    /// </summary>
+    /// <remarks>Held on the dock while it asks, as <see cref="ConfirmRemove"/> holds its item.</remarks>
+    private void ConfirmEndTask(DockItem item)
+    {
+        var dialog = new ConfirmEndTaskWindow(item);
+
+        bool confirmed;
+        HoldRevealed(true);
+        var claim = _dock.FocusItem(item);
+        try
+        {
+            confirmed = dialog.ShowDialog() == true;
+        }
+        finally
+        {
+            _dock.ReleaseFocus(claim);
+            HoldRevealed(false);
+        }
+
+        if (confirmed)
+        {
+            EndTask.End(EndTask.TargetsOf(_runningApps.WindowsOf(item.RunningTarget)));
+        }
+    }
+
+    /// <summary>
+    /// An item's jump list, as the taskbar would show it for the same app, or nothing for an
+    /// item that is no app's: a folder, a document, a web address, a separator.
+    /// </summary>
+    /// <remarks>
+    /// Read afresh on every right-click: measured 2026-11-20 at 1 to 7 ms an app once the
+    /// shell's objects have been made in the process, and 40 to 70 ms the first time.
+    /// </remarks>
+    private IReadOnlyList<JumpListCategory> JumpListOf(DockItem item)
+    {
+        if (!item.IsLaunchable || item.IsOverflow || item.ExplorerFolder is not null || item.Document is not null)
+        {
+            return [];
+        }
+
+        var target = item.RunningTarget;
+        var appId = JumpListApp.For(
+            item.Aumid,
+            item.AppId,
+            item.IsRunning ? _runningApps.AppIdOf(target) : null,
+            target?.Program,
+            JumpListFiles.KnownFolderPath);
+        if (appId is null)
+        {
+            return [];
+        }
+
+        var (showRecent, recentLimit) = JumpLists.RecentSettings();
+        return JumpLists.Read(appId, showRecent, recentLimit);
+    }
+
+    /// <summary>Starts a jump list's entry, and flashes the item it was chosen from when it does.</summary>
+    private void OpenJumpListEntry(DockItem item, JumpListEntry entry)
+    {
+        if (JumpLists.Launch(entry, new WindowInteropHelper(this).Handle))
+        {
+            _dock.FlashItem(Shown(item));
         }
     }
 

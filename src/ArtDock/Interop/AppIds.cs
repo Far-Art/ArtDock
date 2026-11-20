@@ -84,7 +84,7 @@ public static class AppIds
     }
 
     /// <summary>A string property, or null when it is not there or not a string.</summary>
-    private static string? Read(IPropertyStore store, PropertyKey key)
+    internal static string? Read(IPropertyStore store, PropertyKey key)
     {
         var name = key;
         if (store.GetValue(ref name, out var value) != 0)
@@ -94,7 +94,8 @@ public static class AppIds
 
         try
         {
-            return value.Type == VtLpwstr && value.Pointer != 0
+            // A BSTR points at its characters as an LPWSTR does; the length before them is not needed.
+            return value.Type is VtLpwstr or VtBstr && value.Pointer != 0
                 && Marshal.PtrToStringUni(value.Pointer) is { Length: > 0 } text
                     ? text
                     : null;
@@ -105,8 +106,34 @@ public static class AppIds
         }
     }
 
+    /// <summary>A true-or-false property, false when it is not there or not one.</summary>
+    internal static bool ReadFlag(IPropertyStore store, PropertyKey key)
+    {
+        var name = key;
+        if (store.GetValue(ref name, out var value) != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            // VARIANT_BOOL, a short in the union's first two bytes: -1 for true.
+            return value.Type == VtBool && (short)(value.Pointer & 0xFFFF) != 0;
+        }
+        finally
+        {
+            PropVariantClear(ref value);
+        }
+    }
+
     /// <summary><c>VT_LPWSTR</c>.</summary>
     private const ushort VtLpwstr = 31;
+
+    /// <summary><c>VT_BSTR</c>.</summary>
+    private const ushort VtBstr = 8;
+
+    /// <summary><c>VT_BOOL</c>.</summary>
+    private const ushort VtBool = 11;
 
     [DllImport("shell32.dll")]
     private static extern int SHGetPropertyStoreForWindow(

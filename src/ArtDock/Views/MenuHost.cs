@@ -119,7 +119,7 @@ public sealed class MenuHost : Window
         Item(header, MenuIcons.Glyph(glyph), action);
 
     /// <summary>The same, with an icon of the caller's own: an image, for an entry that pins something.</summary>
-    public static MenuItem Item(string header, object? icon, Action action)
+    public static MenuItem Item(object header, object? icon, Action action)
     {
         var entry = new MenuItem { Header = header, Icon = icon };
         entry.Click += (_, _) => Application.Current.Dispatcher.BeginInvoke(action);
@@ -138,6 +138,24 @@ public sealed class MenuHost : Window
     /// </remarks>
     public static MenuItem Note(string header, MenuGlyph glyph) =>
         new() { Header = header, Icon = MenuIcons.Glyph(glyph), IsEnabled = false };
+
+    /// <summary>
+    /// A group's heading, as the taskbar heads the groups of an app's jump list: greyed, smaller,
+    /// and no command.
+    /// </summary>
+    /// <remarks>
+    /// Disabled, as a <see cref="Note"/> is, so the theme greys it and the keyboard passes over
+    /// it. No glyph: it heads the entries under it rather than being one of them. The words are a
+    /// text block rather than the header itself, so a name an app gave its group is shown as given
+    /// — a header string would take its first underscore for an access key.
+    /// </remarks>
+    public static MenuItem Heading(string header) =>
+        new()
+        {
+            Header = new TextBlock { Text = header, FontSize = 12 },
+            IsEnabled = false,
+            Focusable = false
+        };
 
     /// <summary>
     /// The same, for an entry that takes something away.

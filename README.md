@@ -265,9 +265,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   changes, and nothing can be added to it, taken off it or edited. *Item settings…*, *Add*,
   *Add from taskbar*, *Remove*, *Add defaults* and *Clear all* grey out in the dialog, and double-clicking a row no longer opens
   the editor either. On the dock itself the right-click menu drops its commands altogether
-  rather than greying five of them, and says why: one greyed **Locked** where they were,
-  then *Dock settings…* — which is never taken away, so the lock is always one right-click
-  from being undone. A file dropped on the bar is refused with a notice. Reordering is
+  rather than greying them, and says why: one greyed **Locked** where they were. The bar's
+  own menu keeps *Dock settings…*, which is never taken away, so the lock is always one
+  right-click from being undone. A file dropped on the bar is refused with a notice. Reordering is
   untouched: this closes the list, it does not fix the arrangement.
 - **Drag and drop**: drop a file or a folder onto the bar to pin it where you dropped it —
   an application, a shortcut, or a document, which opens in whatever owns its type. **Places
@@ -298,9 +298,10 @@ lands; bring it back into the
   locked nothing drags, so nothing is removed this way either. The gesture was here once, as
   letting go anywhere clear of the bar, and was taken away because it fired on drags that only
   wandered; it came back in this form.
-- **Right-click an icon** to edit it or remove it, add another item beside it, or open the
-  dock's settings — the item's own entries first, then the dock's; or, while the items are
-  locked, a greyed *Locked* and the settings alone. *Remove from dock* is
+- **Right-click an icon** to edit it or remove it; right-click the bar between icons to add an
+  item or open the dock's settings. An icon's menu is about that icon alone. While the items
+  are locked, its menu shows a greyed *Locked* in place of the two, and the bar's menu the
+  settings alone. *Remove from dock* is
   drawn in the theme's critical colour, the same one the settings dialog's Remove button
   takes, so the entry that takes something away does not read like the ones that do not.
   **It asks first**, naming the item and showing its icon, while the dock holds that icon
@@ -440,6 +441,17 @@ lands; bring it back into the
   when the answer was yes. Not for Store apps. **An app running as administrator has an amber
   dot** rather than a white one — however it was started, from the dock or not. Either dot has
   a dark rim, so it stands out on a pale bar as well as a dark one.
+- **An app's own entries**, as the taskbar's right-click menu has them: its pinned files, its
+  own groups (Claude's *New Code Session*, say), its recent or frequent files, and its tasks
+  (*New Incognito window*, *New Chat*), at the top of its menu under greyed headings. They are
+  read from the same jump list Windows keeps for the taskbar, so they match it, and a click
+  runs an entry as the taskbar would. Recent files follow Windows' *Show recently opened items*
+  setting and its count; the entries survive *Lock modification*, being launches.
+- **End task**, while an app is open: it ends the app's processes at once, as the taskbar's
+  entry does, after **asking first** — naming the app and warning that unsaved work is lost,
+  with *Cancel* as the default. It never ends File Explorer, the shell's own processes or the
+  dock, and for a Store app it ends the app inside the frame, not the frame host every such app
+  shares. Greyed for an app running as administrator, which Windows does not let the dock end.
 - **Empty the Recycle Bin from the dock**: right-click the pin and the entry is there, above
   the ones that act on the pin itself. It greys out when the bin is already empty, and it
   **asks first exactly when Explorer would** — the *Display delete confirmation dialog*
@@ -1308,6 +1320,11 @@ translations beyond English. The blur keeping up with the bar was on this list, 
   the previews simply stop peeking. Nor are the pictures' corners rounded: DWM draws a
   thumbnail over everything in its rectangle.
 - **No previews of windows on another virtual desktop**, which Windows hides from the census.
+- **An app's tasks and pinned files are read from files Windows does not document.** Recent
+  and frequent files come through a documented interface, but the rest of a jump list is only
+  in Windows' own files, so the dock reads those. If an update changes them, the menu leaves
+  those entries out rather than showing them wrong. A Store app updated since it wrote its list
+  may name an entry by a resource that no longer exists; such entries are left out.
 - **A folder in a tab behind another shows the tab in front.** Windows pictures a window as it
   is, and a File Explorer window shows one tab at a time, so a folder pin whose folder is open in
   a background tab gets the front tab's picture and title. A click on the card still brings the
@@ -1389,7 +1406,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand two hundred and seven tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and forty-two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -2002,6 +2019,16 @@ pointer has left it, while another still opens. The windows kept in the order fi
 new one last and a closed one forgotten; the held icon drawn where the wave puts it, carried
 outward at the ends; and the setting on, and the delay 150 ms, for a new dock and a file from
 before them, both carried through an export.
+
+Thirty-five cover an app's right-click entries and *End task* (`JumpListTests`, `EndTaskTests`). Which app's
+jump list an icon reads: the Store app it is, its shortcut's id or its window's, and otherwise
+the id Windows derives from the program's path, checked against the file Windows names for
+Notepad++. The app's own file read in order, and a file cut short, with a wrong ending, of an
+unknown version or of random bytes giving what came before the fault and never a crash. Pinned
+files read only from a record of a known version and length. A list written through Windows'
+own interface and read back as written, its recent groups gone when recent files are off, and
+deleted afterwards; and *End task* never offered on the shell's processes, the dock, or a
+process it cannot name.
 
 ## Licence
 

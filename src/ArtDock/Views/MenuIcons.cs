@@ -46,7 +46,13 @@ public enum MenuGlyph
     Administrator,
 
     /// <summary>The symbol font's <em>OpenInNewWindow</em>, for what opens another window of an app.</summary>
-    NewWindow
+    NewWindow,
+
+    /// <summary>
+    /// The symbol font's <em>StatusCircleBlock</em>, the circle the taskbar's <em>End task</em> draws:
+    /// its <em>Blocked</em> is the same picture, but Segoe MDL2 Assets has no such glyph.
+    /// </summary>
+    EndTask
 }
 
 /// <summary>
@@ -159,6 +165,7 @@ public static class MenuIcons
         MenuGlyph.Defaults => "",
         MenuGlyph.Administrator => "",
         MenuGlyph.NewWindow => "",
+        MenuGlyph.EndTask => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };
 

@@ -229,6 +229,18 @@ public sealed class RunningAppsService : IDisposable
         WindowOrder.Arrange(FindWindows(target), _firstSeen);
 
     /// <summary>
+    /// Windows' name for the app a pinned target's open windows belong to (<see cref="AppIds"/>),
+    /// from the first of them that carries one, or null — what its jump list is filed under.
+    /// </summary>
+    public string? AppIdOf(RunningTarget? target)
+    {
+        var windows = FindWindows(target);
+        return windows.Count == 0
+            ? null
+            : _census.FirstOrDefault(window => window.AppId is { Length: > 0 } && windows.Contains(window.Window)).AppId;
+    }
+
+    /// <summary>
     /// Open windows for a pinned target: for a folder, the File Explorer windows showing it; for
     /// a document, the windows whose title names it; for anything else, its program's and its
     /// app's. Its program's are an exact image-path match if there is one, otherwise a match on

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -593,31 +592,8 @@ public sealed class WindowsTraces
             }
         });
 
-    /// <summary>
-    /// The name the shell gives an app's jump-list files: a CRC-64 of its AppUserModelID in
-    /// capitals, as UTF-16, in sixteen hex digits.
-    /// </summary>
-    /// <remarks>
-    /// ECMA-182's polynomial, reflected, started from all ones and not inverted at the end —
-    /// checked against File Explorer's, <c>Microsoft.Windows.Explorer</c>, whose file is
-    /// <c>f01b4d95cf55d32a</c> on every machine.
-    /// </remarks>
-    public static string JumpListId(string appUserModelId)
-    {
-        const ulong Polynomial = 0x92C64265D32139A4;
-        var crc = ulong.MaxValue;
-
-        foreach (var b in Encoding.Unicode.GetBytes(appUserModelId.ToUpperInvariant()))
-        {
-            crc ^= b;
-            for (var bit = 0; bit < 8; bit++)
-            {
-                crc = (crc & 1) != 0 ? (crc >> 1) ^ Polynomial : crc >> 1;
-            }
-        }
-
-        return crc.ToString("x16");
-    }
+    /// <summary>The name the shell gives an app's jump-list files: see <see cref="JumpListFiles.Id"/>.</summary>
+    public static string JumpListId(string appUserModelId) => JumpListFiles.Id(appUserModelId);
 
     private static string? KnownFolderPath(Guid id) =>
         SHGetKnownFolderPath(id, KF_FLAG_DONT_VERIFY, 0, out var path) == 0 ? path : null;

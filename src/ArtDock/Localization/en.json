@@ -384,6 +384,15 @@
     "Menu.Locked": "Locked",
     "Menu.Full": "Dock is full",
     "Menu.EmptyRecycleBin": "Empty Recycle Bin",
+    "Menu.EndTask": "End task",
+    "Menu.JumpList.Pinned": "Pinned",
+    "Menu.JumpList.Recent": "Recent",
+    "Menu.JumpList.Frequent": "Frequent",
+    "Menu.JumpList.Tasks": "Tasks",
+
+    "EndTask.Heading": "End {0}?",
+    "EndTask.Detail": "The app closes at once, without a chance to save. Anything it has not saved is lost.",
+    "EndTask.Confirm": "End task",
 
     "RemoveItem.Heading": "Remove {0} from the dock?",
     "RemoveItem.Heading.Separator": "Remove this separator from the dock?",
