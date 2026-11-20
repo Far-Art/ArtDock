@@ -1613,6 +1613,13 @@ public sealed class DockBar : Canvas
             return;
         }
 
+        if (id != _previewsFor)
+        {
+            // Another app's previews, or none: frozen afresh where the pointer is next held.
+            _steadyCentre = null;
+            _steadyFor = null;
+        }
+
         _previewsFor = id;
         _previewsReach = reach;
         _previewsInReach = inReach;
@@ -1635,8 +1642,11 @@ public sealed class DockBar : Canvas
     /// <remarks>
     /// Asked for on 2026-11-20. Following the pointer to the pixel, the wave moved with every
     /// sideways wobble of a hand reaching up for the previews, and the icon under them with it.
-    /// Resting on the icon's middle instead, it does not move at all until the pointer is on
-    /// another icon — the handover easing the change both ways (<see cref="SetWaveCentre"/>).
+    /// Now it is frozen where it stood as they opened (<see cref="SteadyCentre"/>) and does not
+    /// move at all until the pointer is on another icon, the handover easing it back to the
+    /// pointer then (<see cref="SetWaveCentre"/>). Frozen, not moved to the icon's middle, which
+    /// it was for an hour that day: the pointer seldom rests on the middle, so the wave moved as
+    /// the previews opened.
     /// </remarks>
     private int SteadyIndex()
     {
@@ -1652,6 +1662,32 @@ public sealed class DockBar : Canvas
         }
 
         return _hoveredIndex == index || (_hoveredIndex < 0 && PreviewsIndex == index) ? index : -1;
+    }
+
+    /// <summary>Where the wave was frozen for the previews of <see cref="_steadyFor"/>; null while it is not.</summary>
+    private double? _steadyCentre;
+
+    private string? _steadyFor;
+
+    /// <summary>
+    /// Whether the wave has been held steady without a break since it was frozen — on the icon,
+    /// or up on the way to the previews and back.
+    /// </summary>
+    private bool _steadyHeld;
+
+    /// <summary>
+    /// The wave's centre while it is held steady: where the pointer had it when it was first held
+    /// for these previews — as they opened, with the pointer resting — and the same from then on.
+    /// </summary>
+    private double SteadyCentre(double pointer)
+    {
+        if (_steadyFor != _previewsFor || _steadyCentre is null)
+        {
+            _steadyFor = _previewsFor;
+            _steadyCentre = pointer;
+        }
+
+        return _steadyCentre.Value;
     }
 
     private static bool InReach(Int32Rect reach, NativeMethods.NativePoint point) =>
@@ -2572,12 +2608,22 @@ public sealed class DockBar : Canvas
             // Hovered first, from the icons as they are drawn: whether the pointer is still on
             // the previews' icon decides where the wave goes.
             UpdateHovered(local);
-            if (SteadyIndex() is var steady and >= 0)
+            if (SteadyIndex() >= 0)
             {
-                SetWaveCentre(_layout.RestingCentre(steady), WaveDriver.Parked);
+                // Frozen afresh whenever the hold starts again: kept from an earlier one, the wave
+                // could stand where the icon is no longer under the pointer, and hand the wave to
+                // the neighbour and back on every frame.
+                if (!_steadyHeld)
+                {
+                    _steadyCentre = null;
+                }
+
+                _steadyHeld = true;
+                SetWaveCentre(SteadyCentre(local.X - RestingBarLeft()), WaveDriver.Parked);
             }
             else
             {
+                _steadyHeld = false;
                 SetWaveCentre(local.X - RestingBarLeft(), WaveDriver.Pointer);
             }
 
@@ -2597,7 +2643,11 @@ public sealed class DockBar : Canvas
         if (PreviewsIndex is var held and >= 0)
         {
             _sweepYielded |= _sweeping;
-            SetWaveCentre(_layout.RestingCentre(held), WaveDriver.Parked);
+
+            // Where it was frozen as they opened, if it was; the icon's middle otherwise.
+            SetWaveCentre(
+                _steadyFor == _previewsFor && _steadyCentre is { } frozen ? frozen : _layout.RestingCentre(held),
+                WaveDriver.Parked);
             if (_rampTo < 1)
             {
                 StartRamp(1, EnterRampMs);
@@ -2605,6 +2655,9 @@ public sealed class DockBar : Canvas
 
             return;
         }
+
+        // Neither on the previews' icon nor on the way up to them: the next hold freezes afresh.
+        _steadyHeld = false;
 
         if (_sweeping && PreviewedItem is null)
         {
