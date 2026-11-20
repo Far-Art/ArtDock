@@ -631,9 +631,10 @@ public sealed class DockSettings
     /// Its own setting since 2026-10-03, asked for once the previews had been seen: they first
     /// waited as long as the taskbar's (<c>ExtendedUIHoverTime</c>, 400 ms unless set), and felt
     /// slower than the taskbar's all the same — the icons grow and shift under a pointer arriving
-    /// on the dock, and each icon it lands on starts the wait again. Shorter by default for that.
+    /// on the dock, and each icon it lands on starts the wait again. Shorter by default for that:
+    /// 250 ms at first, 150 since 2026-11-20, asked for once the previews glided between apps.
     /// </remarks>
-    public int PreviewDelayMs { get; set; } = 250;
+    public int PreviewDelayMs { get; set; } = 150;
 
     /// <summary>
     /// Whether a slim handle marks where the dock is while it cannot be seen — slid away by

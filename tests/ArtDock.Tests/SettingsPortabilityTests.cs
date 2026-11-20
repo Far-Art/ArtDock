@@ -55,14 +55,14 @@ public class SettingsPortabilityTests : IDisposable
     }
 
     /// <summary>
-    /// The previews' wait is 250 ms for a new dock and for one from before it could be set —
+    /// The previews' wait is 150 ms for a new dock and for one from before it could be set —
     /// shorter than the taskbar's 400, which they waited at first and felt slower than.
     /// </summary>
     [Fact]
-    public void PreviewDelay_Is250ForANewDock_AndForAFileFromBeforeIt()
+    public void PreviewDelay_Is150ForANewDock_AndForAFileFromBeforeIt()
     {
-        Assert.Equal(250, new DockSettings().PreviewDelayMs);
-        Assert.Equal(250, SettingsStore.Import(Write("before-delay.json", """{ "WindowPreviews": true }""")).PreviewDelayMs);
+        Assert.Equal(150, new DockSettings().PreviewDelayMs);
+        Assert.Equal(150, SettingsStore.Import(Write("before-delay.json", """{ "WindowPreviews": true }""")).PreviewDelayMs);
     }
 
     /// <summary>

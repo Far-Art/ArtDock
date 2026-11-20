@@ -97,7 +97,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   a dock run from a terminal or an IDE does not hand that shell's variables to everything it
   opens.
 - **Shows an app's windows, live, above its icon**: rest the pointer on a running app for the
-  *Preview delay* (250 ms unless changed), and a panel of cards comes up over it, a picture of each window
+  *Preview delay* (150 ms unless changed), and a panel of cards comes up over it, a picture of each window
   under its title — Windows' own thumbnails, which cost the dock nothing however fast the
   window changes. Click a card to go to that window; its close button, or a middle click,
   closes it, except a window of a program running as administrator, which the dock cannot
@@ -1985,7 +1985,7 @@ when it is due to hide soon after, so the two go together; moving to another app
 cutting across a neighbour on the way up does not; and a dismissed item staying shut until the
 pointer has left it, while another still opens. The windows kept in the order first seen, a
 new one last and a closed one forgotten; the held icon drawn where the wave puts it, carried
-outward at the ends; and the setting on, and the delay 250 ms, for a new dock and a file from
+outward at the ends; and the setting on, and the delay 150 ms, for a new dock and a file from
 before them, both carried through an export.
 
 ## Licence
