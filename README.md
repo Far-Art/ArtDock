@@ -107,7 +107,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   frame, taking the new app's shape on the way while the old windows cross-fade into the new —
   none of it animated with *Reduce motion* or Windows' animations off. Too
   many windows to fit across the display are shrunk alike, then listed by title. The icon
-  stays magnified under the panel while the pointer is on it, and a click on the icon still
+  stays magnified, its label showing, under the panel while the pointer is on it or on its way
+  up, holding still against a hand that wanders sideways, and a click on the icon still
   cycles. On by default, on the Behaviour page, with the delay beside it.
 - **Shows a dot** under every app that has an open window, kept current by window events
   rather than polling. A pinned shortcut is matched by what it points at, so one dragged
