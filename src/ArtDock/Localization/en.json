@@ -379,6 +379,7 @@
     "Menu.RunAsAdministrator": "Run as administrator",
     "Menu.EditItem": "Edit item…",
     "Menu.RemoveFromDock": "Remove from dock",
+    "Menu.RemoveSeparator": "Remove separator",
     "Menu.Add": "Add",
     "Menu.DockSettings": "Dock settings…",
     "Menu.Locked": "Locked",

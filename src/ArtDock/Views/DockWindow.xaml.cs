@@ -1658,17 +1658,26 @@ public sealed partial class DockWindow : Window
             // Unpin rather than a bin: nothing is deleted, and the bin is the Empty Recycle
             // Bin entry's, which can be in this same menu.
             menu.Items.Add(MenuHost.DangerItem(
-                Localizer.Get("Menu.RemoveFromDock"), MenuGlyph.Unpin, () => ConfirmRemove(item)));
+                Localizer.Get(item.IsSeparator ? "Menu.RemoveSeparator" : "Menu.RemoveFromDock"),
+                MenuGlyph.Unpin,
+                () => ConfirmRemove(item)));
+
+            if (item.IsSeparator)
+            {
+                menu.Items.Add(new Separator());
+                AddDockEntries(menu, InsertIndexAfter(item));
+            }
         }
         else
         {
-            AddDockEntries(menu);
+            AddDockEntries(menu, _applied.PinnedApps.Count);
         }
 
         // An item's menu is about that item alone. Adding to the dock and the dock's settings
         // are the dock's own menu's, on the bar between icons, which keeps Dock settings… —
-        // and so the way out of the lock — one right-click away.
-        if (item is null)
+        // and so the way out of the lock — one right-click away. A separator is a piece of
+        // that bar, and its menu has them too, an addition landing just after it.
+        if (item is null or { IsSeparator: true })
         {
             menu.Items.Add(MenuHost.Item(
                 Localizer.Get("Menu.DockSettings"),
@@ -1713,10 +1722,12 @@ public sealed partial class DockWindow : Window
     }
 
     /// <summary>
-    /// The dock's own <em>Add</em> menu, for the bar's right-click menu: what can be put on the
-    /// dock, added at its end — or, on a dock that takes no more, a greyed word saying so.
+    /// The dock's own <em>Add</em> menu, for the bar's and a separator's right-click menus: what
+    /// can be put on the dock — or, on a dock that takes no more, a greyed word saying so.
     /// </summary>
-    private void AddDockEntries(ContextMenu menu)
+    /// <param name="menu">The menu to add it to.</param>
+    /// <param name="insertAt">Where in the pins an addition goes.</param>
+    private void AddDockEntries(ContextMenu menu, int insertAt)
     {
         // A dock that takes no more says so where its Add menu would be, as the lock does.
         if (RoomFor(_pins.Count) <= 0)
@@ -1731,7 +1742,6 @@ public sealed partial class DockWindow : Window
             Icon = MenuIcons.Glyph(MenuGlyph.Add)
         };
 
-        var insertAt = _applied.PinnedApps.Count;
         foreach (var group in DockPresets.Menu())
         {
             if (add.Items.Count > 0)
@@ -1748,6 +1758,17 @@ public sealed partial class DockWindow : Window
         }
 
         menu.Items.Add(add);
+    }
+
+    /// <summary>
+    /// Where an addition made from an item's menu belongs: immediately after that item, so it
+    /// lands where the user was pointing rather than at the end of the dock.
+    /// </summary>
+    private int InsertIndexAfter(DockItem item)
+    {
+        var pins = _applied.PinnedApps;
+        var index = pins.FindIndex(pin => pin.Id == item.Id);
+        return index < 0 ? pins.Count : index + 1;
     }
 
     /// <summary>
