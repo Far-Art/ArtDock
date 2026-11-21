@@ -17,11 +17,12 @@ the ratios round down to 2px there and the magnification wave stops reading.
     python tools/make-icon.py src/ArtDock/Assets/ArtDock.ico
     python tools/make-icon.py out.ico --png C:/tmp/frames    # also dump each frame
 
-Needs Pillow (pip install pillow). This is the source of truth for the mark's geometry, which
-tools/make-brand.py imports. It is no longer what ships: since 2026-09-28 the app carries
-make-brand.py's Acrylic mark, brand/windows/ArtDock.ico, copied to Assets/ArtDock.ico. So do
-not point this at Assets/ArtDock.ico -- it would put the older flat mark back. After a change
-to the geometry, run make-brand.py and copy its icon over instead.
+Needs Pillow (pip install pillow). This draws the first mark, the tray of icons, which no
+longer ships: since 2026-11-21 the app carries the Ring, drawn by tools/make-brand.py with a
+geometry of its own -- it borrows only write_ico() and the size table from here -- and copied
+from brand/windows/ArtDock.ico to Assets/ArtDock.ico. So do not point this at
+Assets/ArtDock.ico -- it would put the old mark back. To change the icon, change
+make-brand.py, run it and copy its icon over instead.
 """
 from PIL import Image, ImageChops, ImageDraw
 import io

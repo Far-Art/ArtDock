@@ -115,7 +115,7 @@ from the last release, and the feed installed docks read. The setup installs per
 adds shortcuts on the Start menu and the desktop, and an entry in Windows' installed apps to
 uninstall it by. The setup, the shortcuts and that entry all carry `Assets/ArtDock.ico`, and
 while it installs the setup shows the brand's dark lockup from `brand/installer/splash.png`,
-with its progress bar in the magnified icon's blue. The desktop shortcut came later than the
+with its progress bar in the brand's blue. The desktop shortcut came later than the
 rest. A copy installed without it gets it at its next update, because Velopack makes any
 shortcut location a new version adds. It never re-makes a shortcut the user has deleted, and
 uninstalling removes both.

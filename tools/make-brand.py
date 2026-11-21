@@ -1,9 +1,16 @@
-"""Generate the brand set: the Acrylic and Paper marks for Windows and the web.
+"""Generate the brand set: the Ring mark, dark (Acrylic) and light (Paper), for Windows and the web.
 
-Same geometry as make-icon.py -- it imports geometry(), write_ico() and the size table
-from there, so every raster frame is laid out on its own integer pixel grid and checked
-for mirror symmetry. What differs is the treatment: a vertical gradient ground, a glass
-tray (translucent fill with a rim), and a highlight across the top of the magnified pill.
+The mark is a disc behind an outlined bar -- something bright seen through the dock. The bar's
+outline cuts a gap through the disc, so the disc shows as a dome above the bar and a slice
+inside it. Everything is flat: no gradients, no glass, no highlight. Adopted on 2026-11-21 in
+place of the tray-and-pills mark, which tools/make-icon.py still draws.
+
+Each raster size is laid out on its own integer pixel grid, as make-icon.py does: the disc's
+width, the outline's weight, the gaps and the window inside the bar are whole pixels, the disc
+straddles S/2 exactly, and the render is supersampled 16x then box-filtered down. So every
+straight edge -- the bar's sides, the cuts through the disc -- lands on a pixel boundary and
+only curves are antialiased. Below 32px the widths are hand-set, because the ratios round the
+outline and the gaps unevenly there. Every frame is checked for mirror symmetry.
 
     python tools/make-brand.py brand
 
@@ -15,20 +22,27 @@ writes
     brand/web/favicon.ico                Acrylic 16/32/48
     brand/web/favicon.svg                Acrylic, vector
     brand/web/mark-light.svg             Paper, vector
+    brand/web/mark-mono.svg              one colour, no ground
     brand/web/favicon-16.png, favicon-32.png, apple-touch-icon.png (180, square ground),
               icon-192.png, icon-512.png, icon-maskable-512.png, site.webmanifest
+    brand/lockups/*.svg                  the mark inside each lockup, redrawn in place
     brand/installer/splash.png           the setup's splash, from the dark stacked lockup
 
-The lockups are not drawn here -- they are their SVGs rendered at 2x -- so the splash is made
-from brand/lockups/lockup-stacked-dark@2x.png, and skipped with a warning when that is missing.
+The lockups' lettering is not drawn here, and their @2x PNGs are their SVGs rendered at 2x by
+a browser (the SVGs embed their font, which most other renderers ignore). So after a change to
+the mark: run this, render the four lockup SVGs to their @2x PNGs, and run this again -- the
+splash is made from brand/lockups/lockup-stacked-dark@2x.png, and skipped with a warning when
+that is missing.
 
-Needs Pillow. The shipped src/ArtDock/Assets/ArtDock.ico is a copy of brand/windows/ArtDock.ico,
-adopted on 2026-09-28. Running this does not update it: copy the new ArtDock.ico over it
-deliberately, and rebuild.
+Needs Pillow; write_ico() and the size table come from make-icon.py. The shipped
+src/ArtDock/Assets/ArtDock.ico is a copy of brand/windows/ArtDock.ico. Running this does not
+update it: copy the new ArtDock.ico over it deliberately, and rebuild.
 """
 import importlib.util
 import json
+import math
 import os
+import re
 import sys
 
 from PIL import Image, ImageChops, ImageDraw
@@ -37,58 +51,77 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("make_icon", os.path.join(HERE, "make-icon.py"))
 make_icon = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(make_icon)
-geometry, write_ico, SIZES = make_icon.geometry, make_icon.write_ico, make_icon.SIZES
-
-HOT_TOP = (140, 153, 255)
-HOT_BOT = (77, 92, 255)
+write_ico, SIZES = make_icon.write_ico, make_icon.SIZES
 
 STYLES = {
-    # name: ground gradient, tray fill (top, bottom, with alpha), rim (colour, alpha), pill
-    "acrylic": dict(
-        ground=((31, 35, 51), (20, 22, 31)),
-        tray=((255, 255, 255, 56), (255, 255, 255, 20)),
-        rim=(255, 255, 255, 46),
-        pill=(230, 233, 255),
-    ),
-    "paper": dict(
-        ground=((246, 247, 252), (228, 231, 242)),
-        tray=((58, 63, 88, 26), (58, 63, 88, 51)),
-        rim=(255, 255, 255, 217),
-        pill=(58, 63, 88),
-    ),
+    # name: ground, disc, bar outline
+    "acrylic": dict(ground=(24, 27, 39), disc=(111, 125, 255), bar=(230, 233, 255)),
+    "paper": dict(ground=(238, 240, 247), disc=(91, 105, 255), bar=(43, 47, 68)),
 }
+INK = (27, 30, 43)              # the one-colour mark
 
-HIGHLIGHT_ALPHA = 115           # 0.45 of white at the top of the magnified pill, fading to 0
+# Design ratios, as a fraction of the canvas, tuned at 256px and snapped per size.
+R_BG     = 0.223    # ground corner radius
+R_DISC   = 0.484    # the disc's diameter
+R_INSET  = 0.102    # from the canvas edge to the bar's ends
+R_WEIGHT = 0.059    # the bar's outline
+R_GAP    = 0.035    # clearance between the disc and the outline, everywhere they meet
+R_WINDOW = 0.094    # height of the opening inside the bar that the disc shows through
+
+# Hand-set where the ratios round too unevenly to read.
+#   (disc diameter, inset, outline weight, gap, window)
+OVERRIDES = {
+    16: (8, 1, 1, 1, 2),
+    20: (10, 2, 1, 1, 3),
+    24: (12, 2, 2, 1, 2),
+}
 
 # Velopack draws the splash at its pixel size times the monitor's scale, so it is made at 1x.
 # Three-quarters of the lockup's 640x520 keeps it a splash rather than a window at 100%. The
 # setup lays its 12px progress bar over the bottom of the image, full width, which the lockup's
-# margin below the tagline leaves room for; tools/release.ps1 colours the bar HOT_BOT.
+# margin below the tagline leaves room for; tools/release.ps1 colours the bar.
 SPLASH = (480, 390)
 
-
-def vgrad(w, h, top, bot):
-    """Vertical RGBA gradient; colours may be RGB or RGBA."""
-    top = tuple(top) + (255,) * (4 - len(top))
-    bot = tuple(bot) + (255,) * (4 - len(bot))
-    g = Image.new("RGBA", (1, h))
-    px = g.load()
-    for y in range(h):
-        t = y / max(1, h - 1)
-        px[0, y] = tuple(round(a + (b - a) * t) for a, b in zip(top, bot))
-    return g.resize((w, h), Image.NEAREST)
+# Which mark each lockup carries.
+LOCKUPS = {
+    "lockup-light.svg": "paper",
+    "lockup-light-transparent.svg": "paper",
+    "lockup-stacked-dark.svg": "acrylic",
+    "lockup-stacked-transparent.svg": "acrylic",
+}
 
 
-def paste_grad(img, box, radius, top, bot):
-    """Fill a rounded rectangle with a vertical gradient, composited over img."""
-    x0, y0, x1, y1 = box
-    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    mask = Image.new("L", img.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
-    grad = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    grad.paste(vgrad(x1 - x0 + 1, y1 - y0 + 1, top, bot), (x0, y0))
-    layer.paste(grad, (0, 0), mask)
-    img.alpha_composite(layer)
+def even(v):
+    """Round to an even integer -- the disc must straddle S/2 exactly."""
+    return max(2, int(round(v / 2)) * 2)
+
+
+def geometry(S):
+    """Integer, symmetric geometry for one raster size. Boxes are (x0, y0, x1, y1), x1/y1 exclusive."""
+    if S in OVERRIDES:
+        disc, inset, weight, gap, window = OVERRIDES[S]
+    else:
+        disc = even(S * R_DISC)
+        inset = max(1, round(S * R_INSET))
+        weight = max(1, round(S * R_WEIGHT))
+        gap = max(1, round(S * R_GAP))
+        window = max(1, round(S * R_WINDOW))
+    assert S % 2 == 0 and disc % 2 == 0, f"{S}: the disc cannot be centred on a pixel boundary"
+
+    bar_h = 2 * weight + 2 * gap + window
+    # The content box runs from the top of the disc to the bottom of the bar; the disc's lowest
+    # point stops a gap short of the outline's inner bottom edge.
+    top = (S - (disc + gap + weight)) // 2
+    dx0 = S // 2 - disc // 2
+    bar_bottom = top + disc + gap + weight
+    bar_top = bar_bottom - bar_h
+    assert inset + bar_h <= S // 2, f"{S}: the bar is too short to have straight edges"
+
+    return dict(bg_r=max(2, round(S * R_BG)),
+                disc=(dx0, top, dx0 + disc, top + disc),
+                bar=(inset, bar_top, S - inset, bar_bottom),
+                weight=weight,
+                cut=(bar_top - gap, bar_top + weight + gap))   # the band of the disc that is cut away
 
 
 def render(S, style, square=False, canvas=None, ss=16):
@@ -102,30 +135,29 @@ def render(S, style, square=False, canvas=None, ss=16):
     img = Image.new("RGBA", (W, W), (0, 0, 0, 0))
 
     r = 0 if square or canvas else g["bg_r"] * ss
-    paste_grad(img, (0, 0, W - 1, W - 1), r, *st["ground"])
+    ImageDraw.Draw(img).rounded_rectangle([0, 0, W - 1, W - 1], radius=r, fill=st["ground"] + (255,))
 
-    tx0, ty0, tx1, ty1 = (v + off for v in g["tray"])
-    box = (tx0 * ss, ty0 * ss, tx1 * ss - 1, ty1 * ss - 1)
-    paste_grad(img, box, g["tray_r"] * ss, *st["tray"])
-    if S >= 32:                                 # the rim is 2px at 256 and vanishes below
-        rim = Image.new("RGBA", (W, W), (0, 0, 0, 0))
-        ImageDraw.Draw(rim).rounded_rectangle(box, radius=g["tray_r"] * ss,
-                                              outline=st["rim"], width=max(1, round(S / 128)) * ss)
-        img.alpha_composite(rim)
+    def box(b, grow=0):
+        x0, y0, x1, y1 = b
+        return [(x0 + off - grow) * ss, (y0 + off - grow) * ss,
+                (x1 + off + grow) * ss - 1, (y1 + off + grow) * ss - 1]
 
-    d = ImageDraw.Draw(img)
-    base = g["baseline"] + off
-    for x0, w, centre in g["boxes"]:
-        x0 += off
-        pbox = (x0 * ss, (base - w) * ss, (x0 + w) * ss - 1, base * ss - 1)
-        pr = max(1, round(w * 0.30)) * ss
-        if centre:
-            paste_grad(img, pbox, pr, HOT_TOP, HOT_BOT)
-            if S >= 24:
-                half = (x0 * ss, (base - w) * ss, (x0 + w) * ss - 1, (base - w // 2) * ss - 1)
-                paste_grad(img, half, pr, (255, 255, 255, HIGHLIGHT_ALPHA), (255, 255, 255, 0))
-        else:
-            d.rounded_rectangle(pbox, radius=pr, fill=st["pill"] + (255,))
+    # The disc, less the band the outline and its clearance take out of it.
+    disc = Image.new("L", (W, W), 0)
+    d = ImageDraw.Draw(disc)
+    d.ellipse(box(g["disc"]), fill=255)
+    c0, c1 = g["cut"]
+    d.rectangle([0, (c0 + off) * ss, W - 1, (c1 + off) * ss - 1], fill=0)
+    img.paste(st["disc"] + (255,), (0, 0), disc)
+
+    # The bar: an outline, so the ground and the disc show through its middle.
+    x0, y0, x1, y1 = g["bar"]
+    w = g["weight"]
+    ring = Image.new("L", (W, W), 0)
+    d = ImageDraw.Draw(ring)
+    d.rounded_rectangle(box(g["bar"]), radius=(y1 - y0) * ss // 2, fill=255)
+    d.rounded_rectangle(box(g["bar"], -w), radius=(y1 - y0 - 2 * w) * ss // 2, fill=0)
+    img.paste(st["bar"] + (255,), (0, 0), ring)
 
     out = img.resize((C, C), Image.BOX)
     mirrored = out.transpose(Image.FLIP_LEFT_RIGHT)
@@ -134,33 +166,83 @@ def render(S, style, square=False, canvas=None, ss=16):
     return out
 
 
+def n(v):
+    return f"{v:.3f}".rstrip("0").rstrip(".")
+
+
+def paths():
+    """The mark at 256 as three filled paths: the dome, the slice seen through the bar, the outline.
+
+    Real edges, not masks or strokes: a mask is drawn at its own resolution and goes soft when
+    the page is zoomed, which is how the first drawing of this mark looked."""
+    g = geometry(256)
+    dx0, dy0, dx1, dy1 = g["disc"]
+    cx, cy, r = (dx0 + dx1) / 2, (dy0 + dy1) / 2, (dx1 - dx0) / 2
+    c0, c1 = g["cut"]
+
+    def chord(y):
+        half = math.sqrt(r * r - (y - cy) ** 2)
+        return cx - half, cx + half
+
+    a0, a1 = chord(c0)
+    b0, b1 = chord(c1)
+    dome = f"M{n(a0)},{c0} A{n(r)},{n(r)} 0 1 1 {n(a1)},{c0} Z"
+    seen = f"M{n(b0)},{c1} A{n(r)},{n(r)} 0 0 0 {n(b1)},{c1} Z"
+
+    def pill(x0, y0, x1, y1, clockwise):
+        rr = (y1 - y0) / 2
+        if clockwise:
+            return (f"M{n(x0 + rr)},{n(y0)} L{n(x1 - rr)},{n(y0)} A{n(rr)},{n(rr)} 0 0 1 {n(x1 - rr)},{n(y1)} "
+                    f"L{n(x0 + rr)},{n(y1)} A{n(rr)},{n(rr)} 0 0 1 {n(x0 + rr)},{n(y0)} Z")
+        return (f"M{n(x0 + rr)},{n(y0)} A{n(rr)},{n(rr)} 0 0 0 {n(x0 + rr)},{n(y1)} L{n(x1 - rr)},{n(y1)} "
+                f"A{n(rr)},{n(rr)} 0 0 0 {n(x1 - rr)},{n(y0)} Z")
+
+    x0, y0, x1, y1 = g["bar"]
+    w = g["weight"]
+    ring = pill(x0, y0, x1, y1, True) + " " + pill(x0 + w, y0 + w, x1 - w, y1 - w, False)
+    return dome, seen, ring
+
+
+def hexc(c):
+    return "#%02x%02x%02x" % tuple(c[:3])
+
+
+def mark(style):
+    """The mark's SVG elements on a 256 box: the ground (unless one-colour) and the three paths."""
+    dome, seen, ring = paths()
+    if style == "mono":
+        ground, disc, bar = "", hexc(INK), hexc(INK)
+    else:
+        st = STYLES[style]
+        ground = f'<rect width="256" height="256" rx="57" fill="{hexc(st["ground"])}"/>'
+        disc, bar = hexc(st["disc"]), hexc(st["bar"])
+    return (ground + f'<path d="{dome}" fill="{disc}"/><path d="{seen}" fill="{disc}"/>'
+            f'<path d="{ring}" fill="{bar}"/>')
+
+
 def svg(style):
-    """The same mark as a vector, for favicon.svg and the lockups."""
-    st = STYLES[style]
-    hexc = lambda c: "#%02x%02x%02x" % tuple(c[:3])
-    op = lambda c: "%.2f" % (c[3] / 255)
-    g0, g1 = st["ground"]
-    t0, t1 = st["tray"]
-    pill = hexc(st["pill"])
-    rows = ""
-    for x0, w, centre in geometry(256)["boxes"]:
-        rx = round(w * 0.30)
-        fill = "url(#hot)" if centre else pill
-        rows += f'<rect x="{x0}" y="{156 - w}" width="{w}" height="{w}" rx="{rx}" fill="{fill}"/>'
-    return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">'
-        "<defs>"
-        f'<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{hexc(g0)}"/><stop offset="1" stop-color="{hexc(g1)}"/></linearGradient>'
-        f'<linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{hexc(t0)}" stop-opacity="{op(t0)}"/><stop offset="1" stop-color="{hexc(t1)}" stop-opacity="{op(t1)}"/></linearGradient>'
-        f'<linearGradient id="hot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{hexc(HOT_TOP)}"/><stop offset="1" stop-color="{hexc(HOT_BOT)}"/></linearGradient>'
-        '<linearGradient id="hl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>'
-        "</defs>"
-        '<rect width="256" height="256" rx="57" fill="url(#g)"/>'
-        f'<rect x="17" y="104" width="222" height="60" rx="30" fill="url(#t)" stroke="{hexc(st["rim"])}" stroke-opacity="{op(st["rim"])}" stroke-width="2"/>'
-        + rows +
-        '<rect x="96" y="92" width="64" height="32" rx="19" fill="url(#hl)"/>'
-        "</svg>"
-    )
+    """The same mark as a vector, for favicon.svg and the marks for the web."""
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">{mark(style)}</svg>'
+
+
+def update_lockups(out):
+    """Redraw the mark inside each lockup SVG, leaving its lettering and embedded font alone."""
+    done = []
+    for name, style in LOCKUPS.items():
+        path = os.path.join(out, "lockups", name)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        # The mark is the lockup's one group: <g transform="translate(..) scale(..)"> ... </g>.
+        new, count = re.subn(r'(<g transform="[^"]*">).*?(</g>)',
+                             lambda m: m.group(1) + mark(style) + m.group(2), text, count=1, flags=re.S)
+        assert count == 1, f"{name}: no mark group to redraw"
+        if new != text:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(new)
+        done.append(name)
+    return done
 
 
 def main(argv):
@@ -178,7 +260,8 @@ def main(argv):
             render(S, style).save(os.path.join(out, "png", f"{style}-{S}.png"))
 
     # Web.
-    web = lambda n: os.path.join(out, "web", n)
+    web = lambda name: os.path.join(out, "web", name)
+    ground = hexc(STYLES["acrylic"]["ground"])
     write_ico(web("favicon.ico"), [render(S, "acrylic") for S in (16, 32, 48)])
     render(16, "acrylic").save(web("favicon-16.png"))
     render(32, "acrylic").save(web("favicon-32.png"))
@@ -186,10 +269,9 @@ def main(argv):
     render(192, "acrylic").save(web("icon-192.png"))
     render(512, "acrylic").save(web("icon-512.png"))
     render(420, "acrylic", canvas=512).save(web("icon-maskable-512.png"))
-    with open(web("favicon.svg"), "w", encoding="utf-8") as f:
-        f.write(svg("acrylic"))
-    with open(web("mark-light.svg"), "w", encoding="utf-8") as f:
-        f.write(svg("paper"))
+    for name, style in (("favicon.svg", "acrylic"), ("mark-light.svg", "paper"), ("mark-mono.svg", "mono")):
+        with open(web(name), "w", encoding="utf-8") as f:
+            f.write(svg(style))
     with open(web("site.webmanifest"), "w", encoding="utf-8") as f:
         json.dump({
             "name": "ArtDock", "short_name": "ArtDock",
@@ -198,7 +280,7 @@ def main(argv):
                 {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},
                 {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
             ],
-            "theme_color": "#1f2333", "background_color": "#14161f", "display": "standalone",
+            "theme_color": ground, "background_color": ground, "display": "standalone",
         }, f, indent=2)
     with open(web("head.html"), "w", encoding="utf-8") as f:
         f.write(
@@ -206,9 +288,14 @@ def main(argv):
             '<link rel="icon" href="/favicon.svg" type="image/svg+xml">\n'
             '<link rel="apple-touch-icon" href="/apple-touch-icon.png">\n'
             '<link rel="manifest" href="/site.webmanifest">\n'
-            '<meta name="theme-color" content="#1f2333">\n'
+            f'<meta name="theme-color" content="{ground}">\n'
         )
     print(f"wrote {out}/windows, {out}/png, {out}/web")
+
+    # The mark inside the lockups.
+    done = update_lockups(out)
+    if done:
+        print(f"redrew the mark in {len(done)} lockups; render their @2x PNGs with a browser")
 
     # The installer's splash.
     lockup = os.path.join(out, "lockups", "lockup-stacked-dark@2x.png")

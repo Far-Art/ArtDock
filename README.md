@@ -1252,19 +1252,21 @@ after it gave back only the managed third. It costs about 10 ms, on a pool threa
 nothing is paged out to make the figure look smaller.
 
 **The application icon is generated, not drawn once and downscaled.**
-[tools/make-icon.py](tools/make-icon.py) lays the mark out separately at each of the nine
-sizes in `Assets/ArtDock.ico`, on that size's own integer pixel grid, and builds the icon row
-outward from the centre so symmetry is structural rather than arithmetic. The icon that ships
-is the Acrylic treatment of that geometry — a graded ground, a glass tray and a highlight on
-the magnified icon — drawn by [tools/make-brand.py](tools/make-brand.py) on the same grids and
+[tools/make-brand.py](tools/make-brand.py) lays the mark out separately at each of the nine
+sizes in `Assets/ArtDock.ico`, on that size's own integer pixel grid, with the disc straddling
+the centre so symmetry is structural rather than arithmetic. The mark is the Ring — a disc
+behind an outlined bar, flat, the outline cutting a gap through the disc so that it shows as a
+dome above the bar and a slice inside it. Since 2026-11-21 it stands in place of the tray of
+icons with one magnified, which [tools/make-icon.py](tools/make-icon.py) still draws and whose
+icon writer and size table the newer script borrows. The icon that ships is
 copied from `brand/windows/ArtDock.ico`; `brand/` has the rest of the set, for the web and
 for light backgrounds. A single 256px
-drawing scaled down does not survive the trip: the icon this replaced spanned
+drawing scaled down does not survive the trip: the first icon spanned
 `[-0.5, 255.5]` instead of `[0, 256]`, which left 50% alpha down the left and top edges
 against a hard clip on the right and bottom — a grey ghost column and a visibly off-centre
 mark at 16px — and its five-icon composition smeared into the small sizes. Below 32px the
-outer icon pair is dropped and the widths are hand-set, because the ratios round to 2px there
-and the magnification wave stops reading. The script asserts every frame is mirror-symmetric
+widths are hand-set, because the ratios round the outline and its gaps unevenly there. The
+script asserts every frame is mirror-symmetric
 before writing, and 20px and 40px frames exist so the tray at 125% and 150% has one to pick
 rather than rescaling 24.
 
