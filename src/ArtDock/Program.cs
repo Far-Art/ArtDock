@@ -23,6 +23,7 @@ public static class Program
         // Main is where this call is — and warns about anywhere else.
         VelopackApp.Build()
             .OnAfterInstallFastCallback(AppUpdater.OnInstalled)
+            .OnAfterUpdateFastCallback(AppUpdater.OnUpdated)
             .OnBeforeUninstallFastCallback(AppUpdater.OnUninstalling)
             .Run();
 

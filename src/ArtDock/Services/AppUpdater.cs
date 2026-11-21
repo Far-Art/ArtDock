@@ -179,6 +179,14 @@ public sealed class AppUpdater
     }
 
     /// <summary>
+    /// An update to <paramref name="version"/> has been applied: run by Velopack in the new
+    /// version, which it ends as this returns. The shell is told the programs have changed, so the
+    /// shortcuts show the new version's icon rather than the one it cached
+    /// (<see cref="Interop.IconRefresh"/>).
+    /// </summary>
+    public static void OnUpdated(SemanticVersion version) => Interop.IconRefresh.Announce(Environment.ProcessPath);
+
+    /// <summary>
     /// Velopack's uninstaller is about to remove this installation — the other thing its
     /// setup, updater and uninstaller need of the dock.
     /// </summary>

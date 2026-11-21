@@ -167,7 +167,9 @@ the newest one's. Velopack reads the ten newest releases and merges their feeds,
 to ten versions behind can chain the releases' deltas, each from the release before it, when
 the chain is smaller than the full package; further behind, or when a delta fails to apply, it
 downloads the full package. That holds only while nothing in the dock depends on having run a
-particular version: no work is done in an update hook, and the settings are brought up to date
+particular version: no work the dock relies on is done in an update hook — the one there is,
+`AppUpdater.OnUpdated`, only tells the shell the programs have changed, so the shortcuts show a
+new icon rather than the one it cached (`Interop/IconRefresh`) — and the settings are brought up to date
 when they are read (`DockSettings.Migrate`), one `Version < n` step after another, every step
 kept for good — so a file of any age reaches the current format in one start. A step removed,
 or an upgrade done once on update rather than on read, breaks every copy that skipped the
