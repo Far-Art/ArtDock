@@ -341,7 +341,14 @@ public sealed class GroupFlyout
         _morphIcon = Math.Max(0, morphIcon);
         _morphReach = Math.Max(0, morphReach);
         _blurred = blurred && Sheet() is not null;
-        _holder = new Decorator { Child = Build(group, naming) };
+        // Room at the sides to slide into, for a flyout that follows its group's place along
+        // the dock (FollowPlace): transparent, and passing clicks by to the dock beneath.
+        _holder = new Border
+        {
+            Child = Build(group, naming),
+            Padding = Morphs ? new Thickness(SlideRoom, 0, SlideRoom, 0) : default,
+            RenderTransform = _slide
+        };
         _popup = new Popup
         {
             AllowsTransparency = true,
@@ -389,6 +396,7 @@ public sealed class GroupFlyout
         {
             StopStepping();
             StopResizing();
+            StopSliding();
             LetSheetGo();
 
             // A name being typed when the flyout goes is kept, as a click elsewhere keeps it in
@@ -427,6 +435,96 @@ public sealed class GroupFlyout
     /// frame by frame on 2026-11-21. With the same child, it only grows or shrinks, in place.
     /// </summary>
     private readonly Decorator _holder;
+
+    /// <summary>How far the open group can slide along the dock to follow its place, either way, in DIPs.</summary>
+    private double SlideRoom => 2 * _morphIcon;
+
+    /// <summary>How long the open group takes to slide to its place's new spot.</summary>
+    private const double SlideMs = 240;
+
+    /// <summary>Where the open group stands from where its window was put, along the dock, and where it is heading.</summary>
+    private readonly TranslateTransform _slide = new();
+
+    private double _slideFrom;
+
+    private double _slideTo;
+
+    private double _slideElapsedMs;
+
+    private long _slideLast;
+
+    private bool _sliding;
+
+    /// <summary>
+    /// Has the open group follow its place on the dock, gone to <paramref name="anchor"/> — the
+    /// foot of its icon's middle, in device pixels — by sliding there within its window: an
+    /// icon from it let go on the dock to one side of it moves its place along by a slot.
+    /// </summary>
+    /// <remarks>
+    /// Slid inside its own window rather than the window moved: Windows moves a see-through
+    /// window at once and draws what is in it a frame later, and the group would stand where
+    /// it was going, a slot off, for a frame first. Its window keeps room at the sides for this
+    /// (<see cref="SlideRoom"/>), and no further does it go.
+    /// </remarks>
+    public void FollowPlace(Point anchor)
+    {
+        if (!_popup.IsOpen || PresentationSource.FromVisual(_holder) is not { CompositionTarget: { } target })
+        {
+            Anchor = anchor;
+            return;
+        }
+
+        var along = (anchor.X - Anchor.X) * target.TransformFromDevice.M11;
+        Anchor = anchor;
+        if (Math.Abs(along) < 0.25)
+        {
+            return;
+        }
+
+        _slideFrom = _slide.X;
+        _slideTo = Math.Clamp(_slideTo + along, -SlideRoom, SlideRoom);
+        _slideElapsedMs = 0;
+        _slideLast = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (!_sliding)
+        {
+            _sliding = true;
+            CompositionTarget.Rendering += SlideStep;
+        }
+    }
+
+    private void SlideStep(object? sender, EventArgs e)
+    {
+        if (!_popup.IsOpen)
+        {
+            StopSliding();
+            return;
+        }
+
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        _slideElapsedMs += Math.Min(50, System.Diagnostics.Stopwatch.GetElapsedTime(_slideLast, now).TotalMilliseconds);
+        _slideLast = now;
+
+        var time = Math.Min(1, _slideElapsedMs / SlideMs);
+        _slide.X = _slideFrom + ((_slideTo - _slideFrom) * Pace.GetSplineProgress(time));
+        if (!_stepping)
+        {
+            DrawSheetAtRest();
+        }
+
+        if (time >= 1)
+        {
+            StopSliding();
+        }
+    }
+
+    private void StopSliding()
+    {
+        if (_sliding)
+        {
+            _sliding = false;
+            CompositionTarget.Rendering -= SlideStep;
+        }
+    }
 
     /// <summary>
     /// Raised when the flyout's own window stops being the active one. A click in it can make it

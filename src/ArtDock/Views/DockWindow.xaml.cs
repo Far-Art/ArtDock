@@ -3763,6 +3763,41 @@ public sealed partial class DockWindow : Window
     /// <summary>The group open above the dock now, or null while none is.</summary>
     private GroupFlyout? _flyout;
 
+    /// <summary>
+    /// An icon the pointer may rest on without the open group closing (<see cref="WatchGroupLeft"/>):
+    /// one just let go on the dock from the group, under the pointer as it lands. Spared until
+    /// the pointer is on it no longer.
+    /// </summary>
+    private string? _groupLeftSpared;
+
+    /// <summary>
+    /// Has the open group slide to where its place on the dock is now, after the row has changed
+    /// under it, and holds the wave there afresh.
+    /// </summary>
+    private void FollowGroupPlace(GroupFlyout flyout)
+    {
+        if (_pins.FirstOrDefault(pin => pin.Id == flyout.Group.Id) is not { } group)
+        {
+            return;
+        }
+
+        var shown = Shown(group);
+        if (GroupAnchor(shown, fromFoot: flyout.Morphs) is { } anchor)
+        {
+            flyout.FollowPlace(new Point(anchor.X, anchor.Y));
+        }
+
+        // The wave was held where the place was; held afresh, it goes to where it is.
+        if (flyout.Morphs)
+        {
+            var reach = flyout.ScreenBounds;
+            _dock.HoldForGroup(null);
+            _dock.HoldForGroup(shown, reach.IsEmpty
+                ? default
+                : new Int32Rect((int)reach.Left, (int)reach.Top, (int)Math.Ceiling(reach.Width), (int)Math.Ceiling(reach.Height)));
+        }
+    }
+
     /// <summary>How long the pointer may rest on the dock's other icons before the open group closes.</summary>
     private static readonly TimeSpan GroupLeftAfter = TimeSpan.FromMilliseconds(500);
 
@@ -3808,9 +3843,16 @@ public sealed partial class DockWindow : Window
                 return;
             }
 
-            // On another icon: the wait starts, if it has not.
-            if (since is null && PointerOnDockWindow()
-                && _dock.ItemUnderCursor() is { IsSeparator: false } under && under.Id != flyout.Group.Id)
+            // On another icon: the wait starts, if it has not — but not on one just let go there
+            // from the group, until the pointer has left it.
+            var under = PointerOnDockWindow() ? _dock.ItemUnderCursor() : null;
+            if (_groupLeftSpared is { } spared && under?.Id != spared)
+            {
+                _groupLeftSpared = null;
+            }
+
+            if (since is null && under is { IsSeparator: false } && under.Id != flyout.Group.Id
+                && under.Id != _groupLeftSpared)
             {
                 since = Environment.TickCount64;
             }
@@ -4594,8 +4636,15 @@ public sealed partial class DockWindow : Window
         }
         else if (!cancel && drag.Slot is { } slot)
         {
-            flyout?.Close();
+            // Onto the dock, where the group stays open over its place — wherever the row has
+            // put that now — for more to come out of it; the icon just let go on the dock does not
+            // count as the pointer going on to another (WatchGroupLeft).
             _dock.LandGhosts(() => MoveOutOfGroup(drag.Item, slot));
+            if (flyout is { IsOpen: true, IsClosing: false } stays)
+            {
+                _groupLeftSpared = drag.Item.Id;
+                FollowGroupPlace(stays);
+            }
         }
         else if (flyout is null && _pins.FirstOrDefault(pin => pin.Id == drag.Group.Id) is { } group)
         {
