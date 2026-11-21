@@ -483,7 +483,9 @@ lands; bring it back into the
   the same Add menu as everything else, and shown in the settings list as the rule it is
   rather than as an entry named *Separator*.
 - **Groups**: one icon on the dock that holds others. Its picture is the first four it holds,
-  two by two on a pale tile, as Windows 11's Start menu draws a folder; a click opens what it
+  two by two in a well pressed into the bar, in the bar's own colour, a little larger than the
+  icons beside it — or, with *Arrange by what the group holds* on the Icons page, one to three
+  centred and past four a count of the rest; a click opens what it
   holds above it — the icon lifting off the dock and opening out into it, and closing back down
   into its place, unless motion is reduced — as a grid of icons with their names on a blurred, see-through ground (plain where Windows' transparency effects are off), scrolling past four rows, its title in place of
   the icon's label; and a click on one of those opens it as a

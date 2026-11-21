@@ -456,6 +456,9 @@ public sealed partial class DockWindow : Window
         {
             _itemsSignature = signature;
             _iconSet = IconSetLibrary.Installed.Find(settings.IconSet);
+
+            // Before the items are read: a group's picture is drawn as they are.
+            GroupArt.Configure(settings.GroupFitsContents);
             _pins = ResolveItems(settings);
 
             // Fitted to the display, which is what puts them on the dock.
@@ -1095,7 +1098,8 @@ public sealed partial class DockWindow : Window
     /// set, which changes every picture on the dock without changing a pin.
     /// </summary>
     private static string SignatureOf(DockSettings settings) =>
-        settings.IconSet + '' + string.Join(
+        settings.IconSet + '' + (settings.GroupFitsContents ? "fit" : null)
+        + '' + string.Join(
             '',
             settings.PinnedApps.Select(PinSignature));
 

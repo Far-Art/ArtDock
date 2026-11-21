@@ -262,11 +262,12 @@ public sealed class GroupTests : IDisposable
         var first = GroupArt.Place(0);
         Assert.Equal(Colors.Red, PixelAt(open, first.Left + (first.Width / 2), first.Top + (first.Height / 2)));
 
-        // Between the places, where the tile shows: dark open, pale at rest.
+        // Between the places, where the tile shows: dark and solid open, a faint wash at rest —
+        // the well, which lets the bar show through.
         var dark = PixelAt(open, 128, 128);
-        var pale = PixelAt(GroupArt.For(icons), 128, 128);
         Assert.True(dark.R + dark.G + dark.B < 200);
-        Assert.True(pale.R + pale.G + pale.B > 600);
+        Assert.True(AlphaAt(open, 128, 128) > 0xC0);
+        Assert.InRange(AlphaAt(GroupArt.For(icons), 128, 128), 1, 0x40);
     });
 
     [Fact]
@@ -305,7 +306,7 @@ public sealed class GroupTests : IDisposable
 
         foreach (var place in places)
         {
-            Assert.True(place.Left >= 24 && place.Top >= 24 && place.Right <= 232 && place.Bottom <= 232);
+            Assert.True(place.Left >= 6 && place.Top >= 6 && place.Right <= 250 && place.Bottom <= 250);
         }
 
         for (var i = 0; i < places.Count; i++)
@@ -315,6 +316,46 @@ public sealed class GroupTests : IDisposable
                 var overlap = Rect.Intersect(places[i], places[j]);
                 Assert.True(overlap.IsEmpty || overlap.Width == 0 || overlap.Height == 0);
             }
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void AFittedPicture_IsCentredOnTheTile(int total)
+    {
+        var places = Enumerable.Range(0, total).Select(i => GroupArt.PlaceOf(i, total, fits: true)).ToList();
+        var bounds = places.Aggregate(Rect.Union);
+
+        Assert.Equal(128, bounds.Left + (bounds.Width / 2), 6);
+        Assert.Equal(128, bounds.Top + (bounds.Height / 2), 6);
+        Assert.All(places, place => Assert.True(place.Left >= 6 && place.Top >= 6 && place.Right <= 250 && place.Bottom <= 250));
+
+        // One alone is larger than one of four.
+        if (total == 1)
+        {
+            Assert.True(places[0].Width > GroupArt.Place(0).Width);
+        }
+    }
+
+    [Fact]
+    public void AFittedPicture_OfFourOrMore_IsTwoByTwo()
+    {
+        for (var i = 0; i < GroupArt.Shown; i++)
+        {
+            Assert.Equal(GroupArt.Place(i), GroupArt.PlaceOf(i, 4, fits: true));
+            Assert.Equal(GroupArt.Place(i), GroupArt.PlaceOf(i, 9, fits: true));
+        }
+    }
+
+    [Fact]
+    public void Unfitted_TheFourAreTwoByTwo_HoweverFewThereAre()
+    {
+        for (var i = 0; i < GroupArt.Shown; i++)
+        {
+            Assert.Equal(GroupArt.Place(i), GroupArt.PlaceOf(i, 1, fits: false));
+            Assert.Equal(GroupArt.Place(i), GroupArt.PlaceOf(i, 3, fits: false));
         }
     }
 
@@ -413,10 +454,11 @@ public sealed class GroupTests : IDisposable
         var icon = new Rect(0, 0, 100, 100);
         var tile = GroupArt.TileIn(icon);
 
-        // The dock's 8% inset, then the picture's 24 of 256.
-        Assert.Equal(15.875, tile.Left, 3);
-        Assert.Equal(100 - (2 * 15.875), tile.Width, 3);
-        Assert.Equal(15.75, GroupArt.TileRadiusIn(icon), 3);
+        // The dock's 2% inset of a group, then the picture's 6 of 256.
+        Assert.Equal(4.25, tile.Left, 3);
+        Assert.Equal(100 - (2 * 4.25), tile.Width, 3);
+        Assert.Equal(21.0, GroupArt.TileRadiusIn(icon), 4);
+        Assert.Equal(6.0 / 244.0, GroupArt.ArtRoom, 6);
     }
 
     // ---- helpers -------------------------------------------------------------------------

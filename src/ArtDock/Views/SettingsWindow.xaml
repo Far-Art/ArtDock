@@ -1070,6 +1070,28 @@
                             </Grid>
                         </Border>
 
+                        <!-- Whether a group's own icon is arranged by how much the group holds. -->
+                        <Border Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Text="{DynamicResource Settings.Icons.GroupFit}" />
+                                    <TextBlock
+                                        Style="{StaticResource CardHint}"
+                                        Text="{DynamicResource Settings.Icons.GroupFit.Hint}" />
+                                </StackPanel>
+                                <CheckBox
+                                    x:Name="GroupFitCheck"
+                                    AutomationProperties.Name="{DynamicResource Settings.Icons.GroupFit}"
+                                    AutomationProperties.HelpText="{DynamicResource Settings.Icons.GroupFit.Hint}"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
                         <!-- The labels' lettering, one card for the face and the size together:
                              they describe the same bubble. The two lists are a fixed width,
                              because a list as wide as its widest entry would jump once the

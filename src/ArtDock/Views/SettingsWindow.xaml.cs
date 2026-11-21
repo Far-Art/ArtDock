@@ -336,6 +336,7 @@ public sealed partial class SettingsWindow : Window
         TaskbarColorCheck.IsChecked = settings.UseTaskbarColor;
         BlurCheck.IsChecked = settings.BlurBackground;
         IconShadowsCheck.IsChecked = settings.IconShadows;
+        GroupFitCheck.IsChecked = settings.GroupFitsContents;
         BuildIconSetList(settings.IconSet);
         LoadLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
 
@@ -435,6 +436,8 @@ public sealed partial class SettingsWindow : Window
         BlurCheck.Unchecked += (_, _) => Preview();
         IconShadowsCheck.Checked += (_, _) => Preview();
         IconShadowsCheck.Unchecked += (_, _) => Preview();
+        GroupFitCheck.Checked += (_, _) => Preview();
+        GroupFitCheck.Unchecked += (_, _) => Preview();
 
         ThemeBox.SelectionChanged += (_, _) =>
         {
@@ -675,6 +678,7 @@ public sealed partial class SettingsWindow : Window
             BlurBackground = BlurCheck.IsChecked == true,
             IconShadows = IconShadowsCheck.IsChecked == true,
             IconSet = SelectedIconSet,
+            GroupFitsContents = GroupFitCheck.IsChecked == true,
             LabelFontFamily = SelectedLabelFont,
             LabelFontSize = SelectedLabelSize,
             LabelFontStyle = SelectedLabelStyle,
@@ -2065,6 +2069,7 @@ public sealed partial class SettingsWindow : Window
         _loading = true;
         BuildIconSetList(defaults.IconSet);
         IconShadowsCheck.IsChecked = defaults.IconShadows;
+        GroupFitCheck.IsChecked = defaults.GroupFitsContents;
         LoadLabelFont(defaults.LabelFontFamily, defaults.LabelFontSize, defaults.LabelFontStyle);
         _loading = false;
 

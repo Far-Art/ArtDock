@@ -87,6 +87,8 @@
     "Settings.Icons.IconSet.Missing": "{0} (not installed)",
     "Settings.Icons.Shadows": "Shadow under the icons",
     "Settings.Icons.Shadows.Hint": "A faint shadow falling a little below each icon, so the icons stand off the bar. The icons themselves are drawn exactly as before.",
+    "Settings.Icons.GroupFit": "Arrange by what the group holds",
+    "Settings.Icons.GroupFit.Hint": "One, two or three items are centered, and a group of more than four shows how many more there are.",
     "Settings.Icons.LabelFont": "Label font",
     "Settings.Icons.LabelFont.Hint": "The name shown over an icon while the pointer is on it, in one lettering for every item. While this page is open, the dock holds an icon up with its label showing.",
     "Settings.Icons.LabelFont.Default": "Default ({0})",
@@ -448,6 +450,7 @@
     "Preset.Group": "Group",
     "Preset.Group.Numbered": "{0} {1:0}",
     "Group.Name": "Group name",
+    "Group.More": "+{0}",
     "Group.Empty": "Drag icons or files onto this group on the dock, or choose Move to group from an icon's menu.",
     "Group.Rename": "Rename",
 

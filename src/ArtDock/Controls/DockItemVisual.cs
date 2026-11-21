@@ -570,13 +570,20 @@ public sealed class DockItemVisual : FrameworkElement
         }
     }
 
+    /// <summary>The share of the item's box left clear round an icon, at each side.</summary>
+    public const double IconInset = 0.08;
+
     /// <summary>
     /// Where the icon is drawn in the item's box: with a little breathing room, so neighbouring
     /// glyphs do not crowd each other at peak magnification where their boxes sit only a gap apart.
     /// </summary>
+    /// <remarks>
+    /// A group less so (<see cref="GroupArt.DockInset"/>): its well, faint on a dark bar, read as
+    /// smaller than the icons beside it at the same margin.
+    /// </remarks>
     private Rect DrawnBox(ImageSource icon)
     {
-        var inset = RestingSize * 0.08;
+        var inset = RestingSize * (Item.IsGroup ? GroupArt.DockInset : IconInset);
         return Fit(icon, new Rect(inset, inset, RestingSize - (inset * 2), RestingSize - (inset * 2)));
     }
 

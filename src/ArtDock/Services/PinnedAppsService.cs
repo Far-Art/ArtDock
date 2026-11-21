@@ -610,7 +610,8 @@ public sealed class PinnedAppsService
             child.Icon ??= LoadIcon(child, iconSet);
         }
 
-        return GroupArt.For([.. group.Children.Take(GroupArt.Shown).Select(child => child.Icon)]);
+        // All of them: the picture draws the first four, and may say how many more there are.
+        return GroupArt.For([.. group.Children.Select(child => child.Icon)]);
     }
 
     /// <summary>

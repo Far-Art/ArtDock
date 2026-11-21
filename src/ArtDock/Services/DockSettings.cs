@@ -559,6 +559,12 @@ public sealed class DockSettings
     public bool IconShadows { get; set; } = true;
 
     /// <summary>
+    /// Whether a group's picture places its icons by how many it holds — one, two or three
+    /// centred, and past four a count of the rest in the last place — rather than always two by two.
+    /// </summary>
+    public bool GroupFitsContents { get; set; }
+
+    /// <summary>
     /// The icon set the dock's items are drawn from, by its id, or null for the apps' own
     /// icons.
     /// </summary>
@@ -1282,6 +1288,7 @@ public sealed class DockSettings
         BarRoundness = BarRoundness,
         BlurBackground = BlurBackground,
         IconShadows = IconShadows,
+        GroupFitsContents = GroupFitsContents,
         IconSet = IconSet,
         LabelFontFamily = LabelFontFamily,
         LabelFontSize = LabelFontSize,
