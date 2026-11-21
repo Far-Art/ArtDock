@@ -4666,8 +4666,12 @@ public sealed partial class DockWindow : Window
     /// Whether the window previews may be up: the dock settled on screen, and nothing else — a
     /// menu, a dialog's hold on an item, the keyboard — in charge of it.
     /// </summary>
+    /// <remarks>
+    /// Not while a group is open: the previews of an icon beside it opened under the open group,
+    /// over the dock and behind the card.
+    /// </remarks>
     private bool PreviewsAllowed() =>
-        !_closed && IsSettled && !_keyboard && !_dock.IsHoldingLabel;
+        !_closed && IsSettled && !_keyboard && !_dock.IsHoldingLabel && _flyout is not { IsOpen: true };
 
     /// <summary>
     /// Where an item's window previews go: over the icon as the wave holds it, above the dock's
