@@ -341,12 +341,13 @@ public sealed class GroupFlyout
         _morphIcon = Math.Max(0, morphIcon);
         _morphReach = Math.Max(0, morphReach);
         _blurred = blurred && Sheet() is not null;
+        _holder = new Decorator { Child = Build(group, naming) };
         _popup = new Popup
         {
             AllowsTransparency = true,
             StaysOpen = Morphs,
             PopupAnimation = PopupAnimation.None,
-            Child = Build(group, naming)
+            Child = _holder
         };
 
         // Laid out and placed, but drawn only once the card is on the icon.
@@ -387,6 +388,7 @@ public sealed class GroupFlyout
         _popup.Closed += (_, _) =>
         {
             StopStepping();
+            StopResizing();
             LetSheetGo();
 
             // A name being typed when the flyout goes is kept, as a click elsewhere keeps it in
@@ -408,6 +410,15 @@ public sealed class GroupFlyout
 
     /// <summary>The popup, for <see cref="MenuHost.ShowPopup"/> to place.</summary>
     public Popup Popup => _popup;
+
+    /// <summary>
+    /// What the popup holds, for the life of the popup: the card is rebuilt inside it, never in
+    /// the popup's place. Handed a new child, the popup placed itself from a size measured before
+    /// that child was laid out — some two hundred pixels to the right and down over the dock —
+    /// and was put back a frame later: a jump each time an icon dragged out was removed, seen
+    /// frame by frame on 2026-11-21. With the same child, it only grows or shrinks, in place.
+    /// </summary>
+    private readonly Decorator _holder;
 
     /// <summary>
     /// Raised when the flyout's own window stops being the active one. A click in it can make it
@@ -491,15 +502,204 @@ public sealed class GroupFlyout
         return _sheet;
     }
 
+    /// <summary>How long the card takes to grow or shrink to what it holds when that changes.</summary>
+    private const double ResizeMs = 220;
+
+    /// <summary>Whether the card's frame is on its way between two sizes (<see cref="ResizeStep"/>).</summary>
+    private bool _resizing;
+
+    private Size _resizeFrom;
+
+    private Size _resizeTo;
+
+    private double _resizeElapsedMs;
+
+    private long _resizeLast;
+
+    /// <summary>The card's shape while it changes size, so what it holds is cut to it.</summary>
+    private readonly RectangleGeometry _resizeClip = new();
+
+    /// <summary>
+    /// Has the card, rebuilt at a new size, go there from the size it had: its frame — ground,
+    /// rim, blur — grows or shrinks round what it now holds, which stands at its new size from
+    /// the start, under the title at the top. The flyout's window is held at the larger of the
+    /// two meanwhile, so nothing moves but the card's edge, and lets go once it is there.
+    /// </summary>
+    private void ResizeFrom(Size from, Size holderWas)
+    {
+        if (_card is not { Child: FrameworkElement body } card || from.IsEmpty)
+        {
+            PlaceAgain();
+            return;
+        }
+
+        // The new card's own size, measured with the window held where it was.
+        _holder.MinWidth = holderWas.Width;
+        _holder.MinHeight = holderWas.Height;
+        _holder.UpdateLayout();
+        var to = new Size(card.ActualWidth, card.ActualHeight);
+        if (Math.Abs(to.Width - from.Width) < 0.5 && Math.Abs(to.Height - from.Height) < 0.5)
+        {
+            EndResize();
+            return;
+        }
+
+        // What it holds, at its new size, from the top, the frame going round it.
+        body.Width = body.ActualWidth;
+        body.Height = body.ActualHeight;
+        body.HorizontalAlignment = HorizontalAlignment.Center;
+        body.VerticalAlignment = VerticalAlignment.Top;
+
+        _holder.MinWidth = holderWas.Width + Math.Max(0, to.Width - from.Width);
+        _holder.MinHeight = holderWas.Height + Math.Max(0, to.Height - from.Height);
+
+        _resizeFrom = from;
+        _resizeTo = to;
+        _resizeElapsedMs = 0;
+        card.Clip = _resizeClip;
+        SizeCard(card, from);
+        _holder.UpdateLayout();
+        PlaceAgain();
+        DrawSheetAtRest();
+
+        if (!_resizing)
+        {
+            _resizing = true;
+            CompositionTarget.Rendering += ResizeStep;
+        }
+
+        _resizeLast = System.Diagnostics.Stopwatch.GetTimestamp();
+    }
+
+    /// <summary>
+    /// One frame of the card's change of size. Only the card is laid out again: the flyout's
+    /// window is held at its size till the end, so no window moves from here.
+    /// </summary>
+    private void ResizeStep(object? sender, EventArgs e)
+    {
+        if (_card is not { } card || !_popup.IsOpen)
+        {
+            StopResizing();
+            return;
+        }
+
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        _resizeElapsedMs += Math.Min(50, System.Diagnostics.Stopwatch.GetElapsedTime(_resizeLast, now).TotalMilliseconds);
+        _resizeLast = now;
+
+        var time = Math.Min(1, _resizeElapsedMs / ResizeMs);
+        var eased = Pace.GetSplineProgress(time);
+        SizeCard(card, new Size(
+            _resizeFrom.Width + ((_resizeTo.Width - _resizeFrom.Width) * eased),
+            _resizeFrom.Height + ((_resizeTo.Height - _resizeFrom.Height) * eased)));
+        _holder.UpdateLayout();
+        DrawSheetAtRest();
+
+        if (time >= 1)
+        {
+            EndResize();
+        }
+    }
+
+    private void SizeCard(Border card, Size size)
+    {
+        card.Width = size.Width;
+        card.Height = size.Height;
+        _resizeClip.Rect = new Rect(size);
+        _resizeClip.RadiusX = _resizeClip.RadiusY = Math.Max(0, card.CornerRadius.TopLeft - (card.BorderThickness.Left / 2));
+    }
+
+    /// <summary>Lets the card and the window take their own sizes again, the card where it is.</summary>
+    private void EndResize()
+    {
+        StopResizing();
+        if (_card is { } card)
+        {
+            card.ClearValue(FrameworkElement.WidthProperty);
+            card.ClearValue(FrameworkElement.HeightProperty);
+            if (ReferenceEquals(card.Clip, _resizeClip))
+            {
+                card.Clip = null;
+            }
+
+            if (card.Child is FrameworkElement body)
+            {
+                body.ClearValue(FrameworkElement.WidthProperty);
+                body.ClearValue(FrameworkElement.HeightProperty);
+                body.ClearValue(FrameworkElement.HorizontalAlignmentProperty);
+                body.ClearValue(FrameworkElement.VerticalAlignmentProperty);
+            }
+        }
+
+        _holder.ClearValue(FrameworkElement.MinWidthProperty);
+        _holder.ClearValue(FrameworkElement.MinHeightProperty);
+        _holder.UpdateLayout();
+        PlaceAgain();
+        DrawSheetAtRest();
+
+        // And again once the window has taken its own size, which it does after this.
+        _popup.Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (!_resizing && !_stepping && _popup.IsOpen)
+                {
+                    DrawSheetAtRest();
+                }
+            },
+            System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void StopResizing()
+    {
+        if (_resizing)
+        {
+            _resizing = false;
+            CompositionTarget.Rendering -= ResizeStep;
+        }
+    }
+
+    /// <summary>
+    /// Places the flyout again from what it now holds: centred over the group's place, standing
+    /// on it, at the size it is now.
+    /// </summary>
+    /// <remarks>
+    /// The popup places itself again when what it holds is replaced, but from a size measured
+    /// before the new card was laid out: the open group jumped some two hundred pixels to the
+    /// right and down over the dock as an icon dragged out of it was removed, in one frame —
+    /// seen frame by frame on 2026-11-21, the window it is placed from where it had been. So
+    /// it is laid out first, and then asked to place itself again, which a change of offset does.
+    /// </remarks>
+    private void PlaceAgain()
+    {
+        if (!_popup.IsOpen || _popup.Child is not UIElement child)
+        {
+            return;
+        }
+
+        child.UpdateLayout();
+        var offset = _popup.HorizontalOffset;
+        _popup.HorizontalOffset = offset + 1;
+        _popup.HorizontalOffset = offset;
+        KeepSheetUnder();
+    }
+
     /// <summary>
     /// Puts the blurred sheet where the flyout's window is and straight under it: as it opens,
     /// when it changes size, and whenever the dock has put the flyout back over itself.
     /// </summary>
+    /// <remarks>
+    /// The sheet's window covers the whole display the group is on, and so stays where it is
+    /// while the group is open, whatever size the group is. Kept to the flyout's own window, it
+    /// was moved each time the group changed size, and a sheet's window moved shows its blur at
+    /// the whole of the window for a frame before its shape is drawn again: a blink of the
+    /// group as an item went from it (reported 2026-11-21). The blur is drawn only under the
+    /// card, so the room round it costs nothing, and the window passes clicks by.
+    /// </remarks>
     public void KeepSheetUnder()
     {
         if (!_blurred || _sheet is not { } sheet || !_popup.IsOpen
             || PresentationSource.FromVisual(_popup.Child) is not HwndSource source
-            || !NativeMethods.GetWindowRect(source.Handle, out var at))
+            || MonitorDpi.DisplayOfWindow(source.Handle) is not { } at)
         {
             return;
         }
@@ -1387,6 +1587,7 @@ public sealed class GroupFlyout
             return;
         }
 
+        var midway = _opening;
         if (_opening)
         {
             _opening = false;
@@ -1397,9 +1598,18 @@ public sealed class GroupFlyout
             LeaveShadowOnDock(0);
         }
 
+        // The card as it stands, to go from to its new size; none mid-way, when it stands open at once.
+        var wasOpen = !midway;
+        var from = wasOpen && _card is { ActualWidth: > 0 } was ? new Size(was.ActualWidth, was.ActualHeight) : Size.Empty;
+        var holderWas = new Size(_holder.ActualWidth, _holder.ActualHeight);
+        StopResizing();
+        _holder.ClearValue(FrameworkElement.MinWidthProperty);
+        _holder.ClearValue(FrameworkElement.MinHeightProperty);
+
         Group = group;
         FirstTile = null;
-        _popup.Child = Build(group, naming: false);
+        _holder.Child = Build(group, naming: false);
+        ResizeFrom(from, holderWas);
 
         // The keys were in what was just replaced: back to the first icon, so Escape and the
         // arrows go on working.
@@ -1639,22 +1849,20 @@ public sealed class GroupFlyout
         _content = content;
         _picture = picture;
 
-        // The blur kept to the card as the card changes size standing open — an item gone, the
-        // name being typed. Once the flyout's window has taken its new size and place, which is
+        // The card kept where it stands as it changes size standing open — the name being typed
+        // — and the blur kept to it. Once the flyout's window has taken its new size, which is
         // after this; and not on the way up or down, when it is drawn with the card every frame.
-        if (_blurred)
-        {
-            card.SizeChanged += (_, _) => card.Dispatcher.BeginInvoke(
-                () =>
+        card.SizeChanged += (_, _) => card.Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (!_stepping && !_resizing && _popup?.IsOpen == true && ReferenceEquals(card, _card))
                 {
-                    if (!_stepping && _popup?.IsOpen == true && ReferenceEquals(card, _card))
-                    {
-                        KeepSheetUnder();
-                        DrawSheetAtRest();
-                    }
-                },
-                System.Windows.Threading.DispatcherPriority.Background);
-        }
+                    PlaceAgain();
+                    KeepSheetUnder();
+                    DrawSheetAtRest();
+                }
+            },
+            System.Windows.Threading.DispatcherPriority.Background);
         _face = face;
 
         // The shadow is the frame's, cast by the card as it is drawn — clipped and moved — so it
@@ -1688,6 +1896,7 @@ public sealed class GroupFlyout
             RowDefinitions = { new RowDefinition(), new RowDefinition { Height = new GridLength(_morphIcon) } }
         };
         frame.HorizontalAlignment = HorizontalAlignment.Center;
+        frame.VerticalAlignment = VerticalAlignment.Bottom;
         if (Morphs)
         {
             // Under the card, the icon's shadow for while the card is the icon (DrawIconShadow).

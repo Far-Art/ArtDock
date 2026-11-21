@@ -95,6 +95,28 @@ internal static class MonitorDpi
         return (info.WorkBottom - info.WorkTop) / scale;
     }
 
+    /// <summary>
+    /// The whole of the display a window is on, or nearest to, in physical pixels — or null when
+    /// Windows will not say.
+    /// </summary>
+    public static NativeMethods.NativeRect? DisplayOfWindow(nint hwnd)
+    {
+        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (monitor == 0 || !GetMonitorInfo(monitor, ref info))
+        {
+            return null;
+        }
+
+        return new NativeMethods.NativeRect
+        {
+            Left = info.MonitorLeft,
+            Top = info.MonitorTop,
+            Right = info.MonitorRight,
+            Bottom = info.MonitorBottom
+        };
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo
     {

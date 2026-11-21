@@ -1724,13 +1724,21 @@ public sealed class DockBar : Canvas
 
     /// <summary>
     /// Holds the wave on an open group's place as <see cref="HoldForPreviews"/> holds it under
-    /// window previews — frozen where it stood as the group opened, while the pointer is on the
-    /// place or up on the open group — or lets go, for null. A hold of its own, beside the
-    /// previews', which they let go of on their own schedule.
+    /// window previews — frozen where it stood as the group opened — or lets go, for null. A
+    /// hold of its own, beside the previews', which they let go of on their own schedule.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Asked for on 2026-11-21. Not held, the wave followed the pointer up off the dock and fell
     /// flat under the open group, and came back as it closed.
+    /// </para>
+    /// <para>
+    /// Held wherever the pointer is off the dock, not only up on the open group as the previews'
+    /// hold is: the group stays open until a click, and its card stands on its place. Held only
+    /// within reach, the wave fell flat once an icon dragged out of the group was let go away
+    /// from it to be removed, and the group's place moved out from under the card still open
+    /// over it (reported 2026-11-21).
+    /// </para>
     /// </remarks>
     /// <param name="group">The open group, or null.</param>
     /// <param name="reach">The open group's window, in physical screen pixels.</param>
@@ -1834,10 +1842,11 @@ public sealed class DockBar : Canvas
 
     /// <summary>
     /// Where the item <see cref="HoldForPreviews"/> holds is in the row, while the pointer — as the
-    /// frame loop last read it — is in reach of the previews; -1 otherwise.
+    /// frame loop last read it — is in reach of the previews, or the open group's place wherever
+    /// the pointer is (<see cref="HoldForGroup"/>); -1 otherwise.
     /// </summary>
     private int PreviewsIndex =>
-        HeldFor is not { } held || !InReach(HeldReach, _screenCursor)
+        HeldFor is not { } held || (_previewsFor is not null && !InReach(HeldReach, _screenCursor))
             ? -1
             : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == held);
 
