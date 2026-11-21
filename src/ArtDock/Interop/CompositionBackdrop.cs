@@ -63,6 +63,36 @@ internal sealed class CompositionBackdrop : IDisposable
     private readonly SpriteVisual _blur;
     private readonly SpriteVisual _tint;
 
+    /// <summary>The bare frosting the blur is by default: Windows' own blur of the desktop.</summary>
+    private readonly CompositionBrush _frost;
+
+    /// <summary>
+    /// The taskbar's acrylic and what it is made from, while the bar matches the taskbar — see
+    /// <see cref="SetMaterial"/>. Made the first time it is asked for, so a dock that never
+    /// matches the taskbar never makes them.
+    /// </summary>
+    private CompositionEffectBrush? _acrylic;
+
+    /// <summary>
+    /// The shadow with the bar's shape cut out of it, for under the material — see
+    /// <see cref="CutShadow"/>. A layer holding the shadow while it is cut, the shape cut out,
+    /// and the effect that does the cutting.
+    /// </summary>
+    private LayerVisual? _cutLayer;
+
+    private ShapeVisual? _cut;
+    private CompositionRoundedRectangleGeometry? _cutShape;
+    private CompositionSpriteShape? _cutSprite;
+    private CompositionColorBrush? _cutBrush;
+    private CompositionEffectBrush? _cutEffect;
+    private bool _shadowCut;
+
+    private CompositionBackdropBrush? _behind;
+    private CompositionImages? _images;
+    private CompositionDrawingSurface? _grainSurface;
+    private CompositionSurfaceBrush? _grain;
+    private bool _grainTried;
+
     /// <summary>The bar's fill and rim, over the blur.</summary>
     private readonly ShapeVisual _face;
     private readonly CompositionRoundedRectangleGeometry _outline;
@@ -111,7 +141,8 @@ internal sealed class CompositionBackdrop : IDisposable
         // component's backdrop-filter does.
         _blur = compositor.CreateSpriteVisual();
         _blur.RelativeSizeAdjustment = Vector2.One;
-        _blur.Brush = compositor.CreateHostBackdropBrush();
+        _frost = compositor.CreateHostBackdropBrush();
+        _blur.Brush = _frost;
 
         // The host backdrop is bare frosting; without a wash over it the bar reads as washed
         // out rather than as a material.
@@ -199,6 +230,11 @@ internal sealed class CompositionBackdrop : IDisposable
         SetRoundedRect(_outline, x + inset, y + inset, width - scale, height - scale, radius);
         _faceShape.StrokeThickness = (float)scale;
 
+        if (_cutShape is not null)
+        {
+            SetRoundedRect(_cutShape, x, y, width, height, radius);
+        }
+
         Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
         BarShadow.Rings(new System.Windows.Rect(x, y, width, height), radius, scale, rings);
         for (var i = 0; i < _rings.Length; i++)
@@ -225,6 +261,179 @@ internal sealed class CompositionBackdrop : IDisposable
     {
         _fill.Color = fill;
         _rim.Color = rim;
+    }
+
+    /// <summary>
+    /// Makes the sheet the taskbar's own material, or puts it back to the dock's: the bare blur
+    /// under a wash, for a fill of the dock's choosing to go over.
+    /// </summary>
+    /// <param name="material">The taskbar's material, or null for the dock's own.</param>
+    /// <param name="scale">Device pixels to a DIP, which the material's blur grows with.</param>
+    /// <returns>
+    /// True when the sheet now draws the material, and wants nothing painted over it. False when
+    /// it is the dock's own blur — asked for, or because the material is a plain colour, or
+    /// because this machine's compositor would not build it — and the fill is the caller's.
+    /// </returns>
+    /// <remarks>
+    /// The material takes the blur's place and the wash's both: it blurs for itself, by its own
+    /// amount, and a wash over it would be a second tint the taskbar does not have.
+    /// </remarks>
+    public bool SetMaterial(TaskbarMaterial? material, double scale)
+    {
+        // The shadow first: the material shows what is under it, so it cannot be had with the
+        // shadow lying there.
+        var acrylic = material is { Opaque: false } taskbar && CutShadow(true)
+            ? TaskbarAcrylic.TryCreate(
+                _compositor, taskbar, scale, _behind ??= _compositor.CreateBackdropBrush(), Grain())
+            : null;
+
+        if (acrylic is null)
+        {
+            CutShadow(false);
+        }
+
+        _blur.Brush = acrylic ?? _frost;
+        _tint.IsVisible = acrylic is null;
+
+        _acrylic?.Dispose();
+        _acrylic = acrylic;
+        return acrylic is not null;
+    }
+
+    /// <summary>
+    /// Cuts the bar's shape out of the shadow, or puts the shadow back whole. True when it is
+    /// as asked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Whole, the shadow runs on under the bar — its rings are whole rounded rectangles — and
+    /// nothing shows it, since the dock's own blur is opaque. The taskbar's material is not:
+    /// it works on whatever is behind it <i>in this window too</i>, and with the shadow there
+    /// it came out three or four levels darker than the taskbar, measured. So under the
+    /// material the shadow has a hole the shape of the bar.
+    /// </para>
+    /// <para>
+    /// The compositor clips to a shape and not to everything but a shape, so the hole is made
+    /// with arithmetic. The shadow and the bar's shape — in opaque red, over it — are flattened
+    /// into a layer, and the layer's effect makes each pixel black at the layer's alpha less
+    /// its red: where only the shadow is, the shadow; where the shape is, nothing; and along
+    /// the shape's softened edge, the share of the shadow the bar leaves showing. Still in the
+    /// one batch with everything else, so the hole cannot be a frame behind the bar.
+    /// </para>
+    /// <para>
+    /// The shadow is moved into the layer only while it is wanted. The dock's own blur has
+    /// the tree it always had.
+    /// </para>
+    /// </remarks>
+    private bool CutShadow(bool cut)
+    {
+        if (cut == _shadowCut)
+        {
+            return true;
+        }
+
+        if (!cut)
+        {
+            _cutLayer!.Children.RemoveAll();
+            _root.Children.Remove(_cutLayer);
+            _root.Children.InsertAtBottom(_shadow);
+            _shadowCut = false;
+            return true;
+        }
+
+        if (_cutLayer is null && !TryMakeCut())
+        {
+            return false;
+        }
+
+        _root.Children.Remove(_shadow);
+        _cutLayer!.Children.InsertAtBottom(_shadow);
+        _cutLayer.Children.InsertAtTop(_cut);
+        _root.Children.InsertAtBottom(_cutLayer);
+        _shadowCut = true;
+        return true;
+    }
+
+    private bool TryMakeCut()
+    {
+        try
+        {
+            // Rows are what goes in — red, green, blue, alpha, one — and columns what comes
+            // out: no colour, and alpha less red. Applied to the values as they are stored,
+            // already multiplied by their alpha, which is what makes the softened edge right.
+            float[] alphaLessRed =
+            [
+                0, 0, 0, -1,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 1,
+                0, 0, 0, 0
+            ];
+
+            var effect = new D2DEffect(
+                D2DEffect.ColorMatrix,
+                [alphaLessRed, ColorMatrixStraight, false],
+                new CompositionEffectSourceParameter("Layer"));
+
+            _cutEffect = _compositor.CreateEffectFactory(effect).CreateBrush();
+        }
+        catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
+            or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+
+        _cutBrush = _compositor.CreateColorBrush(Color.FromArgb(0xFF, 0xFF, 0, 0));
+        _cutShape = _compositor.CreateRoundedRectangleGeometry();
+        _cutShape.Offset = _shape.Offset + new Vector2(_sheet.Offset.X, _sheet.Offset.Y);
+        _cutShape.Size = _shape.Size;
+        _cutShape.CornerRadius = _shape.CornerRadius;
+
+        _cutSprite = _compositor.CreateSpriteShape(_cutShape);
+        _cutSprite.FillBrush = _cutBrush;
+
+        _cut = _compositor.CreateShapeVisual();
+        _cut.RelativeSizeAdjustment = Vector2.One;
+        _cut.Shapes.Add(_cutSprite);
+
+        // The layer's own picture is what the effect's one unnamed input is given.
+        _cutLayer = _compositor.CreateLayerVisual();
+        _cutLayer.RelativeSizeAdjustment = Vector2.One;
+        _cutLayer.Effect = _cutEffect;
+        return true;
+    }
+
+    /// <summary>Direct2D's colour matrix told to leave the values as they are stored.</summary>
+    private const uint ColorMatrixStraight = 2;
+
+    /// <summary>
+    /// The material's grain, as a brush that tiles from the sheet's corner at its own size —
+    /// or null where it cannot be had, and the material goes without its texture.
+    /// </summary>
+    /// <remarks>
+    /// Tried once. It takes a Direct3D device to hand the compositor a picture, and a machine
+    /// that refuses one will refuse it again on the next slider tick.
+    /// </remarks>
+    private CompositionSurfaceBrush? Grain()
+    {
+        if (_grainTried)
+        {
+            return _grain;
+        }
+
+        _grainTried = true;
+        _images = CompositionImages.TryCreate(_compositor);
+        _grainSurface = _images?.Upload(TaskbarAcrylic.Grain());
+        if (_grainSurface is null)
+        {
+            return null;
+        }
+
+        _grain = _compositor.CreateSurfaceBrush(_grainSurface);
+        _grain.Stretch = CompositionStretch.None;
+        _grain.HorizontalAlignmentRatio = 0;
+        _grain.VerticalAlignmentRatio = 0;
+        return _grain;
     }
 
     /// <summary>
@@ -256,6 +465,20 @@ internal sealed class CompositionBackdrop : IDisposable
         _sheet.Children.RemoveAll();
         _tint.Dispose();
         _blur.Dispose();
+        _acrylic?.Dispose();
+        _cutLayer?.Children.RemoveAll();
+        _cut?.Shapes.Clear();
+        _cutSprite?.Dispose();
+        _cutShape?.Dispose();
+        _cutBrush?.Dispose();
+        _cut?.Dispose();
+        _cutLayer?.Dispose();
+        _cutEffect?.Dispose();
+        _frost.Dispose();
+        _behind?.Dispose();
+        _grain?.Dispose();
+        _grainSurface?.Dispose();
+        _images?.Dispose();
         _shape.Dispose();
         _sheet.Dispose();
 

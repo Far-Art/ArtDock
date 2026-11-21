@@ -390,16 +390,50 @@ public sealed class DockSettings
     }
 
     /// <summary>
-    /// Whether the bar takes its colour from the taskbar instead of from
-    /// <see cref="BarColor"/>.
+    /// Whether the bar is painted as Windows paints the taskbar — <i>Match the taskbar</i> —
+    /// instead of in <see cref="BarColor"/> at <see cref="BarOpacity"/>.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The taskbar's material, not a colour taken from it: its blur, its tint and its edge
+    /// (<see cref="TaskbarMaterial"/>). So it sets aside all three of the bar's own —
+    /// <see cref="BarColor"/>, <see cref="BarOpacity"/> and <see cref="BlurBackground"/>, which
+    /// the taskbar has no say in and always has on (<see cref="Blurs"/>) — and the settings
+    /// dialog greys them. Until 2026-11-21 it took only the colour Windows tints the taskbar
+    /// with and painted it at the bar's own opacity, which matched the taskbar in name: a pale
+    /// grey at a half over the dock's blur is not what the taskbar looks like. The name is the
+    /// file format's, and is from then.
+    /// </para>
+    /// <para>
     /// A standing choice rather than a one-off "start from this", so the dock keeps matching
-    /// when the accent changes or Windows switches between light and dark. The chosen
-    /// <see cref="BarColor"/> is kept underneath it, so turning this off puts back the colour
-    /// that was there rather than leaving whatever the taskbar happened to be.
+    /// when the accent changes or Windows switches between light and dark. What it sets aside
+    /// is kept underneath it, as under <see cref="NoGpu"/>, so turning this off puts back the
+    /// bar that was there rather than leaving whatever the taskbar happened to be.
+    /// </para>
     /// </remarks>
     public bool UseTaskbarColor { get; set; }
+
+    /// <summary>
+    /// What the dock itself paints the bar with while it matches the taskbar: the colour, and
+    /// how opaque, 0 to 1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Where the bar is solid (<see cref="SolidBar"/>) or the taskbar is one plain colour, that
+    /// colour, as the taskbar is with Windows' transparency effects off — and not mixed with
+    /// grey by <see cref="BarOpacity"/> as the bar's own colour is (<see cref="BarPaint"/>):
+    /// the opacity is set aside, and the taskbar's solid colour is already the one to match.
+    /// </para>
+    /// <para>
+    /// Otherwise the sheet behind the dock draws the material and this is not painted at all —
+    /// except on a machine whose sheet cannot (<c>BackdropWindow.Material</c>), where it is the
+    /// nearest a flat fill over a blur comes: the tint, as strong as the material lays it on.
+    /// </para>
+    /// </remarks>
+    public (string Color, double Alpha) TaskbarPaint(TaskbarMaterial material) =>
+        SolidBar || material.Opaque
+            ? (BarPalette.ToHex(material.Solid), 1)
+            : (BarPalette.ToHex(material.Tint), material.LuminosityOpacity);
 
     /// <summary>
     /// Colours the user has kept, in the order they were saved.
@@ -896,9 +930,13 @@ public sealed class DockSettings
     [JsonIgnore]
     public bool SolidBar => NoGpu || !WindowsTransparency;
 
-    /// <summary>Whether the acrylic sheet is up: asked for, and not ruled out by <see cref="SolidBar"/>.</summary>
+    /// <summary>
+    /// Whether the acrylic sheet is up: asked for — or needed, to match the taskbar, whose
+    /// material is a blur (<see cref="UseTaskbarColor"/>) — and not ruled out by
+    /// <see cref="SolidBar"/>.
+    /// </summary>
     [JsonIgnore]
-    public bool Blurs => BlurBackground && !SolidBar;
+    public bool Blurs => (BlurBackground || UseTaskbarColor) && !SolidBar;
 
     /// <summary>
     /// The opacity the bar is painted at: <see cref="BarOpacity"/>, or solid under

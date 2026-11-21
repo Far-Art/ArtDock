@@ -68,7 +68,7 @@
     "Settings.Appearance.Roundness.Value": "{0:P0}",
     "Settings.Appearance.Colour": "Color",
     "Settings.Appearance.MatchTaskbar": "Match the taskbar",
-    "Settings.Appearance.MatchTaskbar.Hint": "Takes the color Windows tints the taskbar with, and keeps following it when the accent changes or the system switches between light and dark. The color chosen below is kept, and comes back when this is turned off.",
+    "Settings.Appearance.MatchTaskbar.Hint": "Paints the bar as Windows paints the taskbar, with the same blur, tint and edge, and keeps following it when the accent changes or the system switches between light and dark. The opacity, color and blur set here are kept, and come back when this is turned off.",
     "Settings.Appearance.Swatches": "Or start from one of these",
     "Settings.Appearance.SavedColours": "Your saved colors",
     "Settings.Appearance.NoSavedColours": "None yet. Pick a color, then Save it to keep it here.",

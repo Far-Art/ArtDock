@@ -1463,9 +1463,10 @@ public sealed partial class SettingsWindow : Window
         var color = BarPalette.Parse(BarColorBox.Text);
 
         // The swatch shows what the bar will actually be, which is not the box's colour
-        // while the taskbar is driving it.
+        // while the bar matches the taskbar: the taskbar's own colour then, as near as one
+        // colour comes to a material.
         BarColorPreview.Color = TaskbarColorCheck.IsChecked == true
-            ? TaskbarColour.Current()
+            ? TaskbarColour.Material().Solid
             : color;
 
         if (!_syncingColor)
@@ -1475,18 +1476,24 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Greys out everything the taskbar option overrides.
+    /// Greys out everything the taskbar option overrides: the opacity, the colour and the blur.
     /// </summary>
     /// <remarks>
     /// Rather than leaving the wheel and the swatches live and quietly ignored: a control
     /// that responds but changes nothing is worse than one that says it is not in charge.
+    /// Each keeps its value while it is greyed, and that is what is saved — the dock sets them
+    /// aside (<see cref="DockSettings.UseTaskbarColor"/>), so unticking the box puts back the
+    /// bar that was there. The blur's card is greyed by No GPU and by Windows as well, so it
+    /// is decided in the one place, with theirs.
     /// </remarks>
     private void UpdateColorControls()
     {
         var manual = TaskbarColorCheck.IsChecked != true;
 
-        ManualColorPanel.IsEnabled = manual;
-        BarColorBox.IsEnabled = manual;
+        // Each card as a whole, so its label and the colour's swatch dim with its controls.
+        OpacityCard.IsEnabled = manual;
+        ColorCard.IsEnabled = manual;
+        UpdateNoGpuControls();
     }
 
     private void OnTaskbarColorToggled()
@@ -2769,7 +2776,8 @@ public sealed partial class SettingsWindow : Window
         var note = noGpu ? Visibility.Visible : Visibility.Collapsed;
         var opaque = !noGpu && !TransparencyEffects.Enabled;
 
-        BlurCard.IsEnabled = !noGpu && !opaque;
+        // Nor is it the user's while the bar matches the taskbar, which is always blurred.
+        BlurCard.IsEnabled = !noGpu && !opaque && TaskbarColorCheck.IsChecked != true;
         NoGpuNote.Visibility = note;
         TransparencyOffNote.Visibility = opaque ? Visibility.Visible : Visibility.Collapsed;
 

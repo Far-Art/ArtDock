@@ -122,6 +122,51 @@ public class SheetFollowTests
         }
     }
 
+    /// <summary>
+    /// Given the taskbar's material, the sheet draws it — the compositor takes the recipe, the
+    /// grain and the hole in the shadow — and given none again, goes back to the dock's own blur.
+    /// </summary>
+    [Fact]
+    public void GivenTheTaskbarsMaterial_TheSheetDrawsIt_AndGoesBackToItsOwnBlur() => OnStaThread(() =>
+    {
+        var (host, bar) = Hosted(Fractional());
+        using (host)
+        using (var sheet = new BackdropWindow())
+        {
+            Pump(() => !bar.RenderedBarRect.IsEmpty);
+            Assert.True(sheet.Follow(bar, host.Handle));
+            Assert.False(sheet.DrawsMaterial);
+
+            foreach (var material in new[]
+                     {
+                         TaskbarMaterial.Neutral(light: true),
+                         TaskbarMaterial.Neutral(light: false),
+                         TaskbarMaterial.Accent(System.Windows.Media.Color.FromRgb(0x00, 0x1A, 0x6A))
+                     })
+            {
+                sheet.Material = material;
+                Assert.True(sheet.Follow(bar, host.Handle));
+                Assert.True(sheet.DrawsMaterial, $"the sheet would not draw {material}");
+            }
+
+            // A taskbar of one plain colour is no material: the dock paints that.
+            sheet.Material = TaskbarMaterial.Flat(System.Windows.Media.Colors.Black);
+            Assert.True(sheet.Follow(bar, host.Handle));
+            Assert.False(sheet.DrawsMaterial);
+
+            sheet.Material = TaskbarMaterial.Neutral(light: true);
+            Assert.True(sheet.Follow(bar, host.Handle));
+            Assert.True(sheet.DrawsMaterial);
+
+            sheet.Material = null;
+            Assert.True(sheet.Follow(bar, host.Handle));
+            Assert.False(sheet.DrawsMaterial);
+
+            // The bar is drawn where it was all the while.
+            Assert.False(sheet.DrawnBar.IsEmpty);
+        }
+    });
+
     [Fact]
     public void BeforeTheDockHasDrawnItsBar_TheSheetDrawsNothing() => OnStaThread(() =>
     {

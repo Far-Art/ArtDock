@@ -185,6 +185,16 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
+- **Matches the taskbar**, if asked (*Match the taskbar*, first on the Appearance page): the
+  bar is then painted with the taskbar's own material rather than a colour taken from it —
+  Windows' acrylic, by the recipe the taskbar uses (`Dock/TaskbarMaterial`,
+  `Interop/TaskbarAcrylic`), with the taskbar's edge line as its rim — and follows the light
+  and dark themes, the accent shown on the taskbar, a contrast theme and *Transparency
+  effects* as the taskbar does. The bar's own opacity, colour and blur are set aside, greyed
+  in the dialog and kept for when the box is unticked; roundness and the shadow stay the
+  dock's. The light theme's material was measured against the taskbar's pixels, on a display
+  at 100% and one at 150%, and came out within a level; the dark theme's and the accent's are
+  Windows' published values, not yet seen beside a taskbar.
 - **Follows Windows' *Transparency effects*** (Settings › Personalization › Colors). Off, Windows
   makes the taskbar solid, and the bar goes solid with it, with no blur behind it — painted as
   *No GPU* paints it, its colour at its opacity over grey, so the Opacity slider still does
@@ -635,7 +645,7 @@ lands; bring it back into the
   own — the dock is placed again within a quarter of a second, whether or not Windows said so.
 - **Configurable** live: dock size and the smallest the icons may be made to fit,
   magnification, influence range, gap, bar opacity, bar colour (hex, a colour wheel, a stock
-  swatch, one you have saved, or whatever Windows is tinting the taskbar with), corner
+  swatch, or one you have saved), corner
   roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
   displays — and where along its edge, always-on-top, hide/reveal delays, how fast the dock
@@ -724,7 +734,7 @@ src/ArtDock/
                AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
   Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
                WindowsApi, ShellIcons, ShellLink, AppLauncher, Autostart, MonitorDpi,
-               TaskbarColour, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
+               TaskbarColour, TaskbarAcrylic, CompositionEffects, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
                ShellIdList (what Explorer drags besides paths), ExplorerWindows (which
                folder each File Explorer window shows, for the folders' dots)
   Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using ArtDock.Controls;
+using ArtDock.Dock;
 using ArtDock.Interop;
 
 namespace ArtDock.Views;
@@ -267,7 +268,10 @@ public sealed class BackdropWindow : IDisposable
             var spanRight = double.IsFinite(onRight) ? ToWindow(new Point(onRight, 0)).X : width;
 
             Place(frame.Left, frame.Top, width, height);
-            Paint(dock.BarFill, DockBar.BarBorder);
+
+            // The taskbar's material is the sheet's to draw, and then nothing goes over it but
+            // the rim: a fill there would be a second tint.
+            Paint(Clad(scale) ? Colors.Transparent : dock.BarFill, dock.BarRim);
             Span(spanLeft, spanRight, width);
             Shape(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y, radius * scale, scale);
             return true;
@@ -391,6 +395,47 @@ public sealed class BackdropWindow : IDisposable
 
         _span = (left, right, width);
         _composition?.SetSpan(left, right, width);
+    }
+
+    /// <summary>
+    /// The taskbar's material, for the sheet to draw in place of the dock's own blur and fill —
+    /// or null, for those. Taken up at the next <see cref="Follow"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the composition path can draw it. On the fallback the dock goes on painting the bar,
+    /// in the nearest flat colour to it (<c>DockSettings.TaskbarPaint</c>).
+    /// </remarks>
+    public TaskbarMaterial? Material { get; set; }
+
+    /// <summary>The material last given to the sheet and the scale it was given at, and whether the sheet took it.</summary>
+    private (TaskbarMaterial? Material, double Scale)? _clad;
+
+    private bool _cladDrawn;
+
+    /// <summary>
+    /// True when the sheet is drawing <see cref="Material"/> as the bar, as of the last
+    /// <see cref="Follow"/> — and false on the dock's own blur, whether that was asked for or is
+    /// all this machine's sheet can do.
+    /// </summary>
+    public bool DrawsMaterial => _cladDrawn;
+
+    /// <summary>
+    /// Gives the sheet <see cref="Material"/>, if it has changed. True when the sheet draws it.
+    /// </summary>
+    /// <remarks>
+    /// Checked first like everything else here: the material is an effect the compositor builds,
+    /// and this runs on every tick of every slider.
+    /// </remarks>
+    private bool Clad(double scale)
+    {
+        if (_clad is { } last && last.Material == Material && Same(last.Scale, scale))
+        {
+            return _cladDrawn;
+        }
+
+        _clad = (Material, scale);
+        _cladDrawn = _composition?.SetMaterial(Material, scale) ?? false;
+        return _cladDrawn;
     }
 
     /// <summary>The colours last painted, so unchanged ones are not painted again.</summary>

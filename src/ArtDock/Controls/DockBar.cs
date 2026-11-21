@@ -144,7 +144,8 @@ public sealed class DockBar : Canvas
     internal static readonly Brush TooltipFill = Frozen(Color.FromArgb(0xF0, 0x14, 0x16, 0x20));
     internal static readonly Brush TooltipText = Frozen(Colors.White);
 
-    private readonly Pen _barBorder;
+    private Pen _barBorder;
+    private Color _barRim = BarBorder;
     private readonly List<DockItemVisual> _items = [];
 
     private Color _barColor = BarPalette.Default;
@@ -1955,6 +1956,26 @@ public sealed class DockBar : Canvas
         _barColor = resolved;
         _barOpacity = clamped;
         _barFill = Fill(resolved, clamped);
+        InvalidateVisual();
+    }
+
+    /// <summary>The bar's rim as it is painted: <see cref="BarBorder"/>, unless it has been given another.</summary>
+    public Color BarRim => _barRim;
+
+    /// <summary>
+    /// Sets the rim's colour — the taskbar's edge line, for a bar that matches the taskbar, and
+    /// <see cref="BarBorder"/> to put the dock's own back.
+    /// </summary>
+    public void SetBarRim(Color rim)
+    {
+        if (rim == _barRim)
+        {
+            return;
+        }
+
+        _barRim = rim;
+        _barBorder = new Pen(Frozen(rim), 1);
+        _barBorder.Freeze();
         InvalidateVisual();
     }
 

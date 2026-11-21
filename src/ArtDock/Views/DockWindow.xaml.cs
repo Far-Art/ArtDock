@@ -512,14 +512,27 @@ public sealed partial class DockWindow : Window
             FitToDisplay(settings);
             _dock.RowAlignment = settings.EdgeAlignment;
             // The colour, the opacity and the blur as they are in force, which No GPU overrides,
-            // and not as they are stored underneath it.
-            _dock.SetBarAppearance(settings.BarPaint(EffectiveBarColor(settings)), settings.BarAlpha);
+            // and not as they are stored underneath it. Matching the taskbar overrides all three
+            // as well: the bar is the taskbar's material then, drawn by the sheet, and what the
+            // dock paints is only for where there is no sheet to draw it.
+            var taskbar = settings.UseTaskbarColor ? TaskbarColour.Material() : (TaskbarMaterial?)null;
+            if (taskbar is { } material)
+            {
+                var (colour, alpha) = settings.TaskbarPaint(material);
+                _dock.SetBarAppearance(colour, alpha);
+            }
+            else
+            {
+                _dock.SetBarAppearance(settings.BarPaint(settings.BarColor), settings.BarAlpha);
+            }
+
+            _dock.SetBarRim(taskbar is null ? DockBar.BarBorder : TaskbarMaterial.Stroke);
             _dock.IconShadows = settings.CastsIconShadows;
 
             // Before the window is sized: a label in a bigger lettering needs more room above
             // the bar, which is the room SizeToDock gives it.
             _dock.SetLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
-            ApplyBackdrop(settings.Blurs, settings.CastsBarShadow);
+            ApplyBackdrop(settings.Blurs, settings.CastsBarShadow, taskbar);
 
             if (_previewing)
             {
@@ -834,12 +847,13 @@ public sealed partial class DockWindow : Window
     }
 
     /// <summary>
-    /// The colour the bar is actually painted: the taskbar's, when that is what was asked
-    /// for, and otherwise the one that was chosen.
+    /// The one colour nearest the bar's, for what has to be a plain colour — the handle, where
+    /// it cannot invert: the taskbar's solid colour when the bar matches the taskbar, and
+    /// otherwise the one that was chosen.
     /// </summary>
     private static string EffectiveBarColor(DockSettings settings) =>
         settings.UseTaskbarColor
-            ? BarPalette.ToHex(TaskbarColour.Current())
+            ? BarPalette.ToHex(TaskbarColour.Material().Solid)
             : settings.BarColor;
 
     /// <summary>
@@ -865,7 +879,11 @@ public sealed partial class DockWindow : Window
     /// Whether the dock draws the bar's shadow while it draws the bar: not under No GPU, where
     /// the shadow is most of what the wave costs. With the sheet up the shadow is the sheet's.
     /// </param>
-    private void ApplyBackdrop(bool enabled, bool shadow)
+    /// <param name="taskbar">
+    /// The taskbar's material, for the sheet to draw as the bar while the bar matches the
+    /// taskbar; null for the dock's own blur, under the bar's own colour.
+    /// </param>
+    private void ApplyBackdrop(bool enabled, bool shadow, TaskbarMaterial? taskbar)
     {
         if (!enabled)
         {
@@ -895,6 +913,7 @@ public sealed partial class DockWindow : Window
             _backdrop.Show();
         }
 
+        _backdrop.Material = taskbar;
         SyncBackdrop();
     }
 
