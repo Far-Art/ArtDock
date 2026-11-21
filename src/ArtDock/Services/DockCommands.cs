@@ -43,6 +43,16 @@ public static class DockCommands
     /// <summary>Target for the entry that opens the Start menu.</summary>
     public const string StartTarget = Scheme + "start";
 
+    /// <summary>
+    /// Target for a group of the dock's own: an item holding items, which a click opens above
+    /// itself (<see cref="PinnedAppSetting.Items"/>). Never run — the dock opens it.
+    /// </summary>
+    public const string GroupTarget = Scheme + "group";
+
+    /// <summary>Whether a target is a group of the dock's own — see <see cref="GroupTarget"/>.</summary>
+    public static bool IsGroup(string? target) =>
+        string.Equals(target?.Trim(), GroupTarget, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Whether a target is one of these rather than something to open.</summary>
     public static bool IsCommand(string? target) =>
         target is { Length: > 0 }
@@ -83,7 +93,9 @@ public static class DockCommands
     public static ImageSource? IconFor(string? target) =>
         string.Equals(target, StartTarget, StringComparison.OrdinalIgnoreCase)
             ? StartMark.Value
-            : null;
+            : IsGroup(target)
+                ? GroupArt.Empty
+                : null;
 
     private static readonly Lazy<ImageSource?> StartMark = new(() => Load("start.png"));
 

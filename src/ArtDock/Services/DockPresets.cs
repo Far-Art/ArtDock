@@ -45,6 +45,12 @@ public static class DockPresets
     /// <summary>Label a separator carries in the settings list.</summary>
     public static string SeparatorLabel => Localization.Localizer.Get("Preset.Separator");
 
+    /// <summary>Key for the entry that adds an empty group of the dock's own — see <see cref="DockCommands.GroupTarget"/>.</summary>
+    public const string GroupKey = "group";
+
+    /// <summary>What a new group is called.</summary>
+    public static string GroupLabel => Localization.Localizer.Get("Preset.Group");
+
     /// <summary>
     /// Where each preset lives, and what to call it if the file has no description. An
     /// ordered list rather than a map, because this is also the order the menu shows.
@@ -317,7 +323,10 @@ public static class DockPresets
                 .. Places.Select(place => new DockPreset(place.Key, place.Label, place.Path)),
                 .. Commands.Select(command => new DockPreset(command.Key, command.Label, command.Path))
             ],
-            [new DockPreset(SeparatorKey, SeparatorLabel)]
+            [
+                new DockPreset(GroupKey, GroupLabel, DockCommands.GroupTarget),
+                new DockPreset(SeparatorKey, SeparatorLabel)
+            ]
         ];
 
         return [.. groups.Where(group => group.Count > 0)];
@@ -335,6 +344,11 @@ public static class DockPresets
         if (key == SeparatorKey)
         {
             return CreateSeparator();
+        }
+
+        if (key == GroupKey)
+        {
+            return CreateGroup();
         }
 
         var place = Array.Find(
@@ -403,6 +417,11 @@ public static class DockPresets
         if (string.IsNullOrWhiteSpace(target))
         {
             return null;
+        }
+
+        if (DockCommands.IsGroup(target))
+        {
+            return GroupLabel;
         }
 
         var place = Array.Find(
@@ -484,6 +503,39 @@ public static class DockPresets
             TargetPath = "shell:" + parsingName
         };
     }
+
+    /// <summary>
+    /// The name for a new group, among those the dock has already: <c>Group</c>, or the first of
+    /// <c>Group 2</c>, <c>Group 3</c> and on that no group of them has — so two new groups left as
+    /// they came are told apart.
+    /// </summary>
+    public static string NextGroupLabel(IEnumerable<PinnedAppSetting> pins)
+    {
+        var taken = new HashSet<string>(
+            pins.Where(pin => pin.IsGroup).Select(pin => pin.Label.Trim()), StringComparer.CurrentCultureIgnoreCase);
+        if (!taken.Contains(GroupLabel))
+        {
+            return GroupLabel;
+        }
+
+        for (var number = 2; ; number++)
+        {
+            var label = Localization.Localizer.Format("Preset.Group.Numbered", GroupLabel, number);
+            if (!taken.Contains(label))
+            {
+                return label;
+            }
+        }
+    }
+
+    /// <summary>Builds a group of the dock's own, holding <paramref name="items"/> — none, unless given.</summary>
+    public static PinnedAppSetting CreateGroup(IEnumerable<PinnedAppSetting>? items = null) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Label = GroupLabel,
+        TargetPath = DockCommands.GroupTarget,
+        Items = [.. items ?? []]
+    };
 
     /// <summary>Builds a divider pin.</summary>
     public static PinnedAppSetting CreateSeparator() => new()

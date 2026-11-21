@@ -49,7 +49,8 @@ public sealed class FolderRowMarkConverter : IValueConverter
     /// </summary>
     public static bool IsFolder(PinnedAppSetting pin)
     {
-        if (pin.FolderColor is { Length: > 0 })
+        // A group of the dock's own is marked as a folder is: it holds icons, as a folder holds files.
+        if (pin.IsGroup || pin.FolderColor is { Length: > 0 })
         {
             return true;
         }

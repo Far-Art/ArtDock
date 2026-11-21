@@ -72,6 +72,39 @@ public sealed class DockItemVisual : FrameworkElement
     /// <summary>How much of its resting size the icon is currently drawn at, 0 to 1.</summary>
     private double _entryScale = 1;
 
+    /// <summary>How much bigger a group is drawn while an icon dragged over it would go into it.</summary>
+    public const double DropTargetGrowth = 1.32;
+
+    /// <summary>
+    /// The spring the swell rides, in radians a second: quick enough to answer the pointer, slow
+    /// enough to be seen to move — about a fifth of a second to settle.
+    /// </summary>
+    private const double DropSpring = 30;
+
+    /// <summary>
+    /// How damped the spring is on the way out: under 1, so the group overshoots a little and
+    /// settles back, as if it had opened to take the icon.
+    /// </summary>
+    private const double DropOutDamping = 0.55;
+
+    /// <summary>On the way back: critically damped, so it settles without dipping below its size.</summary>
+    private const double DropBackDamping = 1;
+
+    /// <summary>The longest step the spring is worked out in, in ms, so a slow frame cannot throw it.</summary>
+    private const double DropStepMs = 4;
+
+    /// <summary>The time constant of the change to the open look and back, in ms.</summary>
+    private const double OpenEaseMs = 40;
+
+    /// <summary>How much bigger than the wave asks the icon is drawn just now: 1, or on its way to or from <see cref="DropTargetGrowth"/>.</summary>
+    private double _dropScale = 1;
+
+    /// <summary>How fast <see cref="_dropScale"/> is changing, per second.</summary>
+    private double _dropVelocity;
+
+    /// <summary>How far a group is into its open look (<see cref="GroupArt.Open"/>), 0 to 1.</summary>
+    private double _openness;
+
     public DockItemVisual(DockItem item, double restingSize, bool isGhost = false)
     {
         Item = item;
@@ -199,6 +232,78 @@ public sealed class DockItemVisual : FrameworkElement
     }
 
     /// <summary>
+    /// Whether this is the group a dragged icon would go into if let go now. While it is, the
+    /// group opens to take it: it grows, with a little spring, and turns from its pale tile to a
+    /// dark one with a light rim around what it holds (<see cref="GroupArt.Open"/>). It closes
+    /// again once it is not.
+    /// </summary>
+    public bool IsDropTarget { get; set; }
+
+    /// <summary>How much bigger than the wave asks the icon is drawn just now, 1 at rest.</summary>
+    public double DropScale => _dropScale;
+
+    /// <summary>How far into its open look the icon is drawn just now, 0 to 1.</summary>
+    public double Openness => _openness;
+
+    /// <summary>
+    /// Advances the opening toward what <see cref="IsDropTarget"/> asks for — in one step when
+    /// <paramref name="instant"/>, for reduced motion.
+    /// </summary>
+    /// <returns>True while it is still on its way, including the frame it arrives on.</returns>
+    public bool AdvanceDrop(double deltaMs, bool instant)
+    {
+        var target = IsDropTarget ? DropTargetGrowth : 1;
+        var open = IsDropTarget ? 1.0 : 0.0;
+        if (Math.Abs(_dropScale - target) < EntryEpsilon && Math.Abs(_dropVelocity) < 0.01
+            && Math.Abs(_openness - open) < EntryEpsilon)
+        {
+            _dropScale = target;
+            _dropVelocity = 0;
+            SetOpenness(open);
+            return false;
+        }
+
+        if (instant)
+        {
+            _dropScale = target;
+            _dropVelocity = 0;
+            SetOpenness(open);
+            return true;
+        }
+
+        if (deltaMs > 0)
+        {
+            // A damped spring, worked out in short steps: pulled toward the target in proportion
+            // to how far off it is, and held back in proportion to how fast it is going.
+            var damping = IsDropTarget ? DropOutDamping : DropBackDamping;
+            for (var left = Math.Min(deltaMs, 100); left > 0; left -= DropStepMs)
+            {
+                var step = Math.Min(left, DropStepMs) / 1000;
+                var pull = (-DropSpring * DropSpring * (_dropScale - target))
+                    - (2 * damping * DropSpring * _dropVelocity);
+                _dropVelocity += pull * step;
+                _dropScale += _dropVelocity * step;
+            }
+
+            var eased = _openness + ((open - _openness) * (1 - Math.Exp(-deltaMs / OpenEaseMs)));
+            SetOpenness(Math.Abs(eased - open) < EntryEpsilon ? open : eased);
+        }
+
+        return true;
+    }
+
+    private void SetOpenness(double value)
+    {
+        if (Math.Abs(_openness - value) < 0.0001)
+        {
+            return;
+        }
+
+        _openness = value;
+        InvalidateVisual();
+    }
+
+    /// <summary>
     /// Points the visual at a new model without rebuilding it.
     /// </summary>
     /// <remarks>
@@ -245,6 +350,54 @@ public sealed class DockItemVisual : FrameworkElement
     }
 
 
+
+    /// <summary>
+    /// Whether the icon is off the dock: an open group's, which is the open group until that
+    /// closes back into it. Lifted, the icon is not drawn — only as much of its shadow as the
+    /// dock still has (<see cref="ShadowAmount"/>).
+    /// </summary>
+    public bool IsLifted
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// How much of the icon's shadow is drawn, 0 to 1: all of it, but for an open group's icon
+    /// as it leaves the dock and as it comes back.
+    /// </summary>
+    /// <remarks>
+    /// The open group's card is the icon on its way up and down, and draws the icon's shadow
+    /// under itself — this very picture — so that nothing of the shadow changes as the one takes
+    /// the other's place. While both are there, each draws its share, and the shares pass from
+    /// the one to the other. A card with a shadow of another make landed with a fainter one,
+    /// which the icon's own then replaced: a shadow that grew once the closing had ended, seen on
+    /// 2026-11-21. And the icon's shadow left in the slot for the card to land on showed bare
+    /// there, a shadow with nothing casting it, while the card was still on its way.
+    /// </remarks>
+    public double ShadowAmount
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    } = 1;
 
     /// <summary>
     /// Whether the icon casts a shadow — see <see cref="IconShadow"/>.
@@ -328,8 +481,9 @@ public sealed class DockItemVisual : FrameworkElement
 
         // An icon still arriving is drawn at a fraction of whatever the wave asked for, so
         // it grows in under the wave rather than instead of it.
-        _scale.ScaleX = factor * _entryScale;
-        _scale.ScaleY = factor * _entryScale;
+        // A group a dragged icon is over swells on top of both.
+        _scale.ScaleX = factor * _entryScale * _dropScale;
+        _scale.ScaleY = factor * _entryScale * _dropScale;
         _translate.X = deltaX;
     }
 
@@ -341,6 +495,19 @@ public sealed class DockItemVisual : FrameworkElement
         if (Item.IsSeparator)
         {
             DrawSeparator(drawingContext);
+            return;
+        }
+
+        if (IsLifted)
+        {
+            // Off the dock: what the dock still has of its shadow, and nothing else.
+            if (ShadowAmount > 0 && CastsShadow && Item.Icon is { } lifted && IconShadow.For(lifted) is { } cast)
+            {
+                drawingContext.PushOpacity(Math.Min(1, ShadowAmount));
+                drawingContext.DrawImage(cast.Image, cast.Around(DrawnBox(lifted)));
+                drawingContext.Pop();
+            }
+
             return;
         }
 
@@ -356,19 +523,35 @@ public sealed class DockItemVisual : FrameworkElement
 
         if (Item.Icon is { } icon)
         {
-            // A little breathing room, so neighbouring glyphs do not crowd each other at
-            // peak magnification where their boxes sit only a gap apart.
-            var inset = RestingSize * 0.08;
-            var drawn = Fit(icon, new Rect(inset, inset, RestingSize - (inset * 2), RestingSize - (inset * 2)));
+            var drawn = DrawnBox(icon);
 
             // Under the icon, and inside the same opacity, so it fades with it. The icon goes
             // over it exactly as it is drawn without one.
-            if (CastsShadow && IconShadow.For(icon) is { } shadow)
+            if (CastsShadow && ShadowAmount > 0 && IconShadow.For(icon) is { } shadow)
             {
+                var whole = ShadowAmount >= 1;
+                if (!whole)
+                {
+                    drawingContext.PushOpacity(ShadowAmount);
+                }
+
                 drawingContext.DrawImage(shadow.Image, shadow.Around(drawn));
+                if (!whole)
+                {
+                    drawingContext.Pop();
+                }
             }
 
-            drawingContext.DrawImage(icon, drawn);
+            // A group opening to take a dragged icon crosses from its own picture to the open
+            // one, drawn in the same box.
+            if (Item.IsGroup && _openness > 0)
+            {
+                DrawOpening(drawingContext, icon, drawn);
+            }
+            else
+            {
+                drawingContext.DrawImage(icon, drawn);
+            }
         }
         else
         {
@@ -385,6 +568,31 @@ public sealed class DockItemVisual : FrameworkElement
         {
             DrawBadge(drawingContext, badge);
         }
+    }
+
+    /// <summary>
+    /// Where the icon is drawn in the item's box: with a little breathing room, so neighbouring
+    /// glyphs do not crowd each other at peak magnification where their boxes sit only a gap apart.
+    /// </summary>
+    private Rect DrawnBox(ImageSource icon)
+    {
+        var inset = RestingSize * 0.08;
+        return Fit(icon, new Rect(inset, inset, RestingSize - (inset * 2), RestingSize - (inset * 2)));
+    }
+
+    /// <summary>A group's picture part of the way to its open look, the one fading as the other comes.</summary>
+    private void DrawOpening(DrawingContext drawingContext, ImageSource icon, Rect drawn)
+    {
+        if (_openness < 1)
+        {
+            drawingContext.PushOpacity(1 - _openness);
+            drawingContext.DrawImage(icon, drawn);
+            drawingContext.Pop();
+        }
+
+        drawingContext.PushOpacity(_openness);
+        drawingContext.DrawImage(GroupArt.Open([.. Item.Children.Select(child => child.Icon)]), drawn);
+        drawingContext.Pop();
     }
 
     /// <summary>

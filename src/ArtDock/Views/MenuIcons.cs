@@ -52,7 +52,16 @@ public enum MenuGlyph
     /// The symbol font's <em>StatusCircleBlock</em>, the circle the taskbar's <em>End task</em> draws:
     /// its <em>Blocked</em> is the same picture, but Segoe MDL2 Assets has no such glyph.
     /// </summary>
-    EndTask
+    EndTask,
+
+    /// <summary>The symbol font's <em>MoveToFolder</em>, for what puts an item in a group of the dock's.</summary>
+    MoveToGroup,
+
+    /// <summary>The symbol font's <em>NewFolder</em>, for what makes a group of an item.</summary>
+    NewGroup,
+
+    /// <summary>The symbol font's <em>Up</em>, for what takes an item out of its group and onto the dock.</summary>
+    MoveOutOfGroup
 }
 
 /// <summary>
@@ -166,6 +175,9 @@ public static class MenuIcons
         MenuGlyph.Administrator => "",
         MenuGlyph.NewWindow => "",
         MenuGlyph.EndTask => "",
+        MenuGlyph.MoveToGroup => "",
+        MenuGlyph.NewGroup => "",
+        MenuGlyph.MoveOutOfGroup => "",
         _ => throw new ArgumentOutOfRangeException(nameof(glyph), glyph, null)
     };
 

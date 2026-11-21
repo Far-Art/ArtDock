@@ -255,8 +255,8 @@
                     </Grid>
                 </Border>
 
-                <!-- What it opens -->
-                <Border Style="{StaticResource Card}">
+                <!-- What it opens: nothing to set for a group of the dock's own, which opens itself. -->
+                <Border x:Name="OpensCard" Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>

@@ -475,7 +475,7 @@ public static class FolderArt
     /// every 16 pixels. The supersampling was thrown away, and the symbols' edges came out in
     /// steps.
     /// </remarks>
-    private static BitmapSource Shrink(byte[] source, int big, int factor)
+    internal static BitmapSource Shrink(byte[] source, int big, int factor)
     {
         var small = big / factor;
         var area = factor * factor;

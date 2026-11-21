@@ -28,7 +28,9 @@ namespace ArtDock.Views;
 /// It never takes input: the dock has the mouse captured for the length of the drag, and the
 /// window is layered and <c>WS_EX_TRANSPARENT</c>, which is what keeps it out of the way of
 /// <c>WindowFromPoint</c> and of the dock's look at what covers it (<c>WindowChrome.IsClickThrough</c>).
-/// It is moved from the dock window's <c>WM_MOUSEMOVE</c>, by input, never by a frame clock.
+/// It is moved from the dock window's <c>WM_MOUSEMOVE</c>, by input, never by a frame clock —
+/// carried out of a group as well as pulled off the dock (see <c>DockWindow.BeginDragOutOfGroup</c>
+/// for what a frame clock did to it).
 /// </para>
 /// </remarks>
 public sealed class LiftedIconWindow : IDisposable
@@ -215,6 +217,22 @@ public sealed class LiftedIconWindow : IDisposable
                 _hwnd, 0, left, top, 0, 0,
                 NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOSIZE);
         }
+    }
+
+    /// <summary>Its window, while it is up; 0 before it has been shown and once it has gone.</summary>
+    public nint Hwnd => _disposed || _placed is null ? 0 : _hwnd;
+
+    /// <summary>Puts it back at the top, over whatever was raised above it since it was shown.</summary>
+    public void KeepOnTop()
+    {
+        if (_disposed || _placed is null)
+        {
+            return;
+        }
+
+        NativeMethods.SetWindowPos(
+            _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
     }
 
     /// <summary>Shows <i>Remove</i> over the icon, or takes it down.</summary>

@@ -181,6 +181,10 @@ internal static partial class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetWindowRect(nint hWnd, out NativeRect lpRect);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ClientToScreen(nint hWnd, ref NativePoint lpPoint);
+
     /// <summary>The window directly above this one in z-order.</summary>
     internal const uint GW_HWNDPREV = 3;
 
@@ -197,6 +201,9 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern nint SetCapture(nint hWnd);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetCapture();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

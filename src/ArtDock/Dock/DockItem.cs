@@ -117,6 +117,15 @@ public sealed class DockItem
     /// </summary>
     public bool IsOverflow { get; init; }
 
+    /// <summary>
+    /// A group of the dock's own: a click opens what it holds (<see cref="Children"/>) above it,
+    /// and its icon is the first four of them. Launches nothing itself.
+    /// </summary>
+    public bool IsGroup { get; init; }
+
+    /// <summary>What a group holds, in its order; empty for everything else.</summary>
+    public IReadOnlyList<DockItem> Children { get; init; } = [];
+
     /// <summary>Dimmed and non-activating; kept so a pin can outlive an uninstall.</summary>
     public bool IsDisabled { get; set; }
 
@@ -184,6 +193,12 @@ public sealed class DockItem
 
     private RunningTarget? FindRunningTarget()
     {
+        // Lit by what it holds, not by windows of its own — see DockWindow.RefreshRunningState.
+        if (IsGroup)
+        {
+            return null;
+        }
+
         if (ExplorerFolder is { } folder)
         {
             return new RunningTarget { Folder = folder };
@@ -209,6 +224,7 @@ public sealed class DockItem
     }
 
     /// <summary>True when clicking this item should do something.</summary>
+    /// <remarks>A group counts: a click on it opens it.</remarks>
     public bool IsLaunchable => !IsSeparator && !IsDisabled && ShellTarget.Length > 0;
 
     /// <summary>

@@ -104,6 +104,43 @@ public sealed class MenuHost : Window
         menu.IsOpen = true;
     }
 
+    /// <summary>
+    /// Shows a popup centred above a point on screen, in device pixels — an open group of the
+    /// dock's, above its icon. Placed as <see cref="ShowMenu"/> places a menu, from this window
+    /// moved to the point, and kept on the screen by WPF.
+    /// </summary>
+    /// <remarks>
+    /// The popup is centred by its own size and this window's, which WPF gives the placement in
+    /// the same units, whatever the display's scale — so nothing here converts between them.
+    /// </remarks>
+    public void ShowPopup(Popup popup, int screenX, int screenY)
+    {
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        var hwnd = new WindowInteropHelper(this).Handle;
+        NativeMethods.SetWindowPos(
+            hwnd, 0, screenX, screenY, 1, 1,
+            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOZORDER);
+
+        popup.PlacementTarget = this;
+        popup.Placement = PlacementMode.Custom;
+        popup.CustomPopupPlacementCallback = (size, target, _) =>
+        [
+            new CustomPopupPlacement(
+                new Point((target.Width - size.Width) / 2, -size.Height), PopupPrimaryAxis.Horizontal)
+        ];
+        popup.FlowDirection = Localizer.FlowDirection;
+
+        // As for a menu: without the foreground, a click outside the popup goes to whatever
+        // window is under it, and the popup is left hanging open.
+        NativeMethods.SetForegroundWindow(hwnd);
+
+        popup.IsOpen = true;
+    }
+
     /// <summary>A menu entry that runs its action once the menu has finished closing.</summary>
     /// <remarks>
     /// <para>

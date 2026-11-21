@@ -480,6 +480,30 @@ lands; bring it back into the
   size while its neighbours magnify around it — it is punctuation, not a target. Added from
   the same Add menu as everything else, and shown in the settings list as the rule it is
   rather than as an entry named *Separator*.
+- **Groups**: one icon on the dock that holds others. Its picture is the first four it holds,
+  two by two on a pale tile, as Windows 11's Start menu draws a folder; a click opens what it
+  holds above it — the icon lifting off the dock and opening out into it, and closing back down
+  into its place, unless motion is reduced — as a grid of icons with their names, scrolling past four rows, its title in place of
+  the icon's label; and a click on one of those opens it as a
+  click on the dock would — Shift and the middle button for another window included. A new one
+  comes from the Add menu's *Group*, named apart from the others (*Group 2*, *Group 3*), and opens
+  at once with its name selected, to be typed over — as a click on the open group's name does later;
+  an icon goes into one by being dragged along the dock and let go over the group's middle,
+  where the group grows with a little spring and turns dark with a light rim to show it will take
+  it, or from its menu's *Move to group*, which can also make a new group in its place. Files
+  dragged from Explorer go in the same way, let go over its middle — and need no room on the dock
+  to. Out of the open group an icon is dragged: onto the dock, where a gap opens for it; onto
+  another group's middle, into that one; or away from the dock and the group until *Remove*
+  shows, off the dock altogether. Let go anywhere else and it stays, the group open again. Its
+  right-click menu, or the menu key, opens over the open group, which stays open under it, and
+  *Move out of group* there puts it on the dock beside the group; *Remove from group* takes it off.
+  An item whose program has gone is drawn faded there and does not open, but its menu and
+  dragging still work. The group stays open while one of its icons is
+  dragged out, the icon's place faded in it. Its picture is always what it holds: the item
+  editor names it but offers no other icon. One level deep: a group holds no group and no
+  separator. Its dot is lit while anything in it runs. Removing a group that holds anything,
+  from its menu or by dragging it off the dock, asks whether its items go too (*Remove all*) or
+  stay on the dock where it was (*Keep items*).
 - **Starts with a usable dock, once**: a first run — meaning no settings file at all — gives
   the bar **Start**, **This PC**, the **User folder**, **Downloads**, **Settings**, a
   separator and the **Recycle Bin**, so a new install is never an empty strip. Those are on every machine; the
@@ -1309,8 +1333,8 @@ not yet tried on screen.
 Version 2 is planned: more than one dock, so a machine with
 several displays can have one on each; colours for the item labels; running apps shown on the
 dock as a Mac shows them, pinned or not; widgets, starting with a live clock and date;
-subdocks, groups of items that open as a second dock above the one they are on; and built-in
-translations beyond English. The blur keeping up with the bar was on this list, and is done.
+subdocks, groups of items that open as a second dock above the one they are on (groups
+that open as a grid instead are built); and built-in translations beyond English. The blur keeping up with the bar was on this list, and is done.
 
 ## Known gaps
 
@@ -1418,7 +1442,7 @@ translations beyond English. The blur keeping up with the bar was on this list, 
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand two hundred and forty-two tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and eighty-four tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1508,7 +1532,17 @@ shortcut chosen by program and app id; an app already on the dock found whatever
 pinned by; and where a new dock puts what the taskbar gave it. Five cover *Add defaults*: an
 empty list made a new dock's, a full one left alone, the user's own items kept in place with the
 missing defaults among those kept, the Recycle Bin's separator added only when needed, and a
-renamed default still counted as there.
+renamed default still counted as there. Twenty-nine cover groups: a group known by its target
+and never run as a command; its contents copied, not shared, when the settings are, read back
+from the file, and left out of it for any other pin; ids made unique inside it; a pin found and
+removed there by id; ungrouping, which leaves what it held where it was; nothing held that is a
+group or a separator; the Add menu's empty group, and a new group named apart from the others;
+its picture showing the first four in order and an empty place for each one missing, an empty
+one the tile alone, drawn once for the same icons, the four places inside the tile, and its open
+look dark round the same icons, and its icons alone on nothing, for the open group's card; the open group near square, never more
+than four across; and a group opening while an icon dragged onto it would go in, a little past its
+size and back, and closing without going under it, at once under reduced motion; and the open
+group's card put on the icon's tile by its scale and offset, the tile where the picture draws it.
 
 Twenty-five cover dropping those places, which Explorer drags as a shell ID list and no
 paths. One takes the data object the desktop itself hands to a drag of This PC and the Recycle

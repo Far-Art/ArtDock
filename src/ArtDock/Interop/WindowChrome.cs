@@ -333,11 +333,15 @@ public sealed class WindowChrome
     /// pointer is inside its hover zone, which is only ever a short walk — nothing above a
     /// dock that is on top, a few dozen windows above one that is buried.
     /// </remarks>
-    public bool IsCoveredAt(int x, int y)
+    /// <param name="x">The point's left, in physical screen pixels.</param>
+    /// <param name="y">The point's top, in physical screen pixels.</param>
+    /// <param name="passOver">A window of the dock's own not to count — an open group of its, which reaches over it.</param>
+    public bool IsCoveredAt(int x, int y, nint passOver = 0)
     {
         for (var window = Above(_hwnd); window != 0; window = Above(window))
         {
-            if (NativeMethods.GetWindowRect(window, out var rect)
+            if (window != passOver
+                && NativeMethods.GetWindowRect(window, out var rect)
                 && x >= rect.Left && x < rect.Right && y >= rect.Top && y < rect.Bottom
                 && TakesThePointer(window))
             {

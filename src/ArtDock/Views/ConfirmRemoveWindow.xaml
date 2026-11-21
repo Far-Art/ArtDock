@@ -85,6 +85,13 @@
                 Content="{DynamicResource Common.Cancel}"
                 IsCancel="True"
                 IsDefault="True" />
+            <!-- Only for a group holding something: removes the group and leaves what it held on
+                 the dock in its place, where Remove, beside it, takes all of it. -->
+            <Button
+                x:Name="KeepButton"
+                Margin="0,0,8,0"
+                MinWidth="96"
+                Visibility="Collapsed" />
             <Button
                 x:Name="RemoveButton"
                 MinWidth="96"

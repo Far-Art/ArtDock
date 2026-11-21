@@ -1200,7 +1200,10 @@ public sealed partial class SettingsWindow : Window
             IsSeparator = source.IsSeparator,
 
             // Edited is not added: a pin stays as new, or as old, as it was.
-            AddedAt = source.AddedAt
+            AddedAt = source.AddedAt,
+
+            // What a group holds is not the editor's: it goes on as it was, copied, not shared.
+            Items = source.Clone().Items
         };
 
     /// <summary>
@@ -1840,6 +1843,40 @@ public sealed partial class SettingsWindow : Window
             }
         }
     }
+
+    /// <summary>
+    /// Takes what the dock's groups hold now into this list's groups, where it differs — an
+    /// item moved out of one, renamed or removed in one from the dock while this dialog is open,
+    /// none of which changes the list's own rows. Each row keeps everything else of its own, so
+    /// an unsaved rename of the group survives; and a Save after it writes what the group holds
+    /// now, not what it held when the dialog opened.
+    /// </summary>
+    private void AdoptGroupContents(IReadOnlyList<PinnedAppSetting> stored)
+    {
+        foreach (var group in stored.Where(pin => pin.IsGroup))
+        {
+            var index = IndexOfPin(group.Id);
+            if (index < 0 || ContentsKey(_pinned[index]) == ContentsKey(group))
+            {
+                continue;
+            }
+
+            var selected = PinnedList.SelectedIndex == index;
+            var copy = _pinned[index].Clone();
+            copy.Items = group.Clone().Items;
+            _pinned[index] = copy;
+            if (selected)
+            {
+                PinnedList.SelectedIndex = index;
+            }
+        }
+    }
+
+    /// <summary>What a group holds, as one string, for telling whether two copies of it hold the same.</summary>
+    private static string ContentsKey(PinnedAppSetting group) =>
+        string.Join("\u001e", (group.Items ?? []).Select(item => string.Join(
+            "\u001f", item.Id, item.Label, item.TargetPath, item.Aumid, item.IconPath, item.FolderColor,
+            item.FolderSymbol, item.FolderText, item.FolderSymbolTone, item.UseIconNotThumbnail, item.RunAsAdministrator)));
 
     private int IndexOfPin(string id)
     {
@@ -3564,6 +3601,7 @@ public sealed partial class SettingsWindow : Window
             {
                 _loading = true;
                 ApplyOrder(settings.PinnedApps);
+                AdoptGroupContents(settings.PinnedApps);
                 _loading = false;
 
                 UpdateItemButtons();

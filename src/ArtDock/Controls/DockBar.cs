@@ -366,6 +366,18 @@ public sealed class DockBar : Canvas
     /// <summary>Slot the dragged item would land in.</summary>
     private int _dragTarget = -1;
 
+    /// <summary>
+    /// The group the dragged icon would go into if let go now — the pointer over the middle of
+    /// one of the dock's groups — or -1.
+    /// </summary>
+    private int _intoGroup = -1;
+
+    /// <summary>How much of a group's width at each side does not count as its middle: there, letting go moves the icon past it.</summary>
+    private const double GroupEdge = 0.2;
+
+    /// <summary>How the dragged icon is drawn while letting go would put it in a group.</summary>
+    private const double IntoGroupOpacity = 0.55;
+
     /// <summary>Where the press started, for measuring against the threshold.</summary>
     private double _pressX;
 
@@ -644,6 +656,16 @@ public sealed class DockBar : Canvas
 
     /// <summary>Raised when an icon pulled far enough from the dock that <i>Remove</i> showed is let go of: it is to come off the dock.</summary>
     public event EventHandler<DockItem>? DraggedOff;
+
+    /// <summary>Raised when a dragged icon is let go over the middle of one of the dock's groups: it is to go into it.</summary>
+    public event EventHandler<(DockItem Item, DockItem Group)>? DroppedIntoGroup;
+
+    /// <summary>
+    /// Whether an icon dragged onto a group may go into it — not while the dock's contents are
+    /// locked. Over a group the row still holds still while this is off; letting go there drops
+    /// the icon back where the gap is.
+    /// </summary>
+    public bool GroupDropEnabled { get; set; } = true;
 
     /// <summary>True from a press becoming a drag until it ends.</summary>
     public bool IsDragging => _dragging;
@@ -1143,6 +1165,7 @@ public sealed class DockBar : Canvas
 
         PinFocusPointer(claim: false, ease: previewMoved);
         LayoutAtRest();
+        ApplyHiddenItem();
         _paintedSizes = [];
         InvalidateVisual();
         BeginSlotAnimation();
@@ -1274,6 +1297,7 @@ public sealed class DockBar : Canvas
         {
             moving |= visual.AdvanceSlot(deltaMs);
             growing |= visual.AdvanceEntry(deltaMs);
+            growing |= visual.AdvanceDrop(deltaMs, instant: !MagnificationEnabled);
         }
 
         _slotsMoving = moving;
@@ -1590,11 +1614,15 @@ public sealed class DockBar : Canvas
     /// Holds one item magnified with its label open — the item a menu or edit dialog was
     /// opened for, so it stays the subject of what happens next.
     /// </summary>
+    /// <param name="item">The item to hold.</param>
+    /// <param name="showLabel">
+    /// Whether its label shows — not under an open group, whose title says the same thing.
+    /// </param>
     /// <returns>
     /// The claim on the focus, to hand back to <see cref="ReleaseFocus"/>; zero when there
     /// was no such item to hold.
     /// </returns>
-    public int FocusItem(DockItem item)
+    public int FocusItem(DockItem item, bool showLabel = true)
     {
         var index = _items.FindIndex(visual => ReferenceEquals(visual.Item, item));
         if (index < 0)
@@ -1611,7 +1639,7 @@ public sealed class DockBar : Canvas
         }
 
         _focusIsPreview = false;
-        FocusIndex(index, showLabel: true);
+        FocusIndex(index, showLabel);
 
         return _focusClaim;
     }
@@ -1694,6 +1722,55 @@ public sealed class DockBar : Canvas
     /// <summary>The previews and the way up to them, in physical screen pixels: see <see cref="HoldForPreviews"/>.</summary>
     private Int32Rect _previewsReach;
 
+    /// <summary>
+    /// Holds the wave on an open group's place as <see cref="HoldForPreviews"/> holds it under
+    /// window previews — frozen where it stood as the group opened, while the pointer is on the
+    /// place or up on the open group — or lets go, for null. A hold of its own, beside the
+    /// previews', which they let go of on their own schedule.
+    /// </summary>
+    /// <remarks>
+    /// Asked for on 2026-11-21. Not held, the wave followed the pointer up off the dock and fell
+    /// flat under the open group, and came back as it closed.
+    /// </remarks>
+    /// <param name="group">The open group, or null.</param>
+    /// <param name="reach">The open group's window, in physical screen pixels.</param>
+    public void HoldForGroup(DockItem? group, Int32Rect reach = default)
+    {
+        var id = group?.Id;
+        if (id is not null && reach is { Width: > 0, Height: > 0 } && PresentationSource.FromVisual(this) is not null)
+        {
+            var barTop = (int)Math.Ceiling(PointToScreen(new Point(0, BarBottom - Metrics.BarHeight)).Y);
+            reach = new Int32Rect(reach.X, reach.Y, reach.Width, Math.Max(reach.Height, barTop - reach.Y));
+        }
+
+        if (id == _groupFor && reach == _groupReach)
+        {
+            return;
+        }
+
+        if (id != _groupFor && _previewsFor is null)
+        {
+            _steadyCentre = null;
+            _steadyFor = null;
+        }
+
+        _groupFor = id;
+        _groupReach = reach;
+        EnsureRendering();
+        InvalidateVisual();
+    }
+
+    /// <summary>The open group the wave is held for, by <see cref="HoldForGroup"/>; null for none.</summary>
+    private string? _groupFor;
+
+    /// <summary>The open group's window and the way up to it, in physical screen pixels.</summary>
+    private Int32Rect _groupReach;
+
+    /// <summary>The item the wave is held for — the previews', or else an open group's — and where it reaches.</summary>
+    private string? HeldFor => _previewsFor ?? _groupFor;
+
+    private Int32Rect HeldReach => _previewsFor is not null ? _previewsReach : _groupReach;
+
     /// <summary>Whether the pointer was in reach when the previews last said where it is.</summary>
     private bool _previewsInReach;
 
@@ -1712,12 +1789,12 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private int SteadyIndex()
     {
-        if (_previewsFor is null)
+        if (HeldFor is not { } held)
         {
             return -1;
         }
 
-        var index = _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
+        var index = _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == held);
         if (index < 0)
         {
             return -1;
@@ -1743,9 +1820,9 @@ public sealed class DockBar : Canvas
     /// </summary>
     private double SteadyCentre(double pointer)
     {
-        if (_steadyFor != _previewsFor || _steadyCentre is null)
+        if (_steadyFor != HeldFor || _steadyCentre is null)
         {
-            _steadyFor = _previewsFor;
+            _steadyFor = HeldFor;
             _steadyCentre = pointer;
         }
 
@@ -1760,9 +1837,9 @@ public sealed class DockBar : Canvas
     /// frame loop last read it — is in reach of the previews; -1 otherwise.
     /// </summary>
     private int PreviewsIndex =>
-        _previewsFor is null || !InReach(_previewsReach, _screenCursor)
+        HeldFor is not { } held || !InReach(HeldReach, _screenCursor)
             ? -1
-            : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == _previewsFor);
+            : _items.FindIndex(visual => !visual.IsGhost && visual.Item.Id == held);
 
     /// <summary>Releases a claim taken by <see cref="FocusItem"/>, if it is still the current one.</summary>
     public void ReleaseFocus(int claim)
@@ -2229,7 +2306,7 @@ public sealed class DockBar : Canvas
 
         // A drop preview holds the dock flat and drives its own redraws; waking the wave
         // here would only start a ramp the next tick immediately cancels.
-        if (_renderingHooked || _ghostItems.Count > 0 || !TryGetLocalCursor(out var local))
+        if (_renderingHooked || _ghostItems.Count > 0 || DragHovering || !TryGetLocalCursor(out var local))
         {
             return;
         }
@@ -2261,6 +2338,7 @@ public sealed class DockBar : Canvas
     public void BeginPress()
     {
         Land();
+        SetIntoGroup(-1);
         EndDragOff();
         _dragging = false;
         _dragIndex = -1;
@@ -2352,6 +2430,7 @@ public sealed class DockBar : Canvas
         }
 
         _pressedIndex = -1;
+        SetIntoGroup(-1);
         EndDragOff();
         _dragging = false;
         _dragIndex = -1;
@@ -2398,13 +2477,219 @@ public sealed class DockBar : Canvas
         var state = _dragOff.Look(HoverTop - local.Y);
 
         // Off the dock, the gap stays where the icon came from, which is where letting go
-        // short of Remove's distance drops it back.
-        _dragTarget = state == DragOffState.OnBar ? SlotAt(local.X) : _dragIndex;
+        // short of Remove's distance drops it back. Over a group the row holds still, so the
+        // group stays under the pointer rather than sliding away from it as the gap opens; its
+        // middle is a way into it, and only past it does the gap move on.
+        var over = state == DragOffState.OnBar ? GroupUnder(local.X) : null;
+        if (over is var (group, across))
+        {
+            if (_dragTarget < 0)
+            {
+                _dragTarget = _dragIndex;
+            }
+
+            SetIntoGroup(GroupDropEnabled && across is > GroupEdge and < 1 - GroupEdge ? group : -1);
+        }
+        else
+        {
+            SetIntoGroup(-1);
+            _dragTarget = state == DragOffState.OnBar ? SlotAt(local.X) : _dragIndex;
+        }
 
         if (state != _dragOffShown)
         {
             AnnounceDragOff(state);
         }
+    }
+
+    /// <summary>
+    /// The group under the pointer as the row is drawn, other than the icon being dragged, and
+    /// how far across it the pointer is, 0 to 1 — or null when it is over no group, or the
+    /// dragged icon is one that cannot go in a group.
+    /// </summary>
+    private (int Index, double Across)? GroupUnder(double localX)
+    {
+        if (_dragIndex < 0 || _dragIndex >= _items.Count || _sizes.Length != _items.Count
+            || _offsets.Length != _items.Count)
+        {
+            return null;
+        }
+
+        var dragged = _items[_dragIndex].Item;
+        if (dragged.IsGroup || dragged.IsSeparator || dragged.IsOverflow)
+        {
+            return null;
+        }
+
+        return GroupAt(localX, skip: _dragIndex);
+    }
+
+    /// <summary>
+    /// The group drawn under <paramref name="localX"/>, other than the item at
+    /// <paramref name="skip"/> and any drop preview, and how far across it the point is, 0 to 1.
+    /// </summary>
+    private (int Index, double Across)? GroupAt(double localX, int skip)
+    {
+        if (_sizes.Length != _items.Count || _offsets.Length != _items.Count)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < _items.Count; i++)
+        {
+            if (i == skip || _items[i].IsGhost || !_items[i].Item.IsGroup)
+            {
+                continue;
+            }
+
+            var left = _iconsLeft + _offsets[i] + SlotShift(i);
+            var width = _sizes[i];
+            if (width > 0 && localX >= left && localX <= left + width)
+            {
+                return (i, (localX - left) / width);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether something new is being dragged over the dock — files from outside, or an item out
+    /// of one of its groups. The wave is held flat for as long as it is, preview or not.
+    /// </summary>
+    public bool DragHovering
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            if (value)
+            {
+                // The frame loop eases a standing wave down; it may not be running yet.
+                EnsureRendering();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Freezes the wave exactly as it stands, for an item carried out of an open group: it neither
+    /// follows the pointer nor lies down under the item's preview, from the item being picked up
+    /// until it is let go of.
+    /// </summary>
+    /// <remarks>
+    /// Asked for on 2026-11-21. Laid down for the preview and the preview opened after, the dock
+    /// narrowed by a slot's worth as the wave went and widened by it again as the gap came — two
+    /// quick changes of size that came to nothing, every time the item reached the dock. Frozen,
+    /// the only change is the gap's own: a slot wider as the item arrives, a slot narrower if it
+    /// leaves. A frozen wave moves no slot's edge under the pointer, which is what a preview is
+    /// otherwise laid flat for; and its centre is kept in the row's own measure, so a slot opening
+    /// beside it moves nothing but the icons past the gap.
+    /// </remarks>
+    public bool FreezeWave
+    {
+        get;
+        set
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            if (value)
+            {
+                // No label left up from where the pointer was as it froze.
+                UpdateHovered(local: null);
+            }
+
+            EnsureRendering();
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// How far a point on screen is past the top of the dock's space, away from its edge, in this
+    /// element's units: negative inside it. What <see cref="DragOff"/> measures an icon pulled off
+    /// the dock by.
+    /// </summary>
+    public double DistanceBeyond(Point screenPoint) =>
+        PresentationSource.FromVisual(this) is null ? double.NaN : HoverTop - PointFromScreen(screenPoint).Y;
+
+    /// <summary>
+    /// The group a drop from outside the dock — files dragged from Explorer — would go into at
+    /// <paramref name="screenPoint"/>: one whose middle it is over, as for an icon dragged along
+    /// the dock. Null over anything else, which a drop lands beside.
+    /// </summary>
+    /// <remarks>
+    /// Across only, the group's whole height and the room above and below it alike: a drag
+    /// coming down onto a group, or leaving one, never crosses a strip where it would be put on
+    /// the dock beside the group instead, for a frame or two on its way in. The caller has
+    /// already settled that the point is on the dock at all — the drag is over its window, or
+    /// inside its space.
+    /// </remarks>
+    public DockItem? DropGroupAt(Point screenPoint)
+    {
+        if (!GroupDropEnabled || PresentationSource.FromVisual(this) is null)
+        {
+            return null;
+        }
+
+        var local = PointFromScreen(screenPoint);
+        return GroupAt(local.X, skip: -1) is var (index, across) && across is > GroupEdge and < 1 - GroupEdge
+            ? _items[index].Item
+            : null;
+    }
+
+    /// <summary>
+    /// Opens <paramref name="group"/> to take a drop from outside the dock, as it opens for an icon
+    /// dragged onto it, or lets whichever group was open close again when null. While one is
+    /// open the drop's preview, if any, stays where it was and is not drawn: the drop is going
+    /// into the group, not beside it, and the row holding still keeps the group under the pointer.
+    /// </summary>
+    public void ShowDropInto(DockItem? group)
+    {
+        var index = group is null ? -1 : IndexOfItem(group);
+        SetIntoGroup(index);
+        foreach (var visual in _items)
+        {
+            if (visual.IsGhost)
+            {
+                visual.Opacity = index >= 0 ? 0 : DockItemVisual.GhostOpacity;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Marks the group letting go would put the dragged icon in: the group swells, as if opening
+    /// to take it, and the icon is drawn fainter over it. -1 lets the group settle back.
+    /// </summary>
+    private void SetIntoGroup(int group)
+    {
+        if (group == _intoGroup)
+        {
+            return;
+        }
+
+        _intoGroup = group;
+        for (var i = 0; i < _items.Count; i++)
+        {
+            _items[i].IsDropTarget = i == group;
+        }
+
+        if (_dragIndex >= 0 && _dragIndex < _items.Count && _dragOffShown == DragOffState.OnBar)
+        {
+            _items[_dragIndex].Opacity = group >= 0 ? IntoGroupOpacity : 1;
+        }
+
+        // The swell is drawn by the frame loop, which may have nothing else to do once the
+        // icon has been let go.
+        _iconsGrowing = true;
+        EnsureRendering();
     }
 
     /// <summary>
@@ -2488,7 +2773,27 @@ public sealed class DockBar : Canvas
     {
         var from = _dragIndex;
         var to = _dragTarget;
+        var into = _intoGroup;
         var armed = _dragOff.State == DragOffState.Armed;
+
+        // Let go over a group's middle: into the group, and the row closes over the gap.
+        if (!armed && into >= 0 && into < _items.Count && from >= 0 && from < _items.Count && from != into)
+        {
+            var visual = _items[from];
+            var group = _items[into].Item;
+
+            EndDragOff();
+            _dragging = false;
+            _dragIndex = -1;
+            _dragTarget = -1;
+            SetIntoGroup(-1);
+            ResetDisplayOrder();
+            SettleSlots();
+            visual.Opacity = 1;
+
+            DroppedIntoGroup?.Invoke(this, (visual.Item, group));
+            return true;
+        }
 
         if (armed && from >= 0 && from < _items.Count)
         {
@@ -2501,6 +2806,7 @@ public sealed class DockBar : Canvas
             _dragging = false;
             _dragIndex = -1;
             _dragTarget = -1;
+            SetIntoGroup(-1);
             ResetDisplayOrder();
             SettleSlots();
 
@@ -2534,6 +2840,7 @@ public sealed class DockBar : Canvas
         _dragging = false;
         _dragIndex = -1;
         _dragTarget = -1;
+        SetIntoGroup(-1);
 
         if (from < 0 || from >= _items.Count)
         {
@@ -2730,12 +3037,27 @@ public sealed class DockBar : Canvas
     /// <summary>Reads the cursor and either updates the wave's position or ends the gesture.</summary>
     private void TrackCursor()
     {
+        // Frozen, the wave stays exactly as it stands — neither following the pointer nor lying
+        // down for a preview — and the pointer is not read.
+        if (FreezeWave)
+        {
+            return;
+        }
+
         // A drop preview holds the dock flat. Sizes changing under the pointer would move
         // the very slot boundaries the drop is aiming at — the same reason a reorder drag
-        // suppresses the wave.
-        if (_ghostItems.Count > 0)
+        // suppresses the wave. So does any drag bringing something new onto the dock, preview
+        // or not: over a group it has none, and a wave standing there was flattened in one
+        // frame when the preview came, the dock jumping as the pointer moved off the group.
+        // Eased down where it stands, as when the pointer leaves, rather than dropped — the
+        // centre is let go only once there is nothing left of it.
+        if (_ghostItems.Count > 0 || DragHovering)
         {
-            ReleaseWaveCentre();
+            if (_progress <= 0.001)
+            {
+                ReleaseWaveCentre();
+            }
+
             UpdateHovered(local: null);
             if (_rampTo > 0)
             {
@@ -2838,7 +3160,7 @@ public sealed class DockBar : Canvas
 
             // Where it was frozen as they opened, if it was; the icon's middle otherwise.
             SetWaveCentre(
-                _steadyFor == _previewsFor && _steadyCentre is { } frozen ? frozen : _layout.RestingCentre(held),
+                _steadyFor == HeldFor && _steadyCentre is { } frozen ? frozen : _layout.RestingCentre(held),
                 WaveDriver.Parked);
             if (_rampTo < 1)
             {
@@ -3057,6 +3379,66 @@ public sealed class DockBar : Canvas
     public double PreviewFloor =>
         Math.Min(HoverTop, BarBottom - Metrics.PaddingY - Metrics.MaxSize - TooltipGap - _labelHeight);
 
+    /// <summary>
+    /// The top of a fully magnified icon, in this element's coordinates: what stands right above a
+    /// held item whose label is not showing — an open group.
+    /// </summary>
+    public double HeldIconTop => BarBottom - Metrics.PaddingY - Metrics.MaxSize;
+
+    /// <summary>The foot of every icon, magnified or not, in this element's coordinates.</summary>
+    public double IconFoot => BarBottom - Metrics.PaddingY;
+
+    /// <summary>The id of the item not drawn, its slot kept empty; null for none.</summary>
+    private string? _hiddenItemId;
+
+    /// <summary>
+    /// Leaves an item's slot empty, or fills it again for null: an open group, which is its icon
+    /// lifted off the dock until it closes back into it.
+    /// </summary>
+    public void HideItem(string? id)
+    {
+        _hiddenItemId = id;
+        ApplyHiddenItem();
+    }
+
+    /// <summary>The item the dock draws only part of the shadow of; null for none.</summary>
+    private string? _shadowItemId;
+
+    /// <summary>How much of that item's shadow the dock draws, 0 to 1.</summary>
+    private double _shadowAmount = 1;
+
+    /// <summary>
+    /// Has the dock draw only that much of an item's shadow, 0 to 1 — or, for null, all of every
+    /// item's again. An open group's icon's: its shadow passes to the group's card as the icon
+    /// lifts off the dock, and back as the card lands (<see cref="DockItemVisual.ShadowAmount"/>).
+    /// </summary>
+    public void ShadowOf(string? id, double amount)
+    {
+        amount = id is null ? 1 : Math.Clamp(amount, 0, 1);
+        if (id == _shadowItemId && amount == _shadowAmount)
+        {
+            return;
+        }
+
+        _shadowItemId = id;
+        _shadowAmount = amount;
+        ApplyHiddenItem();
+    }
+
+    private void ApplyHiddenItem()
+    {
+        foreach (var visual in _items)
+        {
+            if (visual.IsGhost)
+            {
+                continue;
+            }
+
+            visual.IsLifted = _hiddenItemId is not null && visual.Item.Id == _hiddenItemId;
+            visual.ShadowAmount = _shadowItemId is not null && visual.Item.Id == _shadowItemId ? _shadowAmount : 1;
+        }
+    }
+
     /// <summary>The tallest label's bubble, padding included, as <see cref="RefreshTooltipReserve"/> last measured it.</summary>
     private double _labelHeight;
 
@@ -3068,6 +3450,22 @@ public sealed class DockBar : Canvas
     {
         var index = IndexOfItem(item);
         return index < 0 ? null : RestingBarLeft() + _layout.HeldCentre(_items.Count, index);
+    }
+
+    /// <summary>
+    /// How far to either side of where it rests the wave can carry an item, at the most: half of
+    /// what the wave adds to the row (<see cref="DockLayout.WaveReach"/>).
+    /// </summary>
+    public double WaveReach => MagnificationEnabled ? _layout.WaveReach : 0;
+
+    /// <summary>
+    /// Where an item's middle is at rest — the wave flat — in this element's coordinates; null
+    /// when the dock does not have it.
+    /// </summary>
+    public double? RestingCentreX(DockItem item)
+    {
+        var index = IndexOfItem(item);
+        return index < 0 ? null : RestingBarLeft() + _layout.RestingCentre(index);
     }
 
     private int IndexOfItem(DockItem item)
@@ -3826,6 +4224,13 @@ public sealed class DockBar : Canvas
     {
         if (index < 0 || index >= _sizes.Length || index >= _items.Count
             || _items[index].Item.IsSeparator)
+        {
+            return;
+        }
+
+        // An item not drawn — an open group, lifted off the dock — has no label either: the open
+        // group shows its name.
+        if (_hiddenItemId is not null && !_items[index].IsGhost && _items[index].Item.Id == _hiddenItemId)
         {
             return;
         }

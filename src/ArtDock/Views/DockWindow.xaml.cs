@@ -165,12 +165,26 @@ public sealed partial class DockWindow : Window
         _settings = settings;
         _applied = settings.Current;
         _menus = menus;
+
+        // The open group stays open by itself, to close back into its icon: a click on another
+        // window takes the foreground from the menus' window, and that closes it. Not a click on
+        // the dock, which takes the foreground too, and is the dock's to answer — on the group's
+        // own place, by turning the group round. Answered here as well, the group began to close
+        // and the dock's answer turned it back up: the click seemed to do nothing.
+        _menus.Deactivated += (_, _) =>
+        {
+            if (!PointerOnDockWindow())
+            {
+                _flyout?.Close();
+            }
+        };
         _dock = new DockBar(settings.Current.Metrics);
         _dock.Activated += OnItemActivated;
         _dock.Reordered += OnItemReordered;
         _dock.DragOffChanged += OnDragOffChanged;
         _dock.DraggedOff += OnDraggedOff;
         _dock.DroppedBack += OnDroppedBack;
+        _dock.DroppedIntoGroup += OnDroppedIntoGroup;
 
         // The dock decides how big a window it needs — a drop preview adds a slot, a taller
         // label wants more headroom — and neither is a settings change, so neither reaches
@@ -207,6 +221,10 @@ public sealed partial class DockWindow : Window
             // an excluded game included, which is what a dock restarted in the middle of one
             // used to be drawn over until something moved it.
             CheckFront();
+
+            // Once the dock has nothing else to do: so the first group opened opens as quickly as
+            // the rest (GroupFlyout.WarmUp).
+            Dispatcher.BeginInvoke(GroupFlyout.WarmUp, DispatcherPriority.ApplicationIdle);
         };
         Root.Children.Add(_dock);
 
@@ -342,8 +360,10 @@ public sealed partial class DockWindow : Window
         // taskbar; reported after a wake on 2026-09-30. On its way back it is no different: the
         // pointer that brought it is right there at the edge, and the wave started under a bar
         // still sliding up — asked the same day to wait until the slide has landed.
+        // Not by an open group of its own, though: it reaches down over the group's place on the
+        // dock, and counted, it switched the wave off while open and on again once it closed.
         var chrome = _chrome;
-        _dock.IsCoveredAt = (x, y) => !IsSettled || chrome.IsCoveredAt(x, y);
+        _dock.IsCoveredAt = (x, y) => !IsSettled || chrome.IsCoveredAt(x, y, OpenGroupWindow());
 
         // Clicks have to come from the window procedure: the dock is deliberately
         // WS_EX_NOACTIVATE, and WPF does not route mouse input to a non-activating window.
@@ -442,11 +462,14 @@ public sealed partial class DockWindow : Window
             // Fitted to the display, which is what puts them on the dock.
             FitToDisplay(settings);
             RefreshRunningState();
+            RefreshOpenGroup();
+            NameArrivedGroup();
         }
 
         // Not in ApplyAppearance: that path is what a slider drag takes, and this is about
         // what the dock will let you do rather than about how it looks.
         _dock.ReorderEnabled = !settings.LockItemOrder;
+        _dock.GroupDropEnabled = !settings.LockItemContents;
 
         // The hotkeys in force, which the settings dialog previews like everything else — so a
         // new one can be tried before Save, and Cancel puts the old one back. Nothing is asked
@@ -1075,20 +1098,25 @@ public sealed partial class DockWindow : Window
     private static string SignatureOf(DockSettings settings) =>
         settings.IconSet + '' + string.Join(
             '',
-            settings.PinnedApps.Select(pin => string.Join(
-                '',
-                pin.Id,
-                pin.Label,
-                pin.TargetPath,
-                pin.Aumid,
-                pin.IconPath,
-                pin.UseIconNotThumbnail ? "icon" : null,
-                pin.FolderColor,
-                pin.FolderSymbol,
-                pin.FolderText,
-                pin.FolderSymbolTone,
-                pin.RunAsAdministrator ? "admin" : null,
-                pin.IsSeparator ? "sep" : null)));
+            settings.PinnedApps.Select(PinSignature));
+
+    /// <summary>One pin's part of <see cref="SignatureOf"/>: a group's, with what it holds.</summary>
+    private static string PinSignature(PinnedAppSetting pin) =>
+        string.Join(
+            '',
+            pin.Id,
+            pin.Label,
+            pin.TargetPath,
+            pin.Aumid,
+            pin.IconPath,
+            pin.UseIconNotThumbnail ? "icon" : null,
+            pin.FolderColor,
+            pin.FolderSymbol,
+            pin.FolderText,
+            pin.FolderSymbolTone,
+            pin.RunAsAdministrator ? "admin" : null,
+            pin.IsSeparator ? "sep" : null,
+            pin.Items is { } items ? '' + string.Join('', items.Select(PinSignature)) : null);
 
     /// <summary>What a button coming up asks for, by the keys its message says were held.</summary>
     private static DockClick ClickOf(bool middle, nint wParam) =>
@@ -1106,6 +1134,7 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
+
         // A dock that has not settled on screen — hidden, or sliding either way — starts
         // nothing. Hidden it is click-through as well, but that is a window style, and a hidden
         // dock should not depend on one flag to be out of the way; sliding back it is not, and a
@@ -1122,6 +1151,64 @@ public sealed partial class DockWindow : Window
                 or NativeMethods.WM_RBUTTONUP)
         {
             EndKeyboard(giveBack: true);
+        }
+
+        // A new press on the dock: whatever click was to be skipped has been and gone.
+        if (msg == NativeMethods.WM_LBUTTONDOWN)
+        {
+            _groupClickToSkip = null;
+        }
+
+        // A click on the dock while a group is open, or on its way up or down. On the group's own
+        // place it turns the group round, from wherever it is: going up or open, it goes back
+        // down; going down, it comes back up. Between the icons it closes it, and that is all;
+        // on another icon it closes it and goes on to that icon, as a click on the dock would —
+        // nothing has to be clicked twice.
+        if (_flyout is { IsOpen: true, Morphs: true } open && _groupDrag is null
+            && msg is NativeMethods.WM_LBUTTONDOWN or NativeMethods.WM_RBUTTONUP or NativeMethods.WM_MBUTTONDOWN)
+        {
+            var under = _dock.ItemUnderCursor();
+            if (OnGroupsPlace(open.Group) || under?.Id == open.Group.Id)
+            {
+                ToggleGroup(open);
+                handled = true;
+                return 0;
+            }
+
+            open.Close();
+            if (under is null)
+            {
+                handled = true;
+                return 0;
+            }
+
+            // The group held the dock, which read nothing of the pointer while it did: let go now,
+            // so the press is on the icon actually under it.
+            _dock.ReleaseFocus(_flyoutClaim);
+        }
+
+        // An item being dragged out of a group has the mouse, captured here: its moves and its
+        // letting go are the drag's, wherever the pointer is, as an icon pulled off the dock's
+        // are. The capture taken away mid-way does not call the drag off — it is watched for the
+        // button from then on (WatchGroupDrag).
+        if (_groupDrag is { } dragging)
+        {
+            switch (msg)
+            {
+                case NativeMethods.WM_MOUSEMOVE:
+                    UpdateGroupDrag();
+                    handled = true;
+                    return 0;
+
+                case NativeMethods.WM_LBUTTONUP:
+                    EndGroupDrag(cancel: false);
+                    handled = true;
+                    return 0;
+
+                case NativeMethods.WM_CAPTURECHANGED:
+                    dragging.Captured = false;
+                    return 0;
+            }
         }
 
         switch (msg)
@@ -1259,25 +1346,54 @@ public sealed partial class DockWindow : Window
         // Whatever DragLeave may have just claimed, the drag is plainly still here.
         _dropLeaving = false;
 
-        // Something is being carried onto the dock: the previews would only be in its way.
+        // Something is being carried onto the dock: the previews would only be in its way, and
+        // the wave is held flat under it, over a group as well as at the preview.
         _previews?.Dismiss();
+        _dock.DragHovering = true;
 
-        e.Effects = PrepareDrop(e) ? DroppedItems.Effect(e.AllowedEffects) : DragDropEffects.None;
-        var pinnable = e.Effects != DragDropEffects.None;
+        var point = PointToScreen(e.GetPosition(this));
+        var (pinnable, group) = AimDrop(e, point);
+        e.Effects = pinnable ? DroppedItems.Effect(e.AllowedEffects) : DragDropEffects.None;
         e.Handled = true;
 
-        if (pinnable)
+        // Over a group's middle the group opens to take it, and the preview beside it waits;
+        // anywhere else the preview shows where it would land.
+        _dock.ShowDropInto(group);
+        if (group is null)
         {
-            _dock.ShowGhosts(_dropGhosts, PointToScreen(e.GetPosition(this)));
-        }
-        else
-        {
-            _dock.ClearGhosts();
+            if (pinnable)
+            {
+                _dock.ShowGhosts(_dropGhosts, point);
+            }
+            else
+            {
+                _dock.ClearGhosts();
+            }
         }
 
         // A refused drop shows no preview, so without this the dock's answer to a deliberate
         // gesture is nothing at all.
-        _dock.ShowDropNotice(pinnable ? null : _dropRefusal);
+        _dock.ShowDropNotice(pinnable ? null : _dropRefusal ?? FullNotice);
+    }
+
+    /// <summary>
+    /// Whether the drag would be taken at <paramref name="point"/>, and the group it would go
+    /// into there, if any: one whose middle it is over. Into a group it needs no room on the
+    /// dock; beside one, all of it must fit, as for any drop.
+    /// </summary>
+    private (bool Pinnable, DockItem? Group) AimDrop(DragEventArgs e, Point point)
+    {
+        if (!PrepareDrop(e))
+        {
+            return (false, null);
+        }
+
+        if (_dock.DropGroupAt(point) is { } group)
+        {
+            return (true, group);
+        }
+
+        return (_dropPins.Count <= RoomFor(_pins.Count), null);
     }
 
     /// <summary>
@@ -1328,14 +1444,15 @@ public sealed partial class DockWindow : Window
 
         // The effect is the source's to act on, so it says what was done — a copy or a link,
         // and never the move the source may also have offered.
-        e.Effects = PrepareDrop(e) ? DroppedItems.Effect(e.AllowedEffects) : DragDropEffects.None;
-        var pinnable = e.Effects != DragDropEffects.None;
+        var point = PointToScreen(e.GetPosition(this));
+        var (pinnable, group) = AimDrop(e, point);
+        e.Effects = pinnable ? DroppedItems.Effect(e.AllowedEffects) : DragDropEffects.None;
 
         // Where the preview was sitting, which is where the user was told it would land —
         // read before it is cleared, since clearing forgets the slot.
         var index = _dock.IsShowingGhosts
             ? _dock.GhostDropIndex
-            : _dock.DropIndexAt(PointToScreen(e.GetPosition(this)));
+            : _dock.DropIndexAt(point);
 
         var pins = _dropPins;
         _dropLeaving = false;
@@ -1347,15 +1464,28 @@ public sealed partial class DockWindow : Window
         }
 
         var settings = ContentsToSave();
-        index = Math.Clamp(index, 0, settings.PinnedApps.Count);
 
         // Stamped as they land, for the settings dialog's New mark (PinnedAppSetting.AddedAt).
         var now = DateTimeOffset.UtcNow;
         foreach (var pin in pins)
         {
             pin.AddedAt = now;
-            settings.PinnedApps.Insert(index, pin);
-            index++;
+        }
+
+        if (group is not null)
+        {
+            // Into the group, after what it holds already.
+            if (settings.FindPin(group.Id) is not { IsGroup: true } into)
+            {
+                return;
+            }
+
+            (into.Items ??= []).AddRange(pins);
+        }
+        else
+        {
+            index = Math.Clamp(index, 0, settings.PinnedApps.Count);
+            settings.PinnedApps.InsertRange(index, pins);
         }
 
         // Saving is what applies it: the store raises Changed, and ApplySettings
@@ -1440,6 +1570,8 @@ public sealed partial class DockWindow : Window
         _dropPins = [];
         _dropGhosts = [];
         _dropRefusal = null;
+        _dock.DragHovering = false;
+        _dock.ShowDropInto(null);
         _dock.ClearGhosts();
         _dock.ShowDropNotice(null);
     }
@@ -1466,7 +1598,7 @@ public sealed partial class DockWindow : Window
         // What the dock is showing, not what is stored. With the settings dialog open the
         // two differ, and it is the shown one the drop is being aimed at.
         var pinned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in _pins)
+        foreach (var item in _pins.SelectMany(EveryItem))
         {
             if (PinnedAppsService.TargetKey(item.TargetPath) is { } existing)
             {
@@ -1493,13 +1625,9 @@ public sealed partial class DockWindow : Window
             pins.Add(pin);
         }
 
-        // All or nothing: a drop that pinned some of what it holds would leave the rest to be
-        // found missing later.
-        if (pins.Count > RoomFor(_pins.Count))
-        {
-            return ([], FullNotice);
-        }
-
+        // Whether it all fits on the dock is asked where it is aimed (AimDrop): into a group it
+        // needs no room on the dock. All or nothing beside one — a drop that pinned some of what
+        // it holds would leave the rest to be found missing later.
         if (pins.Count > 0)
         {
             return (pins, null);
@@ -1549,8 +1677,15 @@ public sealed partial class DockWindow : Window
     /// with its first entry lit as Windows' own menus do — or null for at the cursor.
     /// </param>
     /// <param name="closed">Told, once the menu has gone, whether an entry was chosen from it.</param>
+    /// <param name="onGroup">
+    /// The open group the item was right-clicked in, and its tile: the menu opens over it, and
+    /// the group stays open under it (<see cref="GroupFlyout.ShowMenu"/>).
+    /// </param>
     private bool ShowMenuFor(
-        DockItem? item, NativeMethods.NativePoint? at = null, Action<bool>? closed = null)
+        DockItem? item,
+        NativeMethods.NativePoint? at = null,
+        Action<bool>? closed = null,
+        (GroupFlyout Flyout, UIElement Tile)? onGroup = null)
     {
         // The overflow item is no item to edit or take off: right-clicked, it is the dock's own
         // menu, as the bar between icons is.
@@ -1597,7 +1732,7 @@ public sealed partial class DockWindow : Window
         // New window is the other way about: there only while the item is open, since a click
         // on one that is not starts it anyway. It is what Shift+click and the middle button do.
         var acts = false;
-        if (item is { IsLaunchable: true, IsRunning: true })
+        if (item is { IsLaunchable: true, IsRunning: true, IsGroup: false })
         {
             menu.Items.Add(MenuHost.Item(
                 Localizer.Get("Menu.NewWindow"), MenuGlyph.NewWindow, () => Open(item, DockClick.NewWindow)));
@@ -1615,7 +1750,7 @@ public sealed partial class DockWindow : Window
 
         // End task, while the app is open, asked first. Greyed where every process it would end
         // runs as administrator, which Windows does not let the dock end.
-        if (item is { IsRunning: true, ExplorerFolder: null, Document: null }
+        if (item is { IsRunning: true, IsGroup: false, ExplorerFolder: null, Document: null }
             && EndTask.TargetsOf(_runningApps.WindowsOf(item.RunningTarget)) is { Count: > 0 } targets)
         {
             var header = Localizer.Get("Menu.EndTask");
@@ -1647,6 +1782,9 @@ public sealed partial class DockWindow : Window
         }
         else if (item is not null)
         {
+            // The group on the dock that holds it, for an item in one.
+            var holder = GroupHolding(item);
+
             // A separator has no name, no icon and nothing to launch, so it has nothing the
             // edit dialog could act on.
             if (!item.IsSeparator)
@@ -1655,10 +1793,19 @@ public sealed partial class DockWindow : Window
                     Localizer.Get("Menu.EditItem"), MenuGlyph.Edit, () => ShowEditDialog(item)));
             }
 
+            foreach (var entry in GroupEntries(item, holder))
+            {
+                menu.Items.Add(entry);
+            }
+
             // Unpin rather than a bin: nothing is deleted, and the bin is the Empty Recycle
-            // Bin entry's, which can be in this same menu.
+            // Bin entry's, which can be in this same menu. In a group, said as the question
+            // that follows says it.
             menu.Items.Add(MenuHost.DangerItem(
-                Localizer.Get(item.IsSeparator ? "Menu.RemoveSeparator" : "Menu.RemoveFromDock"),
+                Localizer.Get(
+                    item.IsSeparator ? "Menu.RemoveSeparator"
+                    : holder is null ? "Menu.RemoveFromDock"
+                    : "Menu.RemoveFromGroup"),
                 MenuGlyph.Unpin,
                 () => ConfirmRemove(item)));
 
@@ -1690,11 +1837,18 @@ public sealed partial class DockWindow : Window
         }
 
         // Hold the icon the menu belongs to: magnified, label showing, so it is obvious
-        // which one is about to be edited or removed. Released when the menu goes, whether
-        // anything was chosen or not.
+        // which one is about to be edited or removed — or, for an item in a group, the group.
+        // Released when the menu goes, whether anything was chosen or not. An open group holds
+        // its own icon already, and goes on holding it after the menu.
         _previews?.Dismiss();
-        HoldRevealed(true);
-        var claim = item is null ? 0 : _dock.FocusItem(item);
+        var holds = onGroup is null;
+        var claim = 0;
+        if (holds)
+        {
+            HoldRevealed(true);
+            var held = item is null ? null : GroupHolding(item) is { } groupOf ? Shown(groupOf) : item;
+            claim = held is null ? 0 : _dock.FocusItem(held);
+        }
 
         // Clicks on any entry, in a submenu as well, come up to the menu.
         var chosen = false;
@@ -1712,12 +1866,24 @@ public sealed partial class DockWindow : Window
             // By claim, because this runs after the entry's action has already taken the
             // focus for itself — see DockBar._focusClaim. The reveal is a counter and needs
             // no such care: whoever took the next hold has their own.
-            _dock.ReleaseFocus(claim);
-            HoldRevealed(false);
+            if (holds)
+            {
+                _dock.ReleaseFocus(claim);
+                HoldRevealed(false);
+            }
+
             closed?.Invoke(chosen);
         };
 
-        _menus.ShowMenu(menu, cursor.X, cursor.Y);
+        if (onGroup is var (flyout, tile))
+        {
+            flyout.ShowMenu(menu, tile);
+        }
+        else
+        {
+            _menus.ShowMenu(menu, cursor.X, cursor.Y);
+        }
+
         return true;
     }
 
@@ -1867,6 +2033,15 @@ public sealed partial class DockWindow : Window
         }
 
         var settings = ContentsToSave();
+
+        // A new group is named apart from the others, and opens as it arrives, its name ready to
+        // be typed over.
+        if (pins is [{ IsGroup: true } group])
+        {
+            group.Label = DockPresets.NextGroupLabel(settings.EveryPin());
+            _nameOnArrival = group.Id;
+        }
+
         settings.PinnedApps.InsertRange(Math.Clamp(index, 0, settings.PinnedApps.Count), pins);
         _settings.Save(settings);
     }
@@ -1930,14 +2105,24 @@ public sealed partial class DockWindow : Window
         // A name lands on the dock as it is typed, so the preview is the real thing rather
         // than a box in a dialog — and on the item being edited, which is the one whose label
         // the user is actually looking at.
-        editor.PreviewChanged += (_, _) => _dock.PreviewLabel(editor.EditedLabel);
+        editor.PreviewChanged += (_, _) =>
+        {
+            if (GroupHolding(item) is null)
+            {
+                _dock.PreviewLabel(editor.EditedLabel);
+            }
+        };
 
         // The dialog is modal, so this blocks until it closes; the hold and the focus both
         // have to be released either way, including if it throws.
         bool saved;
         HoldRevealed(true);
-        var claim = _dock.FocusItem(item);
-        _dock.PreviewLabel(item.Label);
+        var holder = GroupHolding(item);
+        var claim = _dock.FocusItem(holder is null ? item : Shown(holder));
+        if (holder is null)
+        {
+            _dock.PreviewLabel(item.Label);
+        }
         try
         {
             saved = editor.ShowDialog() == true;
@@ -1954,8 +2139,7 @@ public sealed partial class DockWindow : Window
         }
 
         var settings = ContentsToSave();
-        var pin = settings.PinnedApps.FirstOrDefault(candidate => candidate.Id == item.Id);
-        if (pin is null)
+        if (settings.FindPin(item.Id) is not { } pin)
         {
             return;
         }
@@ -1970,8 +2154,11 @@ public sealed partial class DockWindow : Window
         pin.FolderText = editor.EditedFolderText;
         pin.FolderSymbolTone = editor.EditedFolderSymbolTone;
         pin.RunAsAdministrator = editor.EditedRunAsAdministrator;
-        pin.TargetPath = editor.EditedTargetPath;
-        pin.Aumid = editor.EditedAumid;
+        if (!pin.IsGroup)
+        {
+            pin.TargetPath = editor.EditedTargetPath;
+            pin.Aumid = editor.EditedAumid;
+        }
 
         _settings.Save(settings);
     }
@@ -1986,11 +2173,12 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private void ConfirmRemove(DockItem item)
     {
-        var dialog = new ConfirmRemoveWindow(item);
+        var holder = GroupHolding(item);
+        var dialog = new ConfirmRemoveWindow(item, holder);
 
         bool confirmed;
         HoldRevealed(true);
-        var claim = _dock.FocusItem(item);
+        var claim = _dock.FocusItem(holder is null ? item : Shown(holder));
         try
         {
             confirmed = dialog.ShowDialog() == true;
@@ -2001,7 +2189,16 @@ public sealed partial class DockWindow : Window
             HoldRevealed(false);
         }
 
-        if (confirmed)
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (dialog.KeepsItems)
+        {
+            Ungroup(item);
+        }
+        else
         {
             OnItemUnpinned(this, item);
         }
@@ -2037,7 +2234,7 @@ public sealed partial class DockWindow : Window
 
     /// <summary>
     /// An item's jump list, as the taskbar would show it for the same app, or nothing for an
-    /// item that is no app's: a folder, a document, a web address, a separator.
+    /// item that is no app's: a folder, a document, a web address, a separator, a group.
     /// </summary>
     /// <remarks>
     /// Read afresh on every right-click: measured 2026-11-20 at 1 to 7 ms an app once the
@@ -2045,7 +2242,8 @@ public sealed partial class DockWindow : Window
     /// </remarks>
     private IReadOnlyList<JumpListCategory> JumpListOf(DockItem item)
     {
-        if (!item.IsLaunchable || item.IsOverflow || item.ExplorerFolder is not null || item.Document is not null)
+        if (!item.IsLaunchable || item.IsOverflow || item.IsGroup
+            || item.ExplorerFolder is not null || item.Document is not null)
         {
             return [];
         }
@@ -2072,6 +2270,25 @@ public sealed partial class DockWindow : Window
         if (JumpLists.Launch(entry, new WindowInteropHelper(this).Handle))
         {
             _dock.FlashItem(Shown(item));
+        }
+    }
+
+    /// <summary>
+    /// Takes a group off the dock and leaves what it holds there in its place, in its order —
+    /// unless the dock has no room for them all, when it says so and leaves the group as it is.
+    /// </summary>
+    private void Ungroup(DockItem item)
+    {
+        if (RoomFor(_pins.Count - 1) < item.Children.Count)
+        {
+            MessageBox.Show(FullNotice, "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var settings = ContentsToSave();
+        if (settings.Ungroup(item.Id))
+        {
+            _settings.Save(settings);
         }
     }
 
@@ -2580,12 +2797,41 @@ public sealed partial class DockWindow : Window
     /// The band changing with <em>Always on top</em> is covered by the look that every re-apply
     /// of the settings ends with.
     /// </remarks>
+    /// <summary>The open group's window, or 0 while no group is open.</summary>
+    private nint OpenGroupWindow() =>
+        _flyout is { IsOpen: true } open && PresentationSource.FromVisual(open.Popup.Child) is HwndSource source
+            ? source.Handle
+            : 0;
+
+    /// <summary>Puts the open group's window back over the dock, if one is open.</summary>
+    private void KeepGroupOnTop()
+    {
+        if (_flyout is { IsOpen: true } open && PresentationSource.FromVisual(open.Popup.Child) is HwndSource source)
+        {
+            // Straight under an icon being carried out of it, in one move, or else at the top.
+            // Raised to the top and the icon raised back over it after, the icon was under the
+            // open group for a frame each time the dock lifted itself — every second and a bit
+            // through a drag, a blink of the icon, seen frame by frame on 2026-11-21.
+            // The icon itself first back over the dock, which has just risen over everything.
+            _lifted?.KeepOnTop();
+            var under = _lifted?.Hwnd is { } lifted and not 0 ? lifted : NativeMethods.HWND_TOPMOST;
+            NativeMethods.SetWindowPos(
+                source.Handle, under, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        }
+    }
+
     private void KeepHandleOnTop(bool overOthers = false)
     {
         ReadOnlySpan<nint> dock = [_chrome?.Hwnd ?? 0, _backdrop?.Hwnd ?? 0];
 
         // The window previews too, which a raise of the dock would otherwise bury.
         _previews?.KeepOnTop(dock);
+
+        // And an open group: the dock rising over it, as it does whenever the foreground changes —
+        // opening one changes it — hid the foot of the card where it stands on the dock, and the
+        // card going down into its place went behind the dock.
+        KeepGroupOnTop();
 
         if (_handle is not { } handle)
         {
@@ -3364,6 +3610,19 @@ public sealed partial class DockWindow : Window
             return;
         }
 
+        // A group opens above itself, and the keys go into it, as into the overflow item's list.
+        if (_items[index].IsGroup)
+        {
+            HoldKey(index);
+            _keyMenu = true;
+            if (!ShowGroup(_items[index], AfterKeyMenu))
+            {
+                _keyMenu = false;
+            }
+
+            return;
+        }
+
         // Held up as it opens, so the launch's flash is on the item the keys chose.
         HoldKey(index);
         NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
@@ -3458,10 +3717,11 @@ public sealed partial class DockWindow : Window
         // A Store app's Run as administrator is slow to ask, so asked behind the dock's back and
         // set on whichever items have that app when the answer comes — the menu reads it as it
         // opens, so nothing is redrawn for it.
-        PinnedAppsService.LearnRunAsAdministrator(items, (aumid, elevates) =>
+        PinnedAppsService.LearnRunAsAdministrator(items.SelectMany(EveryItem), (aumid, elevates) =>
             Dispatcher.BeginInvoke(() =>
             {
-                foreach (var pin in _pins.Where(pin => string.Equals(pin.Aumid, aumid, StringComparison.OrdinalIgnoreCase)))
+                foreach (var pin in _pins.SelectMany(EveryItem)
+                             .Where(pin => string.Equals(pin.Aumid, aumid, StringComparison.OrdinalIgnoreCase)))
                 {
                     pin.CanRunAsAdministrator = elevates;
                 }
@@ -3469,6 +3729,9 @@ public sealed partial class DockWindow : Window
 
         return items;
     }
+
+    /// <summary>An item, and after a group what it holds.</summary>
+    private static IEnumerable<DockItem> EveryItem(DockItem item) => item.IsGroup ? [item, .. item.Children] : [item];
 
     private void OnItemActivated(object? sender, (DockItem Item, DockClick Click) activation)
     {
@@ -3490,6 +3753,697 @@ public sealed partial class DockWindow : Window
         }
 
         Open(item, click);
+    }
+
+    // ---- groups --------------------------------------------------------------------------
+
+    /// <summary>The group open above the dock now, or null while none is.</summary>
+    private GroupFlyout? _flyout;
+
+    /// <summary>The open group's hold on its icon (<see cref="DockBar.FocusItem"/>).</summary>
+    private int _flyoutClaim;
+
+    /// <summary>
+    /// A group closed by a press of the left button still down as it went, and when: the release
+    /// of that press, landing on the group's icon, is not to open it again.
+    /// </summary>
+    private (string Id, long At)? _groupClickToSkip;
+
+    /// <summary>How long a click to skip is kept for, should its release land somewhere else.</summary>
+    private const long StaleSkipMs = 1500;
+
+    /// <summary>
+    /// The id of a group just made, to be opened for naming once it is on the dock; null when
+    /// there is none.
+    /// </summary>
+    private string? _nameOnArrival;
+
+    /// <summary>
+    /// Opens the group just made, with its name selected to be typed over, once the dock shows
+    /// it — after the row has taken it in, so the flyout stands over where it ends up.
+    /// </summary>
+    private void NameArrivedGroup()
+    {
+        if (_nameOnArrival is not { } id)
+        {
+            return;
+        }
+
+        _nameOnArrival = null;
+        if (_pins.FirstOrDefault(pin => pin.Id == id && pin.IsGroup) is not { } group)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                // Still the group the dock has, and nothing else open over it.
+                if (_flyout is null && _pins.Contains(group))
+                {
+                    ShowGroup(group, naming: true);
+                }
+            },
+            DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>
+    /// Shows the open group as the dock now has it — after a change made from one of its items'
+    /// menus, say — or takes it down when the dock has it no longer.
+    /// </summary>
+    private void RefreshOpenGroup()
+    {
+        if (_flyout is not { IsOpen: true } flyout)
+        {
+            return;
+        }
+
+        if (_pins.FirstOrDefault(pin => pin.Id == flyout.Group.Id && pin.IsGroup) is { } group)
+        {
+            flyout.Refresh(group);
+        }
+        else
+        {
+            flyout.CloseNow();
+        }
+    }
+
+    /// <summary>Whether the pointer is over the dock's own window, wherever on it.</summary>
+    private bool PointerOnDockWindow()
+    {
+        if (PresentationSource.FromVisual(this) is null || !NativeMethods.GetCursorPos(out var cursor))
+        {
+            return false;
+        }
+
+        var local = PointFromScreen(new Point(cursor.X, cursor.Y));
+        return local.X >= 0 && local.Y >= 0 && local.X <= ActualWidth && local.Y <= ActualHeight;
+    }
+
+    /// <summary>
+    /// Turns the open group round: closing — from wherever it is, part of the way up included —
+    /// or, on its way down, back up, the foreground taken again for the menus' window so a click
+    /// elsewhere still closes it.
+    /// </summary>
+    private void ToggleGroup(GroupFlyout open)
+    {
+        if (!open.IsClosing)
+        {
+            open.Close();
+            return;
+        }
+
+        if (open.Reopen())
+        {
+            NativeMethods.SetForegroundWindow(new WindowInteropHelper(_menus).Handle);
+        }
+    }
+
+    /// <summary>
+    /// Whether the pointer is on a group's place on the dock — across the slot it was lifted from,
+    /// at any height over the dock. Asked of the slot itself rather than of what the dock reads
+    /// as under the pointer, which the moving row and the empty slot leave in doubt.
+    /// </summary>
+    private bool OnGroupsPlace(DockItem group)
+    {
+        if (PresentationSource.FromVisual(_dock) is null || !NativeMethods.GetCursorPos(out var cursor)
+            || _dock.ItemBounds(_pins.FirstOrDefault(pin => pin.Id == group.Id) ?? group) is not { } slot)
+        {
+            return false;
+        }
+
+        var local = _dock.PointFromScreen(new Point(cursor.X, cursor.Y));
+        return local.X >= slot.Left && local.X <= slot.Right;
+    }
+
+    /// <summary>Gives a group of the dock's the name typed for it.</summary>
+    private void RenameGroup(string id, string name)
+    {
+        var settings = ContentsToSave();
+        if (settings.FindPin(id) is { IsGroup: true } pin && pin.Label != name)
+        {
+            pin.Label = name;
+            _settings.Save(settings);
+        }
+    }
+
+    /// <summary>
+    /// Opens a group of the dock's own above its icon: what it holds, to be clicked as the dock's
+    /// own icons are (<see cref="GroupFlyout"/>).
+    /// </summary>
+    /// <remarks>
+    /// The item is held as a menu holds its item — magnified, its name showing under the flyout —
+    /// and the dock kept up while it is open. Placed above the name, where the window previews
+    /// go, so nothing of the dock's is under it.
+    /// </remarks>
+    /// <param name="closed">Told, once it has gone, whether anything was chosen from it.</param>
+    /// <param name="naming">Opened for a group just made, its title to be typed over (<see cref="GroupFlyout"/>).</param>
+    private bool ShowGroup(DockItem group, Action<bool>? closed = null, bool naming = false)
+    {
+        _flyout?.CloseNow();
+
+        var shown = Shown(group);
+        _previews?.Dismiss();
+        HoldRevealed(true);
+
+        // The icon lifted off the dock and opened out, unless motion is reduced — then the group
+        // simply appears over it — or the group is behind the overflow item, which stays.
+        var morphs = _dock.MagnificationEnabled && ReferenceEquals(shown, group);
+
+        // One that simply appears is held magnified, without its label — the open group's title
+        // says the same, right above. One lifted off the dock is not held: its place stays the
+        // size the dock draws it at rest, so it closes back onto the icon as it comes back, not
+        // onto one half as big again that shrinks as it shows.
+        var claim = morphs ? 0 : _dock.FocusItem(shown, showLabel: false);
+        _flyoutClaim = claim;
+        if (GroupAnchor(shown, morphs) is not { } anchor)
+        {
+            _dock.ReleaseFocus(claim);
+            HoldRevealed(false);
+            return false;
+        }
+
+        var flyout = new GroupFlyout(
+            group,
+            naming,
+            canEdit: !_applied.LockItemContents,
+            morphIcon: morphs ? _dock.Metrics.MaxSize : 0,
+            morphReach: morphs ? _dock.WaveReach : 0)
+        {
+            Anchor = new Point(anchor.X, anchor.Y)
+        };
+
+        // The icon goes from the dock as the card leaves its place, and comes back as it lands.
+        // From lifting off to landing, the wave is held where it stood, as under window previews,
+        // while the pointer is on the place or up on the open group: the place stays as it was
+        // for the card to come back to.
+        // The icon's shadow passes to the card as the icon lifts off the dock, and back to the
+        // dock as the card lands. The card draws the very picture the dock does, under itself, so
+        // the dock draws as much less of it.
+        flyout.ShadowOnDock = amount => _dock.ShadowOf(group.Id, amount);
+        flyout.IconShadowOnDock = () =>
+            _dock.IconShadows && (_pins.FirstOrDefault(pin => pin.Id == group.Id) ?? shown).Icon is { } icon
+                ? IconShadow.For(icon)
+                : null;
+        flyout.Lifted += (_, _) =>
+        {
+            _dock.HideItem(group.Id);
+            var reach = flyout.ScreenBounds;
+            _dock.HoldForGroup(group, reach.IsEmpty
+                ? default
+                : new Int32Rect((int)reach.Left, (int)reach.Top, (int)Math.Ceiling(reach.Width), (int)Math.Ceiling(reach.Height)));
+        };
+        // The wave was let go as the closing began (Closing, below).
+        flyout.Landed += (_, _) => _dock.HideItem(null);
+
+        // Measured as it is drawn, at both ends of the way.
+        flyout.IconOnScreen = () =>
+        {
+            var current = _pins.FirstOrDefault(pin => pin.Id == group.Id) ?? shown;
+            // To the fraction of a pixel: the card is drawn over this, and is the icon's size by it.
+            if (_dock.ItemBounds(current) is not { } bounds
+                || ScreenSpace.ToScreen(_dock, bounds.TopLeft) is not { } topLeft
+                || ScreenSpace.ToScreen(_dock, bounds.BottomRight) is not { } bottomRight)
+            {
+                return null;
+            }
+
+            return new Rect(topLeft, bottomRight);
+        };
+
+        // As it starts to close, the wave is let go, and goes to the pointer while the card comes
+        // down; the card is drawn against the icon's place on every frame, so it lands on the icon
+        // wherever that has taken it.
+        flyout.Closing += (_, _) => _dock.HoldForGroup(null);
+
+        // A click on the group's place that the flyout, over it, took itself.
+        flyout.PlaceClicked += (_, _) => ToggleGroup(flyout);
+
+        var chosen = false;
+
+        // After the event, since the new name rebuilds the dock's items — the open group's too,
+        // which then shows it (RefreshOpenGroup).
+        flyout.Renamed += (_, name) =>
+            Dispatcher.BeginInvoke(() => RenameGroup(group.Id, name), DispatcherPriority.Input);
+        flyout.Chosen += (_, choice) =>
+        {
+            chosen = true;
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+            Open(choice.Item, choice.Click);
+        };
+        flyout.MenuAsked += (_, ask) => ShowMenuFor(ask.Item, onGroup: (flyout, ask.Tile));
+        flyout.DragOut += (_, drag) =>
+        {
+            chosen = true;
+            BeginDragOutOfGroup(drag.Item, flyout.Group, drag.Bounds, flyout);
+        };
+        flyout.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_flyout, flyout))
+            {
+                _flyout = null;
+            }
+
+            if (morphs)
+            {
+                _dock.HideItem(null);
+                _dock.ShadowOf(null, 1);
+                _dock.HoldForGroup(null);
+            }
+
+            // Closed by a press still going on — a click elsewhere taken by the group itself, when
+            // it closes on one — whose release is not to open it again.
+            var button = SystemParameters.SwapButtons ? 0x02 : 0x01;
+            _groupClickToSkip = WindowsApi.GetAsyncKeyState(button) < 0
+                ? (group.Id, Environment.TickCount64)
+                : null;
+
+            _dock.ReleaseFocus(claim);
+            HoldRevealed(false);
+            closed?.Invoke(chosen);
+        };
+
+        _flyout = flyout;
+        _menus.ShowPopup(flyout.Popup, anchor.X, anchor.Y);
+        KeepGroupOnTop();
+
+        // It stays open by itself until a click elsewhere takes the foreground from the menus'
+        // window; should that window not have got it, it closes on such a click itself instead.
+        if (flyout.Morphs)
+        {
+            Dispatcher.BeginInvoke(
+                () =>
+                {
+                    // Asked of Windows, not of WPF, whose word on it comes by message and may not
+                    // have come yet; and once everything else on hand is done.
+                    var menus = new WindowInteropHelper(_menus).Handle;
+                    if (flyout.IsOpen && menus != 0 && WindowsApi.GetForegroundWindow() != menus)
+                    {
+                        flyout.CloseOnClickElsewhere();
+                    }
+                },
+                DispatcherPriority.ApplicationIdle);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Where an open group stands, in physical pixels: centred over its icon as the wave holds
+    /// it, right above the magnified icon (<see cref="DockBar.HeldIconTop"/>), its label not showing
+    /// — or, for one that opens out of the icon, from the icon's foot, its room kept under the card.
+    /// </summary>
+    private NativeMethods.NativePoint? GroupAnchor(DockItem item, bool fromFoot = false)
+    {
+        if (PresentationSource.FromVisual(_dock) is null)
+        {
+            return null;
+        }
+
+        if ((fromFoot ? _dock.RestingCentreX(item) : _dock.HeldCentreX(item)) is not { } centre)
+        {
+            return TopOf(item);
+        }
+
+        var anchor = _dock.PointToScreen(new Point(centre, fromFoot ? _dock.IconFoot : _dock.HeldIconTop));
+        return new NativeMethods.NativePoint { X = (int)Math.Round(anchor.X), Y = (int)Math.Floor(anchor.Y) };
+    }
+
+    /// <summary>The group on the dock holding an item, or null for an item on the dock itself.</summary>
+    private DockItem? GroupHolding(DockItem item) =>
+        _pins.FirstOrDefault(pin => pin.IsGroup && pin.Children.Any(child => child.Id == item.Id));
+
+    /// <summary>
+    /// The item's menu's entries for groups: into one of the dock's groups, or into a new one
+    /// in its place, for an item on the dock; out onto the dock beside its group, for one in a
+    /// group. Nothing for what a group cannot hold — a group, a separator.
+    /// </summary>
+    private IEnumerable<MenuItem> GroupEntries(DockItem item, DockItem? holder)
+    {
+        if (holder is not null)
+        {
+            yield return RoomFor(_pins.Count) > 0
+                ? MenuHost.Item(Localizer.Get("Menu.MoveOutOfGroup"), MenuGlyph.MoveOutOfGroup, () => MoveOutOfGroup(item))
+                : MenuHost.Note(Localizer.Get("Menu.MoveOutOfGroup.Full"), MenuGlyph.MoveOutOfGroup);
+            yield break;
+        }
+
+        if (item.IsGroup || item.IsSeparator || item.IsOverflow)
+        {
+            yield break;
+        }
+
+        var into = new MenuItem
+        {
+            Header = Localizer.Get("Menu.MoveToGroup"),
+            Icon = MenuIcons.Glyph(MenuGlyph.MoveToGroup)
+        };
+
+        foreach (var group in _pins.Where(pin => pin.IsGroup))
+        {
+            var id = group.Id;
+            var entry = MenuHost.Item(group.Label, MenuIcons.Picture(group.Icon), () => MoveToGroup(item, id));
+            entry.Header = new TextBlock { Text = group.Label };
+            System.Windows.Automation.AutomationProperties.SetName(entry, group.Label);
+            into.Items.Add(entry);
+        }
+
+        if (into.Items.Count > 0)
+        {
+            into.Items.Add(new Separator());
+        }
+
+        into.Items.Add(MenuHost.Item(
+            Localizer.Get("Menu.NewGroup"), MenuGlyph.NewGroup, () => MoveToGroup(item, groupId: null)));
+
+        yield return into;
+    }
+
+    /// <summary>
+    /// Moves an item from the dock into one of its groups, at the end — or, for no group, into a
+    /// new group that takes its place on the dock.
+    /// </summary>
+    private void MoveToGroup(DockItem item, string? groupId)
+    {
+        var settings = ContentsToSave();
+        if (settings.FindPin(item.Id) is not { } pin || !PinnedAppsService.CanGoInGroup(pin))
+        {
+            return;
+        }
+
+        if (groupId is null)
+        {
+            // Only an item on the dock itself becomes a new group, in its place.
+            var index = settings.PinnedApps.IndexOf(pin);
+            if (index < 0)
+            {
+                return;
+            }
+
+            var group = DockPresets.CreateGroup([pin]);
+            group.Label = DockPresets.NextGroupLabel(settings.EveryPin());
+            group.AddedAt = DateTimeOffset.UtcNow;
+            settings.PinnedApps[index] = group;
+            _nameOnArrival = group.Id;
+        }
+        else
+        {
+            // From the dock, or from another group.
+            if (settings.PinnedApps.Find(candidate => candidate.Id == groupId && candidate.IsGroup) is not { } group
+                || ReferenceEquals(settings.GroupOf(item.Id), group))
+            {
+                return;
+            }
+
+            settings.RemovePin(item.Id);
+            (group.Items ??= []).Add(pin);
+        }
+
+        _settings.Save(settings);
+    }
+
+    /// <summary>Moves an item out of its group onto the dock: at <paramref name="at"/>, or just after the group.</summary>
+    private void MoveOutOfGroup(DockItem item, int? at = null)
+    {
+        var settings = ContentsToSave();
+        if (settings.GroupOf(item.Id) is not { Items: { } items } group
+            || items.Find(pin => pin.Id == item.Id) is not { } pin)
+        {
+            return;
+        }
+
+        if (RoomFor(_pins.Count) <= 0)
+        {
+            MessageBox.Show(FullNotice, "ArtDock", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        items.Remove(pin);
+        var index = at is { } chosen
+            ? Math.Clamp(chosen, 0, settings.PinnedApps.Count)
+            : settings.PinnedApps.IndexOf(group) + 1;
+        settings.PinnedApps.Insert(index, pin);
+        _settings.Save(settings);
+    }
+
+    // ---- dragging out of a group -------------------------------------------------------
+
+    /// <summary>An item being dragged out of an open group, while one is.</summary>
+    private sealed class GroupDrag(DockItem item, DockItem group, Rect bounds, GroupFlyout? flyout)
+    {
+        public DockItem Item { get; } = item;
+
+        public DockItem Group { get; } = group;
+
+        /// <summary>The group, open over the dock for the length of the drag.</summary>
+        public GroupFlyout? Flyout { get; } = flyout;
+
+        /// <summary>Where the group stood open and an icon round it, in device pixels: letting go inside puts the item back.</summary>
+        public Rect Bounds { get; } = bounds;
+
+        /// <summary>The preview of it on the dock, kept as one list so the dock moves it rather than rebuilding it.</summary>
+        public IReadOnlyList<DockItem> Ghosts { get; } = [item];
+
+        /// <summary>Where it stands: on the dock, lifted clear of it, or far enough off to be removed.</summary>
+        public DragOffState State { get; set; } = DragOffState.Lifted;
+
+        /// <summary>Another group whose middle it is over, which letting go puts it in.</summary>
+        public DockItem? Into { get; set; }
+
+        /// <summary>Where on the dock letting go puts it, or null where it would not go on the dock.</summary>
+        public int? Slot { get; set; }
+
+        /// <summary>Whether the dock's window has the mouse for it, so its moves come by input.</summary>
+        public bool Captured { get; set; }
+
+        /// <summary>
+        /// Looks in on the drag a few times a second: for Escape, for a button let go of unseen,
+        /// for the wave having lain down under a pointer at rest — and follows the pointer itself
+        /// only if the capture was lost.
+        /// </summary>
+        public DispatcherTimer? Watch { get; set; }
+    }
+
+    private GroupDrag? _groupDrag;
+
+    /// <summary>How far round the open group, in icons, letting go of an item dragged out of it puts it back.</summary>
+    private const double KeepAroundGroup = 2;
+
+    /// <summary>
+    /// Carries an item out of the group it was pulled from, under the pointer, as an icon pulled
+    /// off the dock is carried: let go on the dock and it goes there, at the gap that opens for
+    /// it; on another group's middle, into that group; far enough from both the dock and the group
+    /// that <i>Remove</i> shows, out of the group altogether; and anywhere else — the group's own
+    /// place included — back where it was. The group stays open throughout, and after, unless the
+    /// item has gone onto the dock or into another group.
+    /// </summary>
+    private void BeginDragOutOfGroup(DockItem item, DockItem group, Rect bounds, GroupFlyout? flyout = null)
+    {
+        EndGroupDrag(cancel: true);
+        if (_applied.LockItemContents || _chrome is not { } chrome)
+        {
+            return;
+        }
+
+        // The group's place, and two icons' width round it: inside, letting go puts the item back,
+        // so a drag that wanders out of the group on its way to the dock does not remove it, and
+        // Remove takes a clear pull away from the group.
+        var scale = MonitorDpi.ScaleForWindow(chrome.Hwnd);
+        var keep = bounds;
+        if (!keep.IsEmpty)
+        {
+            keep.Inflate(_dock.Metrics.BaseSize * scale * KeepAroundGroup, _dock.Metrics.BaseSize * scale * KeepAroundGroup);
+        }
+
+        var drag = new GroupDrag(item, group, keep, flyout);
+        // The wave frozen as it stands until the item is let go of: not flattened, as it is for
+        // files brought from outside, nor following the pointer (DockBar.FreezeWave).
+        _groupDrag = drag;
+        HoldRevealed(true);
+        _dock.FreezeWave = true;
+
+        _lifted?.Dispose();
+        _lifted = new LiftedIconWindow(item, _dock.Metrics.MaxSize, _dock.LabelLettering, scale);
+
+        // Moved by the mouse's own moves, the dock's window holding the mouse for the length of the
+        // drag — as an icon pulled off the dock is, and never by a frame clock. For two rounds on
+        // 2026-11-21 it was moved from CompositionTarget.Rendering, which is what CompositorClock
+        // was written to avoid: each move has WPF draw again and raise Rendering again a
+        // millisecond later, so frames came in bursts with long waits between, and the sheet under
+        // the bar — kept in step with the icons by counting frames — fell out of step with them
+        // whenever the dock moved during the drag: the bar's background standing still for a
+        // tenth of a second and jumping, under icons that eased smoothly inside it.
+        // The group stays open through the drag now, so nothing takes the capture back as its
+        // closing once did; should something, the watch below follows the pointer instead.
+        var hwnd = new WindowInteropHelper(this).Handle;
+        NativeMethods.SetCapture(hwnd);
+        drag.Captured = NativeMethods.GetCapture() == hwnd;
+
+        drag.Watch = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(30), DispatcherPriority.Normal, (_, _) => WatchGroupDrag(), Dispatcher);
+
+        UpdateGroupDrag();
+    }
+
+    /// <summary>
+    /// Looks in on a drag out of a group between the mouse's moves: Escape calls it off, a button
+    /// up that was never seen ends it, and a pointer at rest still has the dock answer it — the
+    /// gap opening once the wave has lain down.
+    /// </summary>
+    private void WatchGroupDrag()
+    {
+        if (_groupDrag is null)
+        {
+            return;
+        }
+
+        var button = SystemParameters.SwapButtons ? 0x02 : 0x01;
+        if (WindowsApi.GetAsyncKeyState(0x1B) < 0)
+        {
+            EndGroupDrag(cancel: true);
+        }
+        else if (WindowsApi.GetAsyncKeyState(button) >= 0)
+        {
+            EndGroupDrag(cancel: false);
+        }
+        else
+        {
+            UpdateGroupDrag();
+        }
+    }
+
+    /// <summary>Follows the pointer: the icon under it, and what letting go there would do shown on the dock.</summary>
+    private void UpdateGroupDrag()
+    {
+        if (_groupDrag is not { } drag || !NativeMethods.GetCursorPos(out var cursor))
+        {
+            return;
+        }
+
+        _lifted?.Follow(cursor.X, cursor.Y);
+        var point = new Point(cursor.X, cursor.Y);
+
+        // On the dock inside its space. Armed only well clear of both the group and the dock — as
+        // far from the dock as an icon dragged off it has to go, three icons — and lifted between,
+        // where letting go puts it back.
+        var beyond = _dock.DistanceBeyond(point);
+        drag.Into = null;
+        drag.Slot = null;
+        // On the dock from inside its space, and off it again only a quarter of an icon clear of it:
+        // a hand resting at the dock's edge flipped between the two, the preview opening and
+        // closing under it and the dock's width with it, frame by frame.
+        var wasOnBar = drag.State == DragOffState.OnBar;
+        var offAt = wasOnBar ? _dock.Metrics.BaseSize / 4 : 0;
+        drag.State = double.IsNaN(beyond) ? DragOffState.Lifted
+            : beyond < offAt ? DragOffState.OnBar
+            : drag.Bounds.Contains(point) || beyond < _dock.Metrics.BaseSize * 3 ? DragOffState.Lifted
+            : DragOffState.Armed;
+
+        // The wave is frozen for the whole drag (BeginDragOutOfGroup), so the gap for the item
+        // opens the moment it is on the dock and closes the moment it is off: one slot's worth of
+        // change either way, and nothing else of the dock moving.
+        var onBar = drag.State == DragOffState.OnBar;
+        string? notice = null;
+        if (onBar && _dock.DropGroupAt(point) is { } over)
+        {
+            // Over a group's middle: it opens to take the item — the one it came from as well,
+            // where letting go leaves it be. The row holds still under it, the preview kept where
+            // it was and not drawn: taken away, the gap closing would slide the group from under
+            // the pointer, the preview would come back beside it, and the two would trade places
+            // on every frame.
+            drag.Into = over;
+            _dock.ShowDropInto(over);
+        }
+        else if (onBar)
+        {
+            _dock.ShowDropInto(null);
+            if (RoomFor(_pins.Count) <= 0)
+            {
+                _dock.ClearGhosts();
+                notice = FullNotice;
+            }
+            else
+            {
+                _dock.ShowGhosts(drag.Ghosts, point);
+                drag.Slot = _dock.GhostDropIndex;
+            }
+        }
+        else
+        {
+            _dock.ShowDropInto(null);
+            _dock.ClearGhosts();
+        }
+
+        _dock.ShowDropNotice(notice);
+        _lifted?.SetArmed(drag.State == DragOffState.Armed);
+
+    }
+
+    /// <summary>Lets go of the item dragged out of a group, doing what letting go there does — or nothing, when <paramref name="cancel"/>.</summary>
+    private void EndGroupDrag(bool cancel)
+    {
+        if (_groupDrag is not { } drag)
+        {
+            return;
+        }
+
+        _groupDrag = null;
+        drag.Watch?.Stop();
+
+        // After the drag is no longer current, so the capture going is not taken for its loss.
+        if (NativeMethods.GetCapture() == new WindowInteropHelper(this).Handle)
+        {
+            NativeMethods.ReleaseCapture();
+        }
+
+        _dock.ShowDropInto(null);
+        _dock.ClearGhosts();
+        _dock.ShowDropNotice(null);
+        _dock.FreezeWave = false;
+        HoldRevealed(false);
+
+        // The group, still open, takes its tile back and closes on a click elsewhere again.
+        var flyout = drag.Flyout is { IsOpen: true } open ? open : null;
+        flyout?.EndDrag();
+
+        if (!cancel && drag.State == DragOffState.Armed)
+        {
+            // Out of the group, which stays open with what is left in it (RefreshOpenGroup).
+            _lifted?.Vanish();
+            _lifted = null;
+            OnItemUnpinned(this, drag.Item);
+            return;
+        }
+
+        _lifted?.Dispose();
+        _lifted = null;
+
+        if (!cancel && drag.Into is { } into && into.Id != drag.Group.Id)
+        {
+            // Into another group: this one goes, as the row moves under it.
+            flyout?.CloseNow();
+            MoveToGroup(drag.Item, into.Id);
+        }
+        else if (!cancel && drag.Slot is { } slot)
+        {
+            // Onto the dock, which makes room for it under the group.
+            flyout?.CloseNow();
+            MoveOutOfGroup(drag.Item, slot);
+        }
+        else if (flyout is null && _pins.FirstOrDefault(pin => pin.Id == drag.Group.Id) is { } group)
+        {
+            // Back where it was, and the group open again to show it, if it had gone.
+            Dispatcher.BeginInvoke(() => ShowGroup(group), DispatcherPriority.Input);
+        }
+    }
+
+    /// <summary>Puts an icon dragged along the dock and let go on a group into that group.</summary>
+    private void OnDroppedIntoGroup(object? sender, (DockItem Item, DockItem Group) drop)
+    {
+        if (!_applied.LockItemContents)
+        {
+            MoveToGroup(drop.Item, drop.Group.Id);
+        }
     }
 
     /// <summary>
@@ -3554,6 +4508,44 @@ public sealed partial class DockWindow : Window
     /// <returns>True when a window was raised or something was started.</returns>
     private bool Open(DockItem item, DockClick click = DockClick.Open)
     {
+        // Opened above itself, once whatever asked — a click, a key, a menu — is over: a popup
+        // opened while the dock still holds the mouse would lose it as the capture is let go.
+        if (item.IsGroup)
+        {
+            // The click that has just closed it, carried on to its icon, is not a new one: it would
+            // open it all over again. Only that click — the next is a click like any other.
+            if (_groupClickToSkip is { } skip && skip.Id == item.Id)
+            {
+                _groupClickToSkip = null;
+                if (Environment.TickCount64 - skip.At < StaleSkipMs)
+                {
+                    return true;
+                }
+            }
+
+            // Its own icon clicked while it is open closes it, as the taskbar's buttons close what
+            // they opened; clicked while it is on its way down, it comes back up.
+            if (_flyout is { IsOpen: true } open && open.Group.Id == item.Id)
+            {
+                ToggleGroup(open);
+                return true;
+            }
+
+            // One that opens out of its icon stays open by itself and needs nothing of the mouse,
+            // so it opens there and then; one that closes on a click elsewhere waits for the dock
+            // to let the mouse go, or it would lose it.
+            if (_dock.MagnificationEnabled)
+            {
+                ShowGroup(item);
+            }
+            else
+            {
+                Dispatcher.BeginInvoke(() => ShowGroup(item), DispatcherPriority.Input);
+            }
+
+            return true;
+        }
+
         if (click != DockClick.NewWindow)
         {
             var window = _runningApps.NextWindow(item.RunningTarget);
@@ -3727,6 +4719,15 @@ public sealed partial class DockWindow : Window
     {
         _lifted?.Vanish();
         _lifted = null;
+
+        // A group holding something asks whether that goes with it or stays on the dock, as the
+        // menu's Remove does, once the drag is over.
+        if (item is { IsGroup: true, Children.Count: > 0 })
+        {
+            Dispatcher.BeginInvoke(() => ConfirmRemove(item), DispatcherPriority.Input);
+            return;
+        }
+
         OnItemUnpinned(this, item);
     }
 
@@ -3734,8 +4735,7 @@ public sealed partial class DockWindow : Window
     private void OnItemUnpinned(object? sender, DockItem item)
     {
         var settings = ContentsToSave();
-        var removed = settings.PinnedApps.RemoveAll(pin => pin.Id == item.Id);
-        if (removed > 0)
+        if (settings.RemovePin(item.Id))
         {
             _settings.Save(settings);
         }
@@ -3746,7 +4746,7 @@ public sealed partial class DockWindow : Window
     private void RefreshRunningState()
     {
         var changed = false;
-        foreach (var item in _pins)
+        foreach (var item in _pins.SelectMany(pin => pin.IsGroup ? pin.Children : [pin]))
         {
             var running = _runningApps.IsRunning(item.RunningTarget);
             var elevated = running && _runningApps.IsElevated(item.RunningTarget);
@@ -3756,6 +4756,22 @@ public sealed partial class DockWindow : Window
                 item.IsRunning = running;
                 item.IsElevated = elevated;
                 item.IsClosing = closing;
+                changed = true;
+            }
+        }
+
+        // A group's dot stands for what it holds, as the overflow item's does for the items
+        // behind it.
+        foreach (var group in _pins.Where(pin => pin.IsGroup))
+        {
+            var running = group.Children.Any(child => child.IsRunning);
+            var elevated = running && group.Children.Any(child => child.IsElevated);
+            var closing = !running && group.Children.Any(child => child.IsClosing);
+            if (group.IsRunning != running || group.IsElevated != elevated || group.IsClosing != closing)
+            {
+                group.IsRunning = running;
+                group.IsElevated = elevated;
+                group.IsClosing = closing;
                 changed = true;
             }
         }

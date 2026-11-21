@@ -148,6 +148,46 @@ public sealed class PinnedAppSetting
     public bool IsSeparator { get; set; }
 
     /// <summary>
+    /// For a group of the dock's own (<see cref="IsGroup"/>), what it holds, in its order: the
+    /// first four are what its icon shows. Null for every other pin, and left out of the file.
+    /// </summary>
+    /// <remarks>
+    /// One level deep: what a group holds is never a group, nor a separator — the dock
+    /// refuses both on the way in, and leaves out any a hand-edited file puts there.
+    /// </remarks>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<PinnedAppSetting>? Items { get; set; }
+
+    /// <summary>Whether this is a group of the dock's own, which holds <see cref="Items"/>.</summary>
+    [JsonIgnore]
+    public bool IsGroup => !IsSeparator && DockCommands.IsGroup(TargetPath);
+
+    /// <summary>
+    /// A copy of the pin, its group's items copied too — never shared, or the settings
+    /// dialog's preview and the store would hold the same list, and Cancel would stop cancelling.
+    /// </summary>
+    public PinnedAppSetting Clone() => new()
+    {
+        Id = Id,
+        Label = Label,
+        TargetPath = TargetPath,
+        Aumid = Aumid,
+        IconPath = IconPath,
+        UseIconNotThumbnail = UseIconNotThumbnail,
+        FolderColor = FolderColor,
+        FolderSymbol = FolderSymbol,
+        FolderText = FolderText,
+        FolderSymbolTone = FolderSymbolTone,
+        RunAsAdministrator = RunAsAdministrator,
+
+        // Not the pin's lettering, which is only ever read from an older file and is moved
+        // to the dock's as it is read — see AdoptPinLettering.
+        IsSeparator = IsSeparator,
+        AddedAt = AddedAt,
+        Items = Items is null ? null : [.. Items.Select(item => item.Clone())]
+    };
+
+    /// <summary>
     /// When the pin was put on the dock, in UTC — what the settings dialog's Items page marks a
     /// recently added row by (<see cref="IsRecent"/>). Null for a pin from before this was kept,
     /// and for the set a new dock starts with, which nobody added.
@@ -1082,7 +1122,9 @@ public sealed class DockSettings
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var changed = false;
-        foreach (var pin in PinnedApps)
+
+        // Across the groups too: an item in a group is found by its id as one on the dock is.
+        foreach (var pin in EveryPin())
         {
             if (string.IsNullOrWhiteSpace(pin.Id) || !seen.Add(pin.Id))
             {
@@ -1093,6 +1135,61 @@ public sealed class DockSettings
         }
 
         return changed;
+    }
+
+    /// <summary>Every pin: each on the dock, and after a group what it holds.</summary>
+    public IEnumerable<PinnedAppSetting> EveryPin()
+    {
+        foreach (var pin in PinnedApps)
+        {
+            yield return pin;
+            if (pin.Items is { } items)
+            {
+                foreach (var item in items)
+                {
+                    yield return item;
+                }
+            }
+        }
+    }
+
+    /// <summary>A pin by its id, on the dock or in one of its groups; null when there is none.</summary>
+    public PinnedAppSetting? FindPin(string id) => EveryPin().FirstOrDefault(pin => pin.Id == id);
+
+    /// <summary>The group holding the pin with this id, or null for one on the dock itself, or none.</summary>
+    public PinnedAppSetting? GroupOf(string id) =>
+        PinnedApps.FirstOrDefault(pin => pin.Items?.Any(item => item.Id == id) == true);
+
+    /// <summary>Takes the pin with this id off the dock, or out of whichever group holds it.</summary>
+    /// <returns>True when there was one to take.</returns>
+    public bool RemovePin(string id)
+    {
+        if (PinnedApps.RemoveAll(pin => pin.Id == id) > 0)
+        {
+            return true;
+        }
+
+        return GroupOf(id)?.Items?.RemoveAll(item => item.Id == id) > 0;
+    }
+
+    /// <summary>
+    /// Takes the group on the dock with this id off it, and puts what it holds there in its
+    /// place, in its order — less anything a group cannot hold, which a hand-edited file may
+    /// have put in it.
+    /// </summary>
+    /// <returns>True when there was such a group.</returns>
+    public bool Ungroup(string id)
+    {
+        var index = PinnedApps.FindIndex(pin => pin.Id == id && pin.IsGroup);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        var held = PinnedAppsService.GroupContents(PinnedApps[index]).ToList();
+        PinnedApps.RemoveAt(index);
+        PinnedApps.InsertRange(index, held);
+        return true;
     }
 
     /// <summary>
@@ -1128,7 +1225,7 @@ public sealed class DockSettings
             LabelFontStyle = string.IsNullOrWhiteSpace(source.FontStyle) ? null : source.FontStyle;
         }
 
-        foreach (var pin in PinnedApps)
+        foreach (var pin in EveryPin())
         {
             pin.FontFamily = null;
             pin.FontSize = null;
@@ -1220,25 +1317,7 @@ public sealed class DockSettings
         WindowsTransparency = WindowsTransparency,
         LockItemOrder = LockItemOrder,
         LockItemContents = LockItemContents,
-        PinnedApps = [.. PinnedApps.Select(app => new PinnedAppSetting
-        {
-            Id = app.Id,
-            Label = app.Label,
-            TargetPath = app.TargetPath,
-            Aumid = app.Aumid,
-            IconPath = app.IconPath,
-            UseIconNotThumbnail = app.UseIconNotThumbnail,
-            FolderColor = app.FolderColor,
-            FolderSymbol = app.FolderSymbol,
-            FolderText = app.FolderText,
-            FolderSymbolTone = app.FolderSymbolTone,
-            RunAsAdministrator = app.RunAsAdministrator,
-
-            // Not the pin's lettering, which is only ever read from an older file and is moved
-            // to the dock's as it is read — see AdoptPinLettering.
-            IsSeparator = app.IsSeparator,
-            AddedAt = app.AddedAt
-        })]
+        PinnedApps = [.. PinnedApps.Select(app => app.Clone())]
     };
 }
 

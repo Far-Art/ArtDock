@@ -287,6 +287,21 @@ public sealed class PinnedAppsService
     /// <summary>Projects a stored pin onto the model the dock draws from.</summary>
     public static DockItem ToDockItem(PinnedAppSetting app)
     {
+        // A group opens nothing the shell knows, so nothing is asked of it; what it holds is
+        // read as the dock's own pins are, less anything a group cannot hold.
+        if (app.IsGroup)
+        {
+            return new DockItem
+            {
+                Id = app.Id,
+                Label = app.Label,
+                TargetPath = app.TargetPath,
+                IconPath = app.IconPath,
+                IsGroup = true,
+                Children = [.. GroupContents(app).Select(ToDockItem)]
+            };
+        }
+
         var linkTarget = ResolveLinkTarget(app.TargetPath);
         var explorerFolder = ExplorerFolder(app.TargetPath, linkTarget);
         return new DockItem
@@ -314,6 +329,16 @@ public sealed class PinnedAppsService
             IsSeparator = app.IsSeparator
         };
     }
+
+    /// <summary>
+    /// What a group holds that it can: never a group, nor a separator — one level deep, as
+    /// <see cref="PinnedAppSetting.Items"/> says, whatever a hand-edited file puts there.
+    /// </summary>
+    public static IEnumerable<PinnedAppSetting> GroupContents(PinnedAppSetting group) =>
+        (group.Items ?? []).Where(CanGoInGroup);
+
+    /// <summary>Whether a pin can be put in a group: anything but a group or a separator.</summary>
+    public static bool CanGoInGroup(PinnedAppSetting pin) => !pin.IsSeparator && !pin.IsGroup;
 
     /// <summary>
     /// The program a launcher starts, when the pin's program is a launcher named after it:
@@ -522,6 +547,11 @@ public sealed class PinnedAppsService
     /// </remarks>
     public static ImageSource? LoadIcon(DockItem item, IconSet? iconSet = null)
     {
+        if (item.IsGroup)
+        {
+            return GroupIcon(item, iconSet);
+        }
+
         if (item.IconPath is not { Length: > 0 } && ThumbnailFor(item) is { } thumbnail)
         {
             return thumbnail;
@@ -565,6 +595,22 @@ public sealed class PinnedAppsService
         }
 
         return icon;
+    }
+
+    /// <summary>
+    /// A group's icon: the first four of what it holds, two by two on a tile
+    /// (<see cref="GroupArt"/>), and never anything else — an image a hand-edited file names for
+    /// it included, as the item editor offers none. Resolves what it holds on the way, so the
+    /// group opens with their icons ready.
+    /// </summary>
+    private static ImageSource? GroupIcon(DockItem group, IconSet? iconSet)
+    {
+        foreach (var child in group.Children)
+        {
+            child.Icon ??= LoadIcon(child, iconSet);
+        }
+
+        return GroupArt.For([.. group.Children.Take(GroupArt.Shown).Select(child => child.Icon)]);
     }
 
     /// <summary>

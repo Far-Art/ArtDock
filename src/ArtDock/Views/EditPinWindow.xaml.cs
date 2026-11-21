@@ -153,6 +153,17 @@ public sealed partial class EditPinWindow : Window
         UseIconBox.Unchecked += (_, _) => RefreshIcon();
         SaveButton.Click += (_, _) => { DialogResult = true; };
 
+        // A group of the dock's own opens what it holds, so there is no target to set and
+        // nothing to run as administrator. Its picture is what it holds, too, and nothing else:
+        // the icon is shown, with what it is drawn from, and cannot be changed.
+        if (item.IsGroup)
+        {
+            OpensCard.Visibility = Visibility.Collapsed;
+            BrowseButton.Visibility = Visibility.Collapsed;
+            ResetIconButton.Visibility = Visibility.Collapsed;
+            _iconPath = null;
+        }
+
         RefreshIcon();
         ShowDefaultName();
 
@@ -621,6 +632,8 @@ public sealed partial class EditPinWindow : Window
             FolderSymbol = EditedFolderSymbol,
             FolderText = EditedFolderText,
             FolderSymbolTone = EditedFolderSymbolTone,
+            IsGroup = Item.IsGroup,
+            Children = Item.Children,
 
             // An icon set matches a shortcut by what it points at, as the dock does.
             LinkTarget = PinnedAppsService.ResolveLinkTarget(EditedTargetPath)
@@ -656,6 +669,8 @@ public sealed partial class EditPinWindow : Window
         // the set is asked the same question the dock will ask it.
         IconPathText.Text = _iconPath is { Length: > 0 }
             ? Path.GetFileName(_iconPath)
+            : Item.IsGroup
+                ? Localizer.Get("EditItem.UsingGroupItems")
             : PinnedAppsService.ThumbnailFor(preview) is not null
                 ? Localizer.Get("EditItem.UsingThumbnail")
             : drawsFolder

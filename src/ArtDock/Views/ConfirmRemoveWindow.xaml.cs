@@ -22,7 +22,9 @@ namespace ArtDock.Views;
 /// </remarks>
 public sealed partial class ConfirmRemoveWindow : Window
 {
-    public ConfirmRemoveWindow(DockItem item)
+    /// <param name="item">What is to be removed.</param>
+    /// <param name="group">The group of the dock's it is in, or null for one on the dock itself.</param>
+    public ConfirmRemoveWindow(DockItem item, DockItem? group = null)
     {
         InitializeComponent();
 
@@ -33,9 +35,29 @@ public sealed partial class ConfirmRemoveWindow : Window
             HeadingText.Text = Localizer.Get("RemoveItem.Heading.Separator");
             DetailText.Visibility = Visibility.Collapsed;
         }
+        else if (group is not null)
+        {
+            HeadingText.Text = Localizer.Format("RemoveItem.Heading.InGroup", item.Label, group.Label);
+        }
         else
         {
             HeadingText.Text = Localizer.Format("RemoveItem.Heading", item.Label);
+        }
+
+        // A group holding something asks what becomes of it: kept, on the dock where the group
+        // was, or taken off with it. Neither is the default; Cancel still is.
+        if (item is { IsGroup: true, Children.Count: > 0 } && group is null)
+        {
+            var count = item.Children.Count;
+            DetailText.Text = Localizer.Format("RemoveItem.Detail.Group", count);
+            KeepButton.Content = Localizer.Format("RemoveItem.KeepItems", count);
+            KeepButton.Visibility = Visibility.Visible;
+            RemoveButton.Content = Localizer.Get("RemoveItem.RemoveAll");
+            KeepButton.Click += (_, _) =>
+            {
+                KeepsItems = true;
+                DialogResult = true;
+            };
         }
 
         IconImage.Source = item.IsSeparator ? null : item.Icon;
@@ -50,4 +72,10 @@ public sealed partial class ConfirmRemoveWindow : Window
             CancelButton.Focus();
         };
     }
+
+    /// <summary>
+    /// After a yes, for a group: whether what it holds is to stay on the dock in its place
+    /// (<em>Keep items</em>) rather than go with it (<em>Remove all</em>).
+    /// </summary>
+    public bool KeepsItems { get; private set; }
 }
