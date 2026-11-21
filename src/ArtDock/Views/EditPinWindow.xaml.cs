@@ -89,6 +89,7 @@ public sealed partial class EditPinWindow : Window
         _iconPath = item.IconPath;
         _iconSet = iconSet;
 
+        NameBox.MaxLength = PinnedAppSetting.MaxLabelLength;
         NameBox.Text = item.Label;
         TargetBox.Text = item.TargetPath ?? item.Aumid ?? string.Empty;
         UseIconBox.IsChecked = item.UseIconNotThumbnail;
@@ -178,7 +179,8 @@ public sealed partial class EditPinWindow : Window
 
     /// <summary>The edited name, trimmed. Falls back to the original if left blank.</summary>
     public string EditedLabel =>
-        string.IsNullOrWhiteSpace(NameBox.Text) ? Item.Label : NameBox.Text.Trim();
+        PinnedAppSetting.ClampLabel(
+            string.IsNullOrWhiteSpace(NameBox.Text) ? Item.Label : NameBox.Text.Trim());
 
     /// <summary>The chosen icon path, or null to use the target's own icon.</summary>
     public string? EditedIconPath => _iconPath;
@@ -549,7 +551,10 @@ public sealed partial class EditPinWindow : Window
             return known.Name;
         }
 
-        var name = PinnedAppsService.DefaultLabel(EditedTargetPath, EditedAumid);
+        // As it would be saved, so a long default once put back does not leave Reset lit.
+        var name = PinnedAppsService.DefaultLabel(EditedTargetPath, EditedAumid) is { } found
+            ? PinnedAppSetting.ClampLabel(found)
+            : null;
         _defaultName = (target, name);
         return name;
     }

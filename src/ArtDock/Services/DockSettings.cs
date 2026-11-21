@@ -18,7 +18,46 @@ public sealed class PinnedAppSetting
     /// </remarks>
     public string Id { get; set; } = string.Empty;
 
-    public string Label { get; set; } = string.Empty;
+    /// <summary>
+    /// What the item is called, never longer than <see cref="MaxLabelLength"/>: a longer name,
+    /// however it arrives — typed, read off a program, or from a settings file written before
+    /// the limit — is cut to it here, so nothing else has to.
+    /// </summary>
+    public string Label
+    {
+        get => _label;
+        set => _label = ClampLabel(value);
+    }
+
+    private string _label = string.Empty;
+
+    /// <summary>The most characters an item's name may have.</summary>
+    public const int MaxLabelLength = 45;
+
+    /// <summary>
+    /// <paramref name="label"/> cut to <see cref="MaxLabelLength"/>, without splitting a
+    /// surrogate pair, and with no trailing space left by the cut.
+    /// </summary>
+    public static string ClampLabel(string? label)
+    {
+        if (label is null)
+        {
+            return string.Empty;
+        }
+
+        if (label.Length <= MaxLabelLength)
+        {
+            return label;
+        }
+
+        var length = MaxLabelLength;
+        if (char.IsHighSurrogate(label[length - 1]))
+        {
+            length--;
+        }
+
+        return label[..length].TrimEnd();
+    }
 
     /// <summary>Filesystem target for a classic app. Null for Store apps.</summary>
     public string? TargetPath { get; set; }
