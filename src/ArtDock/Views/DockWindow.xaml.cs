@@ -2812,8 +2812,9 @@ public sealed partial class DockWindow : Window
             // open group for a frame each time the dock lifted itself — every second and a bit
             // through a drag, a blink of the icon, seen frame by frame on 2026-11-21.
             // The icon itself first back over the dock, which has just risen over everything.
-            _lifted?.KeepOnTop();
-            var under = _lifted?.Hwnd is { } lifted and not 0 ? lifted : NativeMethods.HWND_TOPMOST;
+            var carried = _lifted ?? _homing;
+            carried?.KeepOnTop();
+            var under = carried?.Hwnd is { } lifted and not 0 ? lifted : NativeMethods.HWND_TOPMOST;
             NativeMethods.SetWindowPos(
                 source.Handle, under, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
@@ -4540,9 +4541,36 @@ public sealed partial class DockWindow : Window
         _dock.FreezeWave = false;
         HoldRevealed(false);
 
-        // The group, still open, takes its tile back and closes on a click elsewhere again.
+        // The group, still open, takes its tile back and closes on a click elsewhere again — the
+        // tile once the icon has flown back into it, when it is let go of short of anywhere.
         var flyout = drag.Flyout is { IsOpen: true } open ? open : null;
-        flyout?.EndDrag();
+        var goesSomewhere = !cancel
+            && (drag.State == DragOffState.Armed
+                || drag.Slot is not null
+                || (drag.Into is { } elsewhere && elsewhere.Id != drag.Group.Id));
+        var flies = !goesSomewhere && flyout is not null && _lifted is not null;
+        flyout?.EndDrag(tileBack: !flies);
+
+        if (flies && flyout is not null && _lifted is { } homing)
+        {
+            // Back into its tile, as an icon let go of short of Remove flies back into its place
+            // on the dock — not gone from under the pointer, and the tile back at once.
+            // Over the group all the way: kept on top of it as the carried icon was (KeepGroupOnTop).
+            _lifted = null;
+            _homing = homing;
+            homing.FlyHome(
+                () => flyout.HomingIconOnScreen,
+                () =>
+                {
+                    flyout.TileHome();
+                    if (ReferenceEquals(_homing, homing))
+                    {
+                        _homing = null;
+                    }
+                });
+            KeepGroupOnTop();
+            return;
+        }
 
         if (!cancel && drag.State == DragOffState.Armed)
         {
@@ -4788,6 +4816,9 @@ public sealed partial class DockWindow : Window
 
     /// <summary>The icon pulled off the dock, carried under the pointer; null while none is.</summary>
     private LiftedIconWindow? _lifted;
+
+    /// <summary>An icon let go of out of a group, flying back into its tile; kept over the group meanwhile.</summary>
+    private LiftedIconWindow? _homing;
 
     /// <summary>
     /// Carries a dragged icon under the pointer once it is off the dock, with <i>Remove</i> over it

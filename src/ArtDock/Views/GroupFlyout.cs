@@ -1504,19 +1504,83 @@ public sealed class GroupFlyout
     /// <summary>
     /// The drag out of it is over: its tile comes back, and a click elsewhere closes it again.
     /// </summary>
-    public void EndDrag()
+    /// <param name="tileBack">
+    /// Whether the tile comes back now — or later, by <see cref="TileHome"/>, once the icon let go
+    /// of has flown back into it.
+    /// </param>
+    public void EndDrag(bool tileBack = true)
     {
         _draggedOut = false;
         SetOtherTilesDeaf(null, deaf: false);
 
         if (_draggedTile is { } tile)
         {
-            tile.Opacity = 1;
+            if (tileBack)
+            {
+                tile.Opacity = 1;
+            }
+            else
+            {
+                _homingTile = tile;
+            }
+
             _draggedTile = null;
         }
 
         // Setting it back while open takes the mouse again, as after an item's menu.
         HoldOpen(false);
+    }
+
+    /// <summary>The tile an icon let go of is flying back into, faded until it lands.</summary>
+    private UIElement? _homingTile;
+
+    /// <summary>
+    /// Where the icon is on the tile an icon let go of is flying back into, on screen in device
+    /// pixels; null once there is none, or it is not shown.
+    /// </summary>
+    public Rect? HomingIconOnScreen
+    {
+        get
+        {
+            if (!_popup.IsOpen || _homingTile is not { } tile || PresentationSource.FromVisual(tile) is null
+                || FindIcon(tile) is not { ActualWidth: > 0 } icon
+                || ScreenSpace.ToScreen(icon, new Point(0, 0)) is not { } near
+                || ScreenSpace.ToScreen(icon, new Point(icon.ActualWidth, icon.ActualHeight)) is not { } far)
+            {
+                return null;
+            }
+
+            return new Rect(near, far);
+        }
+    }
+
+    /// <summary>The icon has flown back into its tile: the tile shows whole again.</summary>
+    public void TileHome()
+    {
+        if (_homingTile is { } tile)
+        {
+            tile.Opacity = 1;
+            _homingTile = null;
+        }
+    }
+
+    private static Image? FindIcon(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is Image image)
+            {
+                return image;
+            }
+
+            if (FindIcon(child) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
