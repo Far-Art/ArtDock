@@ -64,7 +64,12 @@ public sealed class BackdropWindow : IDisposable
     private int _width;
     private int _height;
 
-    public BackdropWindow()
+    /// <param name="tint">The wash over the blur, or null for the dock's own.</param>
+    /// <param name="shadow">
+    /// Whether the sheet draws a shadow round its shape, as the bar has: not for a sheet under
+    /// something that casts its own.
+    /// </param>
+    public BackdropWindow(Color? tint = null, bool shadow = true)
     {
         Register();
 
@@ -93,9 +98,11 @@ public sealed class BackdropWindow : IDisposable
         // Preferred over the accent policy for one reason: shape. A composition visual takes
         // a rounded-rectangle clip of any radius; the accent policy blurs the whole window
         // rect and cannot be told otherwise — see DesktopComposition.
-        _composition = CompositionBackdrop.TryCreate(_hwnd, Tint);
+        _composition = CompositionBackdrop.TryCreate(
+            _hwnd, tint is { } wash ? Windows.UI.Color.FromArgb(wash.A, wash.R, wash.G, wash.B) : Tint);
         if (_composition is not null)
         {
+            _composition.ShowShadow(shadow);
             _acrylic = true;
             return;
         }
@@ -306,6 +313,83 @@ public sealed class BackdropWindow : IDisposable
 
         Place(left, top, (int)Math.Round(frame.Left + far.X) - left, (int)Math.Round(frame.Top + far.Y) - top);
         return true;
+    }
+
+    /// <summary>
+    /// Puts the sheet over an area of the screen, in device pixels, straight under a window
+    /// there: for a sheet that is not the dock's own — the one under an open group.
+    /// </summary>
+    /// <remarks>
+    /// Only where the sheet can be cut to a shape (<see cref="DrawsBar"/>): the fallback blurs
+    /// the whole of its window, which is no use under a rounded card. Shown with nothing of it
+    /// showing, until <see cref="DrawSheet"/> says where the blur goes: showing a topmost
+    /// window puts it at the top of its band, over the window it belongs under, until it is
+    /// put under that one.
+    /// </remarks>
+    public void Cover(int left, int top, int width, int height, nint under)
+    {
+        if (_disposed || _composition is null || under == 0 || width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        if (!_visible)
+        {
+            Fade(0);
+        }
+
+        var was = (_left, _top, _width, _height);
+        Place(left, top, width, height);
+        if (was != (_left, _top, _width, _height))
+        {
+            // As the shape is not taken to have survived the move, nor is how much of it shows.
+            _composition.SetOpacity(_sheetOpacity);
+        }
+
+        Show();
+        if (NativeMethods.GetWindow(_hwnd, NativeMethods.GW_HWNDPREV) != under)
+        {
+            NativeMethods.SetWindowPos(
+                _hwnd, under, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        }
+    }
+
+    /// <summary>
+    /// Draws the blur alone at a rounded rectangle in the window, in device pixels from its
+    /// top-left, that much of it showing: no fill and no rim, which are for what stands on it.
+    /// </summary>
+    public void DrawSheet(double x, double y, double width, double height, double radius, double scale, double opacity)
+    {
+        if (_disposed || _composition is null)
+        {
+            return;
+        }
+
+        Paint(Colors.Transparent, Colors.Transparent);
+        if (width <= 0 || height <= 0)
+        {
+            Fade(0);
+            return;
+        }
+
+        Shape(x, y, width, height, radius, scale);
+        Fade(opacity);
+    }
+
+    /// <summary>How much of the sheet last showed, so an unchanged amount is not set again.</summary>
+    private double _sheetOpacity = 1;
+
+    private void Fade(double opacity)
+    {
+        opacity = Math.Clamp(opacity, 0, 1);
+        if (opacity == _sheetOpacity)
+        {
+            return;
+        }
+
+        _sheetOpacity = opacity;
+        _composition?.SetOpacity(opacity);
     }
 
     /// <summary>

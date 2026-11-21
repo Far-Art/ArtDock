@@ -264,6 +264,15 @@ internal sealed class CompositionBackdrop : IDisposable
     }
 
     /// <summary>
+    /// How much of the whole sheet shows, 0 to 1 — blur, wash, fill, rim and shadow together:
+    /// for a sheet that comes and goes by degrees, as the one under an open group does.
+    /// </summary>
+    public void SetOpacity(double opacity) => _root.Opacity = (float)Math.Clamp(opacity, 0, 1);
+
+    /// <summary>Whether the shadow is drawn round the shape: not under what casts its own.</summary>
+    public void ShowShadow(bool show) => _shadow.IsVisible = show;
+
+    /// <summary>
     /// Makes the sheet the taskbar's own material, or puts it back to the dock's: the bare blur
     /// under a wash, for a fill of the dock's choosing to go over.
     /// </summary>

@@ -3,6 +3,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -62,6 +63,15 @@ public sealed class GroupFlyout
     /// sight to say so.
     /// </summary>
     private const double MostRows = 4.5;
+
+    /// <summary>
+    /// The room kept at the right of a scrolling group's icons for its scroll bar, and how far
+    /// of that lies out in the card's own padding: the bar stands clear of the icons and of the
+    /// card's edge both.
+    /// </summary>
+    private const double ScrollBarLane = 15;
+
+    private const double ScrollBarReach = 9;
 
     /// <summary>Clear room around the card for its shadow, and below it a gap above the icon.</summary>
     private static readonly Thickness ShadowRoom = new(16, 16, 16, 12);
@@ -314,13 +324,23 @@ public sealed class GroupFlyout
     /// How far to either side of where it rests the wave can carry that icon, in DIPs: the card
     /// follows the icon there as it closes.
     /// </param>
+    /// <param name="blurred">
+    /// Whether the card stands on a blur of what is behind it, see-through, rather than on a
+    /// menu's plain ground: where Windows' transparency effects are on and there is a GPU to do it.
+    /// </param>
     public GroupFlyout(
-        DockItem group, bool naming = false, bool canEdit = true, double morphIcon = 0, double morphReach = 0)
+        DockItem group,
+        bool naming = false,
+        bool canEdit = true,
+        double morphIcon = 0,
+        double morphReach = 0,
+        bool blurred = false)
     {
         Group = group;
         _canEdit = canEdit;
         _morphIcon = Math.Max(0, morphIcon);
         _morphReach = Math.Max(0, morphReach);
+        _blurred = blurred && Sheet() is not null;
         _popup = new Popup
         {
             AllowsTransparency = true,
@@ -339,10 +359,16 @@ public sealed class GroupFlyout
         // next turn of WPF's own, which kept it out of sight for a frame or more after the click.
         _popup.Opened += (_, _) =>
         {
+            WatchActivation();
+            KeepSheetUnder();
+            _root?.UpdateLayout();
             if (Morphs)
             {
-                _root?.UpdateLayout();
                 BeginOpening();
+            }
+            else
+            {
+                DrawSheetAtRest();
             }
         };
         _popup.Opened += (_, _) => _popup.Dispatcher.InvokeAsync(
@@ -361,6 +387,8 @@ public sealed class GroupFlyout
         _popup.Closed += (_, _) =>
         {
             StopStepping();
+            LetSheetGo();
+
             // A name being typed when the flyout goes is kept, as a click elsewhere keeps it in
             // Explorer — unless Escape took the flyout down.
             if (!_cancelled && _nameBox?.Text.Trim() is { Length: > 0 } name && name != Group.Label)
@@ -380,6 +408,167 @@ public sealed class GroupFlyout
 
     /// <summary>The popup, for <see cref="MenuHost.ShowPopup"/> to place.</summary>
     public Popup Popup => _popup;
+
+    /// <summary>
+    /// Raised when the flyout's own window stops being the active one. A click in it can make it
+    /// that, in place of the window the menus hang off, and a click elsewhere is then heard of
+    /// only here.
+    /// </summary>
+    public event EventHandler? Deactivated;
+
+    /// <summary>Raised as a mouse button goes down anywhere in the flyout.</summary>
+    public event EventHandler? Pressed;
+
+    private void WatchActivation()
+    {
+        if (PresentationSource.FromVisual(_popup.Child) is HwndSource source)
+        {
+            // The source goes with the popup's window, and the hook with it.
+            source.AddHook(OnWindowMessage);
+        }
+    }
+
+    private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        const int WM_ACTIVATE = 0x0006;
+        if (msg == WM_ACTIVATE && ((long)wParam & 0xFFFF) == 0)
+        {
+            Deactivated?.Invoke(this, EventArgs.Empty);
+        }
+
+        return 0;
+    }
+
+    /// <summary>Whether the card stands on a blur of what is behind it (<see cref="Sheet"/>).</summary>
+    private readonly bool _blurred;
+
+    /// <summary>How much of the card's ground shows over the blur: enough to read on, the rest see-through.</summary>
+    private const double GroundOnBlur = 0.72;
+
+    /// <summary>
+    /// The blurred sheet under the open group: a window of its own straight under the flyout's,
+    /// as the dock's bar has one, since nothing composes a blur behind a see-through WPF window.
+    /// One for the life of the program — only one group is open at a time, and making one takes
+    /// long enough to hold a group up as it opens (<see cref="WarmUp"/>).
+    /// </summary>
+    private static BackdropWindow? _sheet;
+
+    private static bool _sheetTried;
+
+    /// <summary>The flyout the sheet is under now, so one closing late does not take it from the next.</summary>
+    private static GroupFlyout? _sheetOwner;
+
+    /// <summary>Where the sheet's window is, in device pixels: where the flyout's own is.</summary>
+    private NativeMethods.NativeRect _sheetAt;
+
+    /// <summary>The sheet, made the first time it is asked for; null where it cannot be cut to a shape.</summary>
+    private static BackdropWindow? Sheet()
+    {
+        if (_sheetTried)
+        {
+            return _sheet;
+        }
+
+        _sheetTried = true;
+        try
+        {
+            // No wash and no shadow: the card over it is its tint, and casts its own.
+            var sheet = new BackdropWindow(Colors.Transparent, shadow: false);
+            if (sheet.DrawsBar)
+            {
+                _sheet = sheet;
+            }
+            else
+            {
+                sheet.Dispose();
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // No window to be had: the card keeps its plain ground.
+        }
+
+        return _sheet;
+    }
+
+    /// <summary>
+    /// Puts the blurred sheet where the flyout's window is and straight under it: as it opens,
+    /// when it changes size, and whenever the dock has put the flyout back over itself.
+    /// </summary>
+    public void KeepSheetUnder()
+    {
+        if (!_blurred || _sheet is not { } sheet || !_popup.IsOpen
+            || PresentationSource.FromVisual(_popup.Child) is not HwndSource source
+            || !NativeMethods.GetWindowRect(source.Handle, out var at))
+        {
+            return;
+        }
+
+        _sheetOwner = this;
+        _sheetAt = at;
+        sheet.Cover(at.Left, at.Top, at.Right - at.Left, at.Bottom - at.Top, source.Handle);
+    }
+
+    /// <summary>
+    /// Draws the blur under the card: where the card shows, in the flyout's own units, rounded
+    /// as it is on screen, and that much of it.
+    /// </summary>
+    private void DrawSheet(Rect shown, double corner, double opacity)
+    {
+        if (!ReferenceEquals(_sheetOwner, this) || _sheet is not { } sheet || _root is not { } root
+            || PresentationSource.FromVisual(root) is not { CompositionTarget: { } target }
+            || ScreenSpace.ToScreen(root, shown.TopLeft) is not { } near
+            || ScreenSpace.ToScreen(root, shown.BottomRight) is not { } far)
+        {
+            return;
+        }
+
+        var on = new Rect(near, far);
+        var scale = target.TransformToDevice.M11;
+        sheet.DrawSheet(
+            on.Left - _sheetAt.Left, on.Top - _sheetAt.Top, on.Width, on.Height, corner * scale, scale, opacity);
+    }
+
+    /// <summary>Draws the blur under the card standing open, all of it.</summary>
+    private void DrawSheetAtRest()
+    {
+        if (_card is not { ActualWidth: > 0 } card || _root is not { } root
+            || PresentationSource.FromVisual(root) is null)
+        {
+            return;
+        }
+
+        DrawSheet(
+            new Rect(card.TranslatePoint(new Point(0, 0), root), new Size(card.ActualWidth, card.ActualHeight)),
+            card.CornerRadius.TopLeft,
+            1);
+    }
+
+    private void LetSheetGo()
+    {
+        if (ReferenceEquals(_sheetOwner, this))
+        {
+            _sheetOwner = null;
+            _sheet?.Hide();
+        }
+    }
+
+    /// <summary>
+    /// Gives a part of the card its ground: a menu's — or, over the blur, that much of it
+    /// see-through, as the theme has it now.
+    /// </summary>
+    private void SetGround(Border on)
+    {
+        if (_blurred && on.TryFindResource("ContextMenuBackground") is SolidColorBrush solid)
+        {
+            var ground = new SolidColorBrush(solid.Color) { Opacity = solid.Opacity * GroundOnBlur };
+            ground.Freeze();
+            on.Background = ground;
+            return;
+        }
+
+        on.SetResourceReference(Border.BackgroundProperty, "ContextMenuBackground");
+    }
 
     /// <summary>Raised, once it has closed, when one of its items was clicked, with what the click asks for.</summary>
     public event EventHandler<(DockItem Item, DockClick Click)>? Chosen;
@@ -902,6 +1091,17 @@ public sealed class GroupFlyout
         _clip.RadiusX = corner;
         _clip.RadiusY = corner;
 
+        // The blur under the card where the card shows on this frame, there as the card's ground
+        // is: none of it under the card as the icon, whose tile on the dock has none.
+        DrawSheet(
+            new Rect(
+                place.Left + _shift.X + (_clip.Rect.Left * scale),
+                place.Top + _shift.Y + (_clip.Rect.Top * scale),
+                _clip.Rect.Width * scale,
+                _clip.Rect.Height * scale),
+            corner * scale,
+            Smooth(open / TileWholeUntil));
+
         // The card's own shadow comes as the icon's goes, the one for the other: never neither.
         var own = Smooth(open / ShadowsCrossBy);
         shadow.Opacity = ShadowAsIcon.Opacity + ((ShadowOpen.Opacity - ShadowAsIcon.Opacity) * own);
@@ -1051,7 +1251,7 @@ public sealed class GroupFlyout
         }
 
         // Its own ground again, rounded with it, and the layer that stood in for it gone.
-        card.SetResourceReference(Border.BackgroundProperty, "ContextMenuBackground");
+        SetGround(card);
         if (_backdrop is { } backdrop)
         {
             backdrop.Visibility = Visibility.Collapsed;
@@ -1077,6 +1277,7 @@ public sealed class GroupFlyout
         picture.Visibility = Visibility.Collapsed;
         card.Clip = null;
         card.RenderTransform = Transform.Identity;
+        DrawSheetAtRest();
     }
 
     /// <summary>
@@ -1370,6 +1571,12 @@ public sealed class GroupFlyout
             {
                 first.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 var row = first.DesiredSize.Height > 0 ? first.DesiredSize.Height : 100;
+
+                // The scroll bar in a lane of its own, between the icons and the card's edge.
+                // Windows draws it over the right of what scrolls, which put it on the last
+                // column's tiles, hard against their icons; so the icons stop short of it, and
+                // the scrolling part reaches out into the card's own padding to carry it there.
+                grid.Margin = new Thickness(0, 0, ScrollBarLane, 0);
                 content.Children.Add(new ScrollViewer
                 {
                     Content = grid,
@@ -1377,7 +1584,8 @@ public sealed class GroupFlyout
                     HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
                     PanningMode = PanningMode.VerticalOnly,
                     Focusable = false,
-                    MaxHeight = row * MostRows
+                    MaxHeight = row * MostRows,
+                    Margin = new Thickness(0, 0, -ScrollBarReach, 0)
                 });
             }
             else
@@ -1391,7 +1599,7 @@ public sealed class GroupFlyout
         // dock has them. Not the picture itself, tile and all: grown with the card, its tile was a
         // rounder, outlined square inside the card's own — a tile within a tile, seen frame by
         // frame on 2026-11-21.
-        content.Margin = new Thickness(6, 10, 6, 6);
+        content.Margin = new Thickness(14, 16, 14, 14);
         var face = new Border
         {
             IsHitTestVisible = false,
@@ -1414,7 +1622,7 @@ public sealed class GroupFlyout
 
         // The card's ground, for the way (_backdrop): at rest the card has it as its own.
         var backdrop = new Border { Visibility = Visibility.Collapsed };
-        backdrop.SetResourceReference(Border.BackgroundProperty, "ContextMenuBackground");
+        SetGround(backdrop);
         _backdrop = backdrop;
         var body = new Grid { Children = { backdrop, face, content, stage } };
 
@@ -1423,13 +1631,30 @@ public sealed class GroupFlyout
             Child = body,
             RenderTransformOrigin = new Point(0, 0)
         };
-        card.SetResourceReference(Border.BackgroundProperty, "ContextMenuBackground");
+        SetGround(card);
         card.SetResourceReference(Border.BorderBrushProperty, "ContextMenuBorderBrush");
         card.SetResourceReference(Border.BorderThicknessProperty, "ContextMenuBorderThickness");
         card.SetResourceReference(Border.CornerRadiusProperty, "OverlayCornerRadius");
         _card = card;
         _content = content;
         _picture = picture;
+
+        // The blur kept to the card as the card changes size standing open — an item gone, the
+        // name being typed. Once the flyout's window has taken its new size and place, which is
+        // after this; and not on the way up or down, when it is drawn with the card every frame.
+        if (_blurred)
+        {
+            card.SizeChanged += (_, _) => card.Dispatcher.BeginInvoke(
+                () =>
+                {
+                    if (!_stepping && _popup?.IsOpen == true && ReferenceEquals(card, _card))
+                    {
+                        KeepSheetUnder();
+                        DrawSheetAtRest();
+                    }
+                },
+                System.Windows.Threading.DispatcherPriority.Background);
+        }
         _face = face;
 
         // The shadow is the frame's, cast by the card as it is drawn — clipped and moved — so it
@@ -1519,6 +1744,7 @@ public sealed class GroupFlyout
         // click on the group, landing on the card that has just left it.
         root.PreviewMouseDown += (_, e) =>
         {
+            Pressed?.Invoke(this, EventArgs.Empty);
             if (!Morphs || e.ChangedButton != MouseButton.Left)
             {
                 return;
@@ -1567,11 +1793,12 @@ public sealed class GroupFlyout
     /// one that waits for its code to be compiled, its tiles' template read and the theme's
     /// styles for its parts found.
     /// </summary>
-    public static void WarmUp()
+    /// <param name="blurred">Whether groups open on a blur, and the sheet for it is wanted too.</param>
+    public static void WarmUp(bool blurred = false)
     {
         var child = new DockItem { Id = "warm-up-item", Label = "Item" };
         var group = new DockItem { Id = "warm-up", Label = "Group", IsGroup = true, Children = [child] };
-        var flyout = new GroupFlyout(group, canEdit: true, morphIcon: 48);
+        var flyout = new GroupFlyout(group, canEdit: true, morphIcon: 48, blurred: blurred);
         if (flyout._popup.Child is FrameworkElement root)
         {
             root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));

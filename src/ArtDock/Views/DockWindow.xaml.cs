@@ -171,13 +171,7 @@ public sealed partial class DockWindow : Window
         // the dock, which takes the foreground too, and is the dock's to answer — on the group's
         // own place, by turning the group round. Answered here as well, the group began to close
         // and the dock's answer turned it back up: the click seemed to do nothing.
-        _menus.Deactivated += (_, _) =>
-        {
-            if (!PointerOnDockWindow())
-            {
-                _flyout?.Close();
-            }
-        };
+        _menus.Deactivated += (_, _) => CloseGroupIfLeft();
         _dock = new DockBar(settings.Current.Metrics);
         _dock.Activated += OnItemActivated;
         _dock.Reordered += OnItemReordered;
@@ -224,7 +218,8 @@ public sealed partial class DockWindow : Window
 
             // Once the dock has nothing else to do: so the first group opened opens as quickly as
             // the rest (GroupFlyout.WarmUp).
-            Dispatcher.BeginInvoke(GroupFlyout.WarmUp, DispatcherPriority.ApplicationIdle);
+            Dispatcher.BeginInvoke(
+                () => GroupFlyout.WarmUp(blurred: !_applied.SolidBar), DispatcherPriority.ApplicationIdle);
         };
         Root.Children.Add(_dock);
 
@@ -233,7 +228,11 @@ public sealed partial class DockWindow : Window
             KeepOnDisplay();
             CheckFront();
         };
-        _onForeground = (_, _, _, _, _, _, _) => CheckFront(foregroundChanged: true);
+        _onForeground = (_, _, _, _, _, _, _) =>
+        {
+            CheckFront(foregroundChanged: true);
+            CloseGroupIfLeft();
+        };
         _dock.Polled += (_, _) =>
         {
             WatchWinCtrl();
@@ -2818,6 +2817,9 @@ public sealed partial class DockWindow : Window
             NativeMethods.SetWindowPos(
                 source.Handle, under, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+
+            // And its blurred sheet straight under it again, over the dock.
+            open.KeepSheetUnder();
         }
     }
 
@@ -3828,6 +3830,53 @@ public sealed partial class DockWindow : Window
         }
     }
 
+    /// <summary>
+    /// Closes the open group once the foreground has gone to a window that is not its own: a
+    /// click elsewhere.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked of Windows, a moment after whatever raised the question, and from three places: the
+    /// menus' window losing the foreground, the group's own window losing it, and the foreground
+    /// changing at all. The menus' window alone was listened to at first, and that missed a
+    /// click elsewhere made after a click in the group — on its empty ground, say — which had
+    /// passed the foreground to the group's own window, so that the menus' window had none left
+    /// to lose (reported 2026-11-21).
+    /// </para>
+    /// <para>
+    /// Not while the pointer is on the dock: a click there takes the foreground too, and is the
+    /// dock's to answer — on the group's own place, by turning the group round. Answered here as
+    /// well, the group began to close and the dock's answer turned it back up: the click seemed
+    /// to do nothing.
+    /// </para>
+    /// </remarks>
+    private void CloseGroupIfLeft()
+    {
+        if (_flyout is null)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (_flyout is not { IsOpen: true } open || PointerOnDockWindow())
+                {
+                    return;
+                }
+
+                // Nothing in front for a moment, between two windows: the change that follows asks again.
+                var front = WindowsApi.GetForegroundWindow();
+                if (front == 0 || front == OpenGroupWindow() || front == new WindowInteropHelper(_menus).Handle)
+                {
+                    return;
+                }
+
+                open.Close();
+            },
+            DispatcherPriority.Input);
+    }
+
     /// <summary>Whether the pointer is over the dock's own window, wherever on it.</summary>
     private bool PointerOnDockWindow()
     {
@@ -3928,7 +3977,8 @@ public sealed partial class DockWindow : Window
             naming,
             canEdit: !_applied.LockItemContents,
             morphIcon: morphs ? _dock.Metrics.MaxSize : 0,
-            morphReach: morphs ? _dock.WaveReach : 0)
+            morphReach: morphs ? _dock.WaveReach : 0,
+            blurred: !_applied.SolidBar)
         {
             Anchor = new Point(anchor.X, anchor.Y)
         };
@@ -3978,6 +4028,23 @@ public sealed partial class DockWindow : Window
 
         // A click on the group's place that the flyout, over it, took itself.
         flyout.PlaceClicked += (_, _) => ToggleGroup(flyout);
+
+        // A click in the group can pass the foreground to the group's own window, and a click
+        // elsewhere is then heard of from it.
+        flyout.Deactivated += (_, _) => CloseGroupIfLeft();
+
+        // Should neither window of the group's have the foreground — the menus' window was
+        // refused it as the group opened — a press in the group is the moment it can be had:
+        // Windows gives it to the program just clicked. A click elsewhere then takes it away.
+        flyout.Pressed += (_, _) =>
+        {
+            var menus = new WindowInteropHelper(_menus).Handle;
+            var front = WindowsApi.GetForegroundWindow();
+            if (menus != 0 && front != menus && front != OpenGroupWindow())
+            {
+                NativeMethods.SetForegroundWindow(menus);
+            }
+        };
 
         var chosen = false;
 
