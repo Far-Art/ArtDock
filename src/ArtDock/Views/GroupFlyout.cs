@@ -411,6 +411,14 @@ public sealed class GroupFlyout
     /// <summary>The popup, for <see cref="MenuHost.ShowPopup"/> to place.</summary>
     public Popup Popup => _popup;
 
+    /// <summary>The card as it stands now, on screen in device pixels; empty while it is not shown.</summary>
+    public Rect CardOnScreen =>
+        _popup.IsOpen && _card is { ActualWidth: > 0 } card && PresentationSource.FromVisual(card) is not null
+            && ScreenSpace.ToScreen(card, new Point(0, 0)) is { } near
+            && ScreenSpace.ToScreen(card, new Point(card.ActualWidth, card.ActualHeight)) is { } far
+            ? new Rect(near, far)
+            : Rect.Empty;
+
     /// <summary>
     /// What the popup holds, for the life of the popup: the card is rebuilt inside it, never in
     /// the popup's place. Handed a new child, the popup placed itself from a size measured before

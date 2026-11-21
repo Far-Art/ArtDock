@@ -3762,6 +3762,68 @@ public sealed partial class DockWindow : Window
     /// <summary>The group open above the dock now, or null while none is.</summary>
     private GroupFlyout? _flyout;
 
+    /// <summary>How long the pointer may rest on the dock's other icons before the open group closes.</summary>
+    private static readonly TimeSpan GroupLeftAfter = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Closes an open group once the pointer has gone on to another icon on the dock and not come
+    /// back up to the group within half a second (<see cref="GroupLeftAfter"/>): the group is left for
+    /// the dock, as a menu is when the pointer goes on to the next.
+    /// </summary>
+    /// <remarks>
+    /// The wait starts on the first look at another icon, and only the group itself — its
+    /// card, or its own place on the dock — calls it off; resting on the bar between icons does
+    /// not. Not while an icon is being dragged out of the group, nor once it is closing. Looked
+    /// for a few times a second rather than on every move, which is all half a second's grace needs.
+    /// </remarks>
+    private void WatchGroupLeft(GroupFlyout flyout)
+    {
+        long? since = null;
+        var watch = new DispatcherTimer(DispatcherPriority.Input) { Interval = TimeSpan.FromMilliseconds(60) };
+        watch.Tick += (_, _) =>
+        {
+            if (!ReferenceEquals(_flyout, flyout) || !flyout.IsOpen)
+            {
+                watch.Stop();
+                return;
+            }
+
+            if (flyout.IsClosing || _groupDrag is not null || !NativeMethods.GetCursorPos(out var cursor))
+            {
+                since = null;
+                return;
+            }
+
+            // Back on the group: on its card, a little round it, or on its own place.
+            var card = flyout.CardOnScreen;
+            if (!card.IsEmpty)
+            {
+                card.Inflate(8, 8);
+            }
+
+            if ((!card.IsEmpty && card.Contains(new Point(cursor.X, cursor.Y))) || OnGroupsPlace(flyout.Group))
+            {
+                since = null;
+                return;
+            }
+
+            // On another icon: the wait starts, if it has not.
+            if (since is null && PointerOnDockWindow()
+                && _dock.ItemUnderCursor() is { IsSeparator: false } under && under.Id != flyout.Group.Id)
+            {
+                since = Environment.TickCount64;
+            }
+
+            if (since is { } started && Environment.TickCount64 - started >= GroupLeftAfter.TotalMilliseconds)
+            {
+                watch.Stop();
+                flyout.Close();
+            }
+        };
+        flyout.Closed += (_, _) => watch.Stop();
+        watch.Start();
+    }
+
     /// <summary>The open group's hold on its icon (<see cref="DockBar.FocusItem"/>).</summary>
     private int _flyoutClaim;
 
@@ -4093,6 +4155,7 @@ public sealed partial class DockWindow : Window
         _flyout = flyout;
         _menus.ShowPopup(flyout.Popup, anchor.X, anchor.Y);
         KeepGroupOnTop();
+        WatchGroupLeft(flyout);
 
         // It stays open by itself until a click elsewhere takes the foreground from the menus'
         // window; should that window not have got it, it closes on such a click itself instead.
