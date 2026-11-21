@@ -1845,7 +1845,7 @@ public sealed class GroupFlyout
             Margin = new Thickness(4, 0, 4, 8),
             MinWidth = 2 * TileWidth,
             MaxWidth = MostColumns * TileWidth,
-            MaxLength = 64
+            MaxLength = PinnedAppSetting.MaxLabelLength
         };
         AutomationProperties.SetName(box, Localizer.Get("Group.Name"));
         box.KeyDown += (_, e) =>

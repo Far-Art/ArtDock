@@ -1442,7 +1442,7 @@ that open as a grid instead are built); and built-in translations beyond English
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand two hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and ninety-two tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
