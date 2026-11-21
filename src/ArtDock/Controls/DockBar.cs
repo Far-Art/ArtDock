@@ -1080,6 +1080,7 @@ public sealed class DockBar : Canvas
     /// </remarks>
     private void RebuildVisuals()
     {
+        _rebuilds++;
         var display = ComposeDisplay();
 
         // Carried by id, so the same icon keeps its element — and its slide — across a
@@ -1173,6 +1174,7 @@ public sealed class DockBar : Canvas
         // Against the count the window is sized for, not the number of icons on the bar:
         // splicing a preview in changes the second and not the first, which is the whole
         // point of reserving the slot.
+        ReserveWindowSlots();
         var countChanged = SizedCount != _sizedForCount;
         _sizedForCount = SizedCount;
 
@@ -1380,7 +1382,8 @@ public sealed class DockBar : Canvas
             Metrics.MaxSize + Metrics.PaddingY + _tooltipReserve + ShadowSlack);
 
     /// <summary>
-    /// The number of icons the window is sized for: always one more than the dock holds.
+    /// The number of icons the window is sized for: at least one more than the dock holds, and
+    /// a few more besides, kept as icons come and go (<see cref="ReserveWindowSlots"/>).
     /// </summary>
     /// <remarks>
     /// The slot a drop preview opens is paid for in advance, because a window that grew to
@@ -1395,7 +1398,52 @@ public sealed class DockBar : Canvas
     /// <see cref="RowAlignment"/> — so the reserve is invisible: the same reasoning that lets
     /// the window stay oversized while the settings dialog is open.
     /// </remarks>
-    private int SizedCount => Math.Max(_items.Count, _pinnedItems.Count + 1);
+    private int SizedCount => Math.Max(_windowSlots, NeededSlots);
+
+    /// <summary>The fewest icons the window can be sized for: what is on the bar, and one more.</summary>
+    private int NeededSlots => Math.Max(_items.Count, _pinnedItems.Count + 1);
+
+    /// <summary>The icons the window is sized for, spare ones included; see <see cref="ReserveWindowSlots"/>.</summary>
+    private int _windowSlots;
+
+    /// <summary>How many slots beyond what it needs the window takes when it has to grow.</summary>
+    private const int SpareSlots = 3;
+
+    /// <summary>
+    /// Sizes the window for a few icons more than it needs, and changes that only when it runs
+    /// out of them, or has far more than it needs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A window sized for just one more than the dock held had to grow with every icon added.
+    /// Growing, it moves out by half a slot to stay centred, and Windows moves a layered window
+    /// at once but shows its old picture in it until it is drawn again: the whole dock stood
+    /// half a slot to one side for a frame each time an icon went in — seen frame by frame on
+    /// 2026-11-21, an icon let go on the dock from a group. Grown by a few slots at a time, it
+    /// grows once in a few additions, and shrinks only once a few more have gone, so taking
+    /// one off and putting it back moves nothing.
+    /// </para>
+    /// <para>
+    /// Never more than the room the row has along the edge, which a full dock fills: there the
+    /// spare slots would only reach off the display.
+    /// </para>
+    /// </remarks>
+    private void ReserveWindowSlots()
+    {
+        var needed = NeededSlots;
+        if (needed <= _windowSlots && needed + (2 * SpareSlots) >= _windowSlots)
+        {
+            return;
+        }
+
+        var slots = needed + SpareSlots;
+        while (slots > needed && _layout.RestingWidth(slots) > RowRoom)
+        {
+            slots--;
+        }
+
+        _windowSlots = slots;
+    }
 
     /// <summary>Repaints the indicator dots after a change in which apps are running.</summary>
     public void RefreshRunningState() => InvalidateVisual();
@@ -2151,6 +2199,38 @@ public sealed class DockBar : Canvas
         RebuildVisuals();
         return true;
     }
+
+    /// <summary>
+    /// Lands the drop preview: takes it down and runs <paramref name="land"/>, which puts the
+    /// real item in its place, as one change to the row — the item where the preview stood, and
+    /// no row between the two without either.
+    /// </summary>
+    /// <remarks>
+    /// Taken down first and the item put in after, the dock drew the row without the preview in
+    /// between: narrower, and moved over by half a slot, for a frame — the dock's width blinked
+    /// as an icon dragged out of a group was let go on it (seen frame by frame on 2026-11-21).
+    /// Should <paramref name="land"/> not change the row after all, the preview goes as usual.
+    /// </remarks>
+    public void LandGhosts(Action land)
+    {
+        if (_ghostItems.Count == 0)
+        {
+            land();
+            return;
+        }
+
+        _ghostItems = [];
+        _ghostIndex = -1;
+        var rebuilds = _rebuilds;
+        land();
+        if (_rebuilds == rebuilds)
+        {
+            RebuildVisuals();
+        }
+    }
+
+    /// <summary>How many times the row has been rebuilt, for <see cref="LandGhosts"/> to tell whether it was.</summary>
+    private int _rebuilds;
 
     /// <summary>True while a drop preview is on the dock.</summary>
     public bool IsShowingGhosts => _ghostItems.Count > 0;

@@ -1580,10 +1580,17 @@ public sealed class GroupFlyout
             return;
         }
 
-        // On its way down, it simply goes; on its way up, the rebuilt card stands open.
+        // On its way down, it goes on down as it is, only its tile's four icons made the group's
+        // as it now is, to land as the icon the dock now draws; on its way up, the rebuilt card
+        // stands open.
         if (_closing)
         {
-            CloseNow();
+            Group = group;
+            if (_picture is { } picture)
+            {
+                picture.Source = GroupArt.IconsOnly([.. group.Children.Select(child => child.Icon)]);
+            }
+
             return;
         }
 

@@ -4463,8 +4463,16 @@ public sealed partial class DockWindow : Window
             NativeMethods.ReleaseCapture();
         }
 
+        // Let go on the dock, the preview there is landed, as the item goes in (LandGhosts); taken
+        // down otherwise.
+        var landing = !cancel && drag.State != DragOffState.Armed && drag.Slot is not null
+            && !(drag.Into is { } other && other.Id != drag.Group.Id);
         _dock.ShowDropInto(null);
-        _dock.ClearGhosts();
+        if (!landing)
+        {
+            _dock.ClearGhosts();
+        }
+
         _dock.ShowDropNotice(null);
         _dock.FreezeWave = false;
         HoldRevealed(false);
@@ -4485,17 +4493,18 @@ public sealed partial class DockWindow : Window
         _lifted?.Dispose();
         _lifted = null;
 
+        // Into another group, or onto the dock: this one closes back into its icon, as the row
+        // moves under it — the card follows its icon wherever the row takes it. Taken down at
+        // once, it blinked out (reported 2026-11-21).
         if (!cancel && drag.Into is { } into && into.Id != drag.Group.Id)
         {
-            // Into another group: this one goes, as the row moves under it.
-            flyout?.CloseNow();
+            flyout?.Close();
             MoveToGroup(drag.Item, into.Id);
         }
         else if (!cancel && drag.Slot is { } slot)
         {
-            // Onto the dock, which makes room for it under the group.
-            flyout?.CloseNow();
-            MoveOutOfGroup(drag.Item, slot);
+            flyout?.Close();
+            _dock.LandGhosts(() => MoveOutOfGroup(drag.Item, slot));
         }
         else if (flyout is null && _pins.FirstOrDefault(pin => pin.Id == drag.Group.Id) is { } group)
         {
