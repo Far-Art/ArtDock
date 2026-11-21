@@ -216,6 +216,7 @@ public static class MenuIcons
         DockPresets.SearchAppsKey => Glyph(MenuGlyph.Apps),
         DockPresets.SearchGamesKey => Glyph(MenuGlyph.Games),
         DockPresets.SeparatorKey => Rule(),
+        DockPresets.GroupKey => Picture(GroupArt.AddPicture),
         _ => Picture(TargetIcon(preset.Target))
     };
 

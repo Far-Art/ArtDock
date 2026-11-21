@@ -91,6 +91,34 @@ public static class GroupArt
     /// <summary>An empty group's picture.</summary>
     public static BitmapSource Empty => _empty ??= Draw([], Look.Closed);
 
+    private static BitmapSource? _add;
+
+    /// <summary>
+    /// The picture for what makes a new group, in the Add menus: the tile with four squares of
+    /// colour in its places, a group with something in it, where the empty tile alone was a
+    /// blank square at a menu's size.
+    /// </summary>
+    public static BitmapSource AddPicture => _add ??= Draw([.. AddColours.Select(Square)], Look.Closed);
+
+    /// <summary>The four squares' colours, in the picture's order: blue, green, amber, purple.</summary>
+    public static IReadOnlyList<Color> AddColours { get; } =
+    [
+        Color.FromRgb(0x3B, 0x82, 0xF6),
+        Color.FromRgb(0x22, 0xC5, 0x5E),
+        Color.FromRgb(0xF5, 0x9E, 0x0B),
+        Color.FromRgb(0xA8, 0x55, 0xF7),
+    ];
+
+    /// <summary>A rounded square of one colour, as an icon is drawn in one of the tile's places.</summary>
+    private static ImageSource Square(Color colour)
+    {
+        var brush = new SolidColorBrush(colour);
+        brush.Freeze();
+        var image = new DrawingImage(new GeometryDrawing(brush, null, new RectangleGeometry(new Rect(0, 0, 66, 66), 16, 16)));
+        image.Freeze();
+        return image;
+    }
+
     /// <summary>The picture for a group whose first items have these icons, in order; at most <see cref="Shown"/> are used.</summary>
     public static BitmapSource For(IReadOnlyList<ImageSource?> icons) => Picture(icons, Look.Closed);
 

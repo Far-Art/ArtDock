@@ -577,6 +577,24 @@ public class FolderArtTests : IDisposable
         var typeface = new Typeface(font);
         Assert.True(typeface.TryGetGlyphTypeface(out var glyphs), $"{font} is not installed");
         Assert.True(glyphs.CharacterToGlyphMap.ContainsKey(ArtDock.Views.FolderRowMarkConverter.Glyph[0]));
+        Assert.True(glyphs.CharacterToGlyphMap.ContainsKey(ArtDock.Views.FolderRowMarkConverter.GroupGlyph[0]));
+    }
+
+    /// <summary>A group's row carries a mark of its own, and a folder's the folder mark.</summary>
+    [Fact]
+    public void AGroupsRow_HasItsOwnMark()
+    {
+        var converter = new ArtDock.Views.FolderRowMarkConverter { AsGlyph = true };
+        string Mark(PinnedAppSetting pin) =>
+            (string)converter.Convert(pin, typeof(string), null, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(
+            ArtDock.Views.FolderRowMarkConverter.GroupGlyph,
+            Mark(new PinnedAppSetting { Id = "g", Label = "Group", TargetPath = DockCommands.GroupTarget, Items = [] }));
+        Assert.Equal(
+            ArtDock.Views.FolderRowMarkConverter.Glyph,
+            Mark(new PinnedAppSetting { Id = "f", Label = "Folder", TargetPath = "shell:Downloads" }));
+        Assert.NotEqual(ArtDock.Views.FolderRowMarkConverter.Glyph, ArtDock.Views.FolderRowMarkConverter.GroupGlyph);
     }
 
     // ---- which pins are offered one -----------------------------------------------------------

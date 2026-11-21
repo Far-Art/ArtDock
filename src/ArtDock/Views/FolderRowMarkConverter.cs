@@ -33,12 +33,31 @@ public sealed class FolderRowMarkConverter : IValueConverter
     /// </remarks>
     public const string Glyph = "";
 
+    /// <summary>
+    /// The mark on a group of the dock's own: <em>ViewAll</em>, four squares two by two, as the
+    /// group's picture has its four icons — a mark of its own, since a group is no folder.
+    /// </summary>
+    public const string GroupGlyph = "";
+
+    /// <summary>
+    /// Whether this gives the mark itself — <see cref="Glyph"/> or <see cref="GroupGlyph"/> — for
+    /// the row's text, rather than whether it shows.
+    /// </summary>
+    public bool AsGlyph { get; init; }
+
     private static readonly Dictionary<string, bool> Folders = new(StringComparer.OrdinalIgnoreCase);
 
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is PinnedAppSetting { IsSeparator: false } pin && IsFolder(pin)
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (AsGlyph)
+        {
+            return value is PinnedAppSetting { IsGroup: true } ? GroupGlyph : Glyph;
+        }
+
+        return value is PinnedAppSetting { IsSeparator: false } pin && IsFolder(pin)
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -49,7 +68,8 @@ public sealed class FolderRowMarkConverter : IValueConverter
     /// </summary>
     public static bool IsFolder(PinnedAppSetting pin)
     {
-        // A group of the dock's own is marked as a folder is: it holds icons, as a folder holds files.
+        // A group of the dock's own is marked too, with a mark of its own (GroupGlyph): it holds
+        // icons, as a folder holds files.
         if (pin.IsGroup || pin.FolderColor is { Length: > 0 })
         {
             return true;

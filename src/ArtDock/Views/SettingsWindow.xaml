@@ -36,6 +36,7 @@
 
         <views:ItemRowIconConverter x:Key="ItemRowIcon" />
         <views:FolderRowMarkConverter x:Key="FolderRowMark" />
+        <views:FolderRowMarkConverter x:Key="FolderRowGlyph" AsGlyph="True" />
         <views:RecentRowMarkConverter x:Key="RecentRowMark" />
         <views:RecentRowMarkConverter x:Key="RecentRowStatus" AsStatus="True" />
 
@@ -1281,7 +1282,7 @@
                                             FontFamily="{DynamicResource SymbolThemeFontFamily}"
                                             FontSize="16"
                                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                            Text="{x:Static views:FolderRowMarkConverter.Glyph}"
+                                            Text="{Binding Converter={StaticResource FolderRowGlyph}}"
                                             Visibility="{Binding Converter={StaticResource FolderRowMark}}" />
 
                                         <!-- A separator is punctuation rather than an entry,

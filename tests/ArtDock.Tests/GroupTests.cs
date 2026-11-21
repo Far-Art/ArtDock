@@ -235,6 +235,21 @@ public sealed class GroupTests : IDisposable
         }
     });
 
+    /// <summary>The Add menus' picture is the tile with a square of each colour in its four places, in order.</summary>
+    [Fact]
+    public void TheAddPicture_HasAColouredSquareInEachPlace() => OnStaThread(() =>
+    {
+        var picture = GroupArt.AddPicture;
+        Assert.Same(picture, GroupArt.AddPicture);
+        for (var i = 0; i < GroupArt.Shown; i++)
+        {
+            var place = GroupArt.Place(i);
+            var pixel = PixelAt(picture, place.Left + (place.Width / 2), place.Top + (place.Height / 2));
+            var wanted = GroupArt.AddColours[i];
+            Assert.InRange(Math.Abs(pixel.R - wanted.R) + Math.Abs(pixel.G - wanted.G) + Math.Abs(pixel.B - wanted.B), 0, 12);
+        }
+    });
+
     [Fact]
     public void TheOpenLook_IsDark_AroundTheSameIcons() => OnStaThread(() =>
     {

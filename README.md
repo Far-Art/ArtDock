@@ -1442,7 +1442,7 @@ that open as a grid instead are built); and built-in translations beyond English
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand two hundred and eighty-four tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and eighty-six tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1532,7 +1532,7 @@ shortcut chosen by program and app id; an app already on the dock found whatever
 pinned by; and where a new dock puts what the taskbar gave it. Five cover *Add defaults*: an
 empty list made a new dock's, a full one left alone, the user's own items kept in place with the
 missing defaults among those kept, the Recycle Bin's separator added only when needed, and a
-renamed default still counted as there. Twenty-nine cover groups: a group known by its target
+renamed default still counted as there. Thirty cover groups: a group known by its target
 and never run as a command; its contents copied, not shared, when the settings are, read back
 from the file, and left out of it for any other pin; ids made unique inside it; a pin found and
 removed there by id; ungrouping, which leaves what it held where it was; nothing held that is a
@@ -1542,7 +1542,8 @@ one the tile alone, drawn once for the same icons, the four places inside the ti
 look dark round the same icons, and its icons alone on nothing, for the open group's card; the open group near square, never more
 than four across; and a group opening while an icon dragged onto it would go in, a little past its
 size and back, and closing without going under it, at once under reduced motion; and the open
-group's card put on the icon's tile by its scale and offset, the tile where the picture draws it.
+group's card put on the icon's tile by its scale and offset, the tile where the picture draws it;
+and the Add menus' picture of one, a square of colour in each of its places.
 
 Twenty-five cover dropping those places, which Explorer drags as a shell ID list and no
 paths. One takes the data object the desktop itself hands to a drag of This PC and the Recycle
