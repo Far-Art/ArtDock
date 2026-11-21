@@ -303,15 +303,17 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 lands; bring it back into the
   dock and it is a reorder again. Only pulling **away from the edge** counts — past the ends of
   the bar the icon stays on it. The icon leaves the row half an icon above the space the
-  magnified icons fill, and *Remove* shows five icons above it. It does not ask, as the
-  menu's *Remove from dock* does: taking it that far, with *Remove* showing, is the asking. While the items are
+  magnified icons fill, and *Remove* shows five icons above it. It does not ask: taking it
+  that far, with *Remove* showing, is the asking. While the items are
   locked nothing drags, so nothing is removed this way either. The gesture was here once, as
   letting go anywhere clear of the bar, and was taken away because it fired on drags that only
   wandered; it came back in this form.
-- **Right-click an icon** to edit it or remove it; right-click the bar between icons to add an
-  item or open the dock's settings. An icon's menu is about that icon alone. While the items
-  are locked, its menu shows a greyed *Locked* in place of the two, and the bar's menu the
-  settings alone. *Remove from dock* is
+- **Right-click an icon** to edit it; right-click the bar between icons to add an
+  item or open the dock's settings. An icon's menu is about that icon alone, and has no entry
+  to remove it: that is done by dragging it off the dock or in the settings dialog. A
+  separator's menu has *Remove separator*, and an item in a group *Remove from group*. While the
+  items are locked, its menu shows a greyed *Locked* in their place, and the bar's menu the
+  settings alone. Those removing entries are
   drawn in the theme's critical colour, the same one the settings dialog's Remove button
   takes, so the entry that takes something away does not read like the ones that do not.
   **It asks first**, naming the item and showing its icon, while the dock holds that icon
@@ -502,7 +504,7 @@ lands; bring it back into the
   dragged out, the icon's place faded in it. Its picture is always what it holds: the item
   editor names it but offers no other icon. One level deep: a group holds no group and no
   separator. Its dot is lit while anything in it runs. Removing a group that holds anything,
-  from its menu or by dragging it off the dock, asks whether its items go too (*Remove all*) or
+  by dragging it off the dock, asks whether its items go too (*Remove all*) or
   stay on the dock where it was (*Keep items*).
 - **Starts with a usable dock, once**: a first run — meaning no settings file at all — gives
   the bar **Start**, **This PC**, the **User folder**, **Downloads**, **Settings**, a
@@ -652,7 +654,7 @@ lands; bring it back into the
 - **Every menu entry has an icon**, as in Windows 11's own right-click menus: a glyph from
   the system's symbol font for each command — the same one for *Settings…* on the tray and
   *Dock settings…* on the dock — and, in the *Add* menus, the icon of what each entry pins.
-  *Remove from dock*'s glyph is red with its words, and a greyed entry's is greyed.
+  A removing entry's glyph is red with its words, and a greyed entry's is greyed.
 - **One dock to a session.** A second launch does not start a second dock. The running one
   says it is already running, lifts the dock above any windows covering it, and says where
   the dock is — or, when it cannot be seen (hidden from the tray menu, tucked away by

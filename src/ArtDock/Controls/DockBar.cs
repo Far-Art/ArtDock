@@ -2855,7 +2855,7 @@ public sealed class DockBar : Canvas
     /// Taking it off was here once, as letting go anywhere clear of the bar, and was taken away:
     /// it fired on a drag that wandered rather than on one that meant it. It came back on
     /// 2026-11-20 as the macOS dock does it, which a slip of the hand does not do — see
-    /// <see cref="DragOff"/>. It does not ask, as the menu's <i>Remove from dock</i> does: taking
+    /// <see cref="DragOff"/>. It does not ask: taking
     /// it that far, with <i>Remove</i> showing, is the asking.
     /// </remarks>
     private bool EndDrag()

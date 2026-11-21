@@ -1799,14 +1799,15 @@ public sealed partial class DockWindow : Window
 
             // Unpin rather than a bin: nothing is deleted, and the bin is the Empty Recycle
             // Bin entry's, which can be in this same menu. In a group, said as the question
-            // that follows says it.
-            menu.Items.Add(MenuHost.DangerItem(
-                Localizer.Get(
-                    item.IsSeparator ? "Menu.RemoveSeparator"
-                    : holder is null ? "Menu.RemoveFromDock"
-                    : "Menu.RemoveFromGroup"),
-                MenuGlyph.Unpin,
-                () => ConfirmRemove(item)));
+            // that follows says it. An item on the dock itself has no such entry: it is
+            // dragged off the dock, or removed in the settings dialog.
+            if (item.IsSeparator || holder is not null)
+            {
+                menu.Items.Add(MenuHost.DangerItem(
+                    Localizer.Get(item.IsSeparator ? "Menu.RemoveSeparator" : "Menu.RemoveFromGroup"),
+                    MenuGlyph.Unpin,
+                    () => ConfirmRemove(item)));
+            }
 
             if (item.IsSeparator)
             {
