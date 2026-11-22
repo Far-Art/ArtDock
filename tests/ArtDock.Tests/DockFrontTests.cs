@@ -159,6 +159,67 @@ public class DockFrontTests
         Assert.True(Marks(previewing: true, hides: false, visibility: DockVisibility.Shown));
     }
 
+    // ---- a window left filling the dock's display -----------------------------------------
+
+    /// <summary>
+    /// Asked on 2026-11-22: a game or a video fullscreen on the dock's display, and a click on
+    /// the other display — the dock stays down, and no handle is drawn over the picture.
+    /// </summary>
+    [Fact]
+    public void A_fullscreen_window_left_on_the_docks_display_still_counts()
+    {
+        Assert.Equal(FrontFill.Fullscreen, DockFront.LeftBehind([Window(FrontFill.Fullscreen)]));
+    }
+
+    /// <summary>The same day, maximized as well — with the handle, as while it has the focus.</summary>
+    [Fact]
+    public void A_maximized_window_left_on_the_docks_display_still_counts()
+    {
+        Assert.Equal(FrontFill.Maximized, DockFront.LeftBehind([Window(FrontFill.Maximized)]));
+    }
+
+    [Fact]
+    public void A_display_with_nothing_on_it_has_nothing_left_behind()
+    {
+        Assert.Equal(FrontFill.None, DockFront.LeftBehind([]));
+    }
+
+    /// <summary>A window brought up over the filling one on the same display is what it shows.</summary>
+    [Fact]
+    public void An_ordinary_window_over_it_is_what_the_display_shows()
+    {
+        Assert.Equal(FrontFill.None, DockFront.LeftBehind([Window(FrontFill.None), Window(FrontFill.Fullscreen)]));
+    }
+
+    /// <summary>A picture-in-picture player or a widget floats over everything without being it.</summary>
+    [Fact]
+    public void A_small_topmost_window_over_it_is_passed_over()
+    {
+        Assert.Equal(
+            FrontFill.Maximized,
+            DockFront.LeftBehind([Window(FrontFill.None, topmost: true), Window(FrontFill.Maximized)]));
+    }
+
+    /// <summary>The walk stops at the first window that settles it, and reads no further.</summary>
+    [Fact]
+    public void The_walk_stops_at_the_first_window_that_settles_it()
+    {
+        var read = 0;
+
+        IEnumerable<StackedWindow> Windows()
+        {
+            read++;
+            yield return Window(FrontFill.None);
+            read++;
+            yield return Window(FrontFill.Fullscreen);
+        }
+
+        Assert.Equal(FrontFill.None, DockFront.LeftBehind(Windows()));
+        Assert.Equal(1, read);
+    }
+
+    private static StackedWindow Window(FrontFill fill, bool topmost = false) => new(fill, topmost);
+
     private static bool Marks(
         bool showHandle = true,
         bool fullscreenInFront = false,

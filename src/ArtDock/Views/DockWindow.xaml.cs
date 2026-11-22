@@ -2694,7 +2694,9 @@ public sealed partial class DockWindow : Window
     /// when it came back up; hiding was asked for the same day, for the animation. Only the
     /// foreground is asked, as the Exclusions page has always asked it: overlays are never the
     /// foreground, and a window that is has the user's attention — so a maximized window left
-    /// behind while the user works on the other display has the dock back over it.
+    /// behind while the user works on the other display had the dock back over it, until
+    /// 2026-11-22: while the focus is on another display, the dock's own is looked at as well,
+    /// and a window left filling it still counts (<see cref="ForegroundApp.LeftBehind"/>).
     /// </para>
     /// <para>
     /// <b>A program on the Exclusions page outranks all of that</b>: the dock goes under it as
@@ -2736,7 +2738,14 @@ public sealed partial class DockWindow : Window
 
             // The general test is not asked once the list has answered, which settles it: a
             // listed program counts only when it fills the display.
+            // And with the focus on another display, a window left filling this one still counts
+            // — see ForegroundApp.LeftBehind.
             var fill = excluded ? FrontFill.Fullscreen : ForegroundApp.Filling(_display, _workArea);
+            if (fill == FrontFill.None)
+            {
+                fill = ForegroundApp.LeftBehind(_display, _workArea);
+            }
+
             var action = DockFront.Decide(excluded, filledInFront: fill != FrontFill.None);
 
             // Before the dock is moved, since its sliding away is what brings the handle up, and

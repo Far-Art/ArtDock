@@ -188,6 +188,12 @@ internal static partial class NativeMethods
     /// <summary>The window directly above this one in z-order.</summary>
     internal const uint GW_HWNDPREV = 3;
 
+    /// <summary>The top window of the z-order at this one's level.</summary>
+    internal const uint GW_HWNDFIRST = 0;
+
+    /// <summary>The window directly below this one in z-order.</summary>
+    internal const uint GW_HWNDNEXT = 2;
+
     [DllImport("user32.dll")]
     internal static extern nint GetWindow(nint hWnd, uint uCmd);
     internal const int WM_CAPTURECHANGED = 0x0215;
@@ -367,6 +373,9 @@ internal static partial class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern nint MonitorFromRect(ref NativeRect lprc, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    internal static extern nint MonitorFromWindow(nint hwnd, uint dwFlags);
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct MonitorInfo

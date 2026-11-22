@@ -88,6 +88,48 @@ public static class DockFront
         : filledInFront ? FrontAction.Hide
         : FrontAction.Show;
 
+    /// <summary>
+    /// How much of the dock's display a window left there has taken while the focus is on
+    /// another — the windows there given front to back, as a walk down the z-order finds them.
+    /// </summary>
+    /// <param name="frontToBack">
+    /// The windows on the dock's display that could be in front of it, from the top: overlays,
+    /// the shell's own and the dock's are left out before they get here.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// Asked on 2026-11-22: with a window fullscreen or maximized on the dock's display, a click
+    /// on the other display brought the dock back up over it, since only the foreground was
+    /// asked. That window still fills the display, so the dock stays down for it as it does while
+    /// the window has the focus — and the handle marks it over a maximized one, as there. Until
+    /// then a maximized window left behind had the dock back over it, deliberately, since
+    /// 2026-09-30.
+    /// </para>
+    /// <para>
+    /// The walk passes over topmost windows that do not fill the display — a picture-in-picture
+    /// player, a widget — which float over everything, the filling window included, without
+    /// being what the user left there. An ordinary window does stop it: above a filling window
+    /// on the same display, it was put there by the user and is what that display shows.
+    /// </para>
+    /// </remarks>
+    public static FrontFill LeftBehind(IEnumerable<StackedWindow> frontToBack)
+    {
+        foreach (var window in frontToBack)
+        {
+            if (window.Fill != FrontFill.None)
+            {
+                return window.Fill;
+            }
+
+            if (!window.Topmost)
+            {
+                return FrontFill.None;
+            }
+        }
+
+        return FrontFill.None;
+    }
+
     /// <summary>Whether the handle marks the dock.</summary>
     /// <param name="showHandle">The handle is asked for.</param>
     /// <param name="fullscreenInFront">
@@ -137,3 +179,8 @@ public static class DockFront
             || (hides && visibility is DockVisibility.Hiding or DockVisibility.Hidden)
             || (visibility is DockVisibility.Shown && outOfSight));
 }
+
+/// <summary>One window on the dock's display, as <see cref="DockFront.LeftBehind"/> sees it.</summary>
+/// <param name="Fill">How much of the display it has taken (<c>ForegroundApp.FillOf</c>).</param>
+/// <param name="Topmost">It is in the topmost band.</param>
+public readonly record struct StackedWindow(FrontFill Fill, bool Topmost);
