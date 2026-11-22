@@ -17,6 +17,7 @@
     "Settings.Size.Influence.Hint": "How many icons either side of the pointer lift with it. Counted in icons, so changing the dock size does not change the wave.",
 
     "Settings.Appearance.Colour": "Colour",
+    "Settings.Appearance.Corners.Beveled": "Bevelled",
     "Settings.Icons.GroupFit.Hint": "One, two or three items are centred, and a group of more than four shows how many more there are.",
     "Settings.Appearance.MatchTaskbar.Hint": "Paints the bar as Windows paints the taskbar, with the same blur, tint and edge, and keeps following it when the accent changes or the system switches between light and dark. The opacity, colour and blur set here are kept, and come back when this is turned off.",
     "Settings.Appearance.SavedColours": "Your saved colours",

@@ -255,6 +255,7 @@ public sealed class BackdropWindow : IDisposable
         var toWindow = dock.TransformToAncestor(root);
         var scale = toDevice.M11;
         var radius = dock.RenderedBarRadius;
+        var corners = dock.RenderedBarCorners;
 
         Point ToWindow(Point point) => toDevice.Transform(toWindow.Transform(point));
 
@@ -280,7 +281,7 @@ public sealed class BackdropWindow : IDisposable
             // the rim: a fill there would be a second tint.
             Paint(Clad(scale) ? Colors.Transparent : dock.BarFill, dock.BarRim);
             Span(spanLeft, spanRight, width);
-            Shape(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y, radius * scale, scale);
+            Shape(topLeft.X, topLeft.Y, bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y, radius * scale, scale, corners);
             return true;
         }
 
@@ -299,7 +300,7 @@ public sealed class BackdropWindow : IDisposable
             return false;
         }
 
-        var (insetX, insetY) = Inset(bar, radius);
+        var (insetX, insetY) = Inset(bar, BarOutline.EnclosedBy(radius, corners));
         bar.Inflate(-insetX, -insetY);
         if (bar.Width <= 0 || bar.Height <= 0)
         {
@@ -430,7 +431,7 @@ public sealed class BackdropWindow : IDisposable
     }
 
     /// <summary>The bar last drawn, so an unchanged one is not drawn again.</summary>
-    private (double X, double Y, double Width, double Height, double Radius, double Scale) _shape;
+    private (double X, double Y, double Width, double Height, double Radius, double Scale, BarCorners Corners) _shape;
 
     private bool _shaped;
 
@@ -450,20 +451,22 @@ public sealed class BackdropWindow : IDisposable
     /// was composed by DWM whenever a frame fell between the two, and showed as a flash of the
     /// sheet at the full width of its window, far past the ends of the bar.
     /// </remarks>
-    private void Shape(double x, double y, double width, double height, double radius, double scale)
+    private void Shape(
+        double x, double y, double width, double height, double radius, double scale, BarCorners corners = BarCorners.Round)
     {
         // Re-applying the shape it already has re-composes the sheet for nothing, and this
         // runs on every frame of the settings dialog's demonstration wave as well as on
         // every tick of every slider.
         if (_shaped && Same(x, _shape.X) && Same(y, _shape.Y) && Same(width, _shape.Width)
-            && Same(height, _shape.Height) && Same(radius, _shape.Radius) && Same(scale, _shape.Scale))
+            && Same(height, _shape.Height) && Same(radius, _shape.Radius) && Same(scale, _shape.Scale)
+            && corners == _shape.Corners)
         {
             return;
         }
 
-        _shape = (x, y, width, height, radius, scale);
+        _shape = (x, y, width, height, radius, scale, corners);
         _shaped = true;
-        _composition?.SetShape(x, y, width, height, radius, scale);
+        _composition?.SetShape(x, y, width, height, radius, scale, corners);
     }
 
     /// <summary>The span last cut to, so an unchanged one is not set again.</summary>

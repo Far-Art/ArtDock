@@ -3840,6 +3840,9 @@ public sealed class DockBar : Canvas
     /// </remarks>
     public double RenderedBarRadius { get; private set; } = -1;
 
+    /// <summary>The corners' shape that went with <see cref="RenderedBarRect"/>, for the same reason.</summary>
+    public BarCorners RenderedBarCorners { get; private set; }
+
     /// <summary>Frames of the render loop so far, counted as each begins.</summary>
     private long _frame;
 
@@ -3857,7 +3860,7 @@ public sealed class DockBar : Canvas
     /// geometry is recomputed on every frame of the wave, most of them changing nothing, and a
     /// note keeps the render loop running.
     /// </summary>
-    private (Rect Rect, double Radius) _noted = (Rect.Empty, -1);
+    private (Rect Rect, double Radius, BarCorners Corners) _noted = (Rect.Empty, -1, default);
 
     /// <summary>
     /// Notes that the bar has changed shape, to be announced once it has been drawn — see
@@ -3867,18 +3870,19 @@ public sealed class DockBar : Canvas
     {
         var rect = BarRect;
         var radius = Metrics.BarRadius;
-        if (SameShape(rect, radius, _noted.Rect, _noted.Radius))
+        var corners = Metrics.Corners;
+        if (corners == _noted.Corners && SameShape(rect, radius, _noted.Rect, _noted.Radius))
         {
             return;
         }
 
-        _noted = (rect, radius);
+        _noted = (rect, radius, corners);
 
         // Nothing follows the bar, so there is nothing to keep in step: the shape is taken as
         // drawn at once, and no frame is run to announce it.
         if (BarRectChanged is null)
         {
-            (RenderedBarRect, RenderedBarRadius) = (rect, radius);
+            (RenderedBarRect, RenderedBarRadius, RenderedBarCorners) = (rect, radius, corners);
             return;
         }
 
@@ -3913,12 +3917,13 @@ public sealed class DockBar : Canvas
 
         var rect = BarRect;
         var radius = Metrics.BarRadius;
-        if (SameShape(rect, radius, RenderedBarRect, RenderedBarRadius))
+        var corners = Metrics.Corners;
+        if (corners == RenderedBarCorners && SameShape(rect, radius, RenderedBarRect, RenderedBarRadius))
         {
             return;
         }
 
-        (RenderedBarRect, RenderedBarRadius) = (rect, radius);
+        (RenderedBarRect, RenderedBarRadius, RenderedBarCorners) = (rect, radius, corners);
         BarRectChanged?.Invoke(this, rect);
     }
 
@@ -4060,7 +4065,14 @@ public sealed class DockBar : Canvas
 
         // Inset by half the pen so the 1px border lands inside the bar's bounds.
         var bounds = new Rect(bar.X + 0.5, bar.Y + 0.5, bar.Width - 1, bar.Height - 1);
-        drawingContext.DrawRoundedRectangle(_barFill, _barBorder, bounds, radius, radius);
+        if (Metrics.Corners == BarCorners.Round)
+        {
+            drawingContext.DrawRoundedRectangle(_barFill, _barBorder, bounds, radius, radius);
+        }
+        else
+        {
+            drawingContext.DrawGeometry(_barFill, _barBorder, BarOutline.Geometry(bounds, radius, Metrics.Corners));
+        }
     }
 
     /// <summary>
@@ -4077,13 +4089,13 @@ public sealed class DockBar : Canvas
     private void DrawStandIn(DrawingContext drawingContext, Rect bar, double radius)
     {
         var area = new GeometryGroup { FillRule = FillRule.Nonzero };
-        area.Children.Add(new RectangleGeometry(bar, radius, radius));
+        area.Children.Add(BarOutline.Geometry(bar, radius, Metrics.Corners));
 
         if (DrawsShadow)
         {
             for (var pass = 0; pass < BarShadow.Passes.Count; pass++)
             {
-                var ring = BarShadow.Outermost(bar, radius, pass);
+                var ring = BarShadow.Outermost(bar, BarOutline.EnclosedBy(radius, Metrics.Corners), pass);
                 area.Children.Add(new RectangleGeometry(ring.Bounds, ring.Radius, ring.Radius));
             }
         }
@@ -4109,19 +4121,19 @@ public sealed class DockBar : Canvas
     /// blur it lays over the bar is opaque.
     /// </para>
     /// </remarks>
-    private static void DrawShadow(DrawingContext drawingContext, Rect bar, double radius)
+    private void DrawShadow(DrawingContext drawingContext, Rect bar, double radius)
     {
         // Even-odd over two figures punches the bar out of the region: the standard donut,
         // and far cheaper per frame than a boolean geometry combine.
         var region = new GeometryGroup { FillRule = FillRule.EvenOdd };
         region.Children.Add(new RectangleGeometry(Rect.Inflate(bar, BarShadow.Reach, BarShadow.Reach)));
-        region.Children.Add(new RectangleGeometry(bar, radius, radius));
+        region.Children.Add(BarOutline.Geometry(bar, radius, Metrics.Corners));
         region.Freeze();
 
         drawingContext.PushClip(region);
 
         Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
-        BarShadow.Rings(bar, radius, scale: 1, rings);
+        BarShadow.Rings(bar, BarOutline.EnclosedBy(radius, Metrics.Corners), scale: 1, rings);
 
         foreach (var ring in rings)
         {

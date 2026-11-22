@@ -60,6 +60,7 @@ internal sealed class CompositionBackdrop : IDisposable
     private readonly InsetClip _span;
     private readonly ContainerVisual _sheet;
     private readonly CompositionRoundedRectangleGeometry _shape;
+    private readonly CompositionGeometricClip _clip;
     private readonly SpriteVisual _blur;
     private readonly SpriteVisual _tint;
 
@@ -100,6 +101,26 @@ internal sealed class CompositionBackdrop : IDisposable
     private readonly CompositionColorBrush _fill;
     private readonly CompositionColorBrush _rim;
 
+    /// <summary>
+    /// The sheet's clip, the bar's face and the shadow's cut as paths, for every corner shape
+    /// but round — which the compositor's rounded rectangle cannot draw. Made the first time they are
+    /// wanted; the rounded rectangles above are kept up to date alongside, and swapped back in
+    /// for round corners.
+    /// </summary>
+    private CompositionPathGeometry? _shapePath;
+
+    private CompositionPathGeometry? _outlinePath;
+    private CompositionPathGeometry? _cutPath;
+
+    /// <summary>The corners drawn: anything but round means the paths are.</summary>
+    private BarCorners _corners;
+
+    /// <summary>Set once a path has failed to build, after which every shape is drawn round.</summary>
+    private bool _noPaths;
+
+    /// <summary>The bar last set, in device pixels, for a cut made after it — see <see cref="TryMakeCut"/>.</summary>
+    private (double X, double Y, double Width, double Height, double Radius) _bar;
+
     private CompositionBackdrop(Compositor compositor, DesktopWindowTarget target, Color tint)
     {
         _compositor = compositor;
@@ -135,7 +156,8 @@ internal sealed class CompositionBackdrop : IDisposable
         // sake of the part the clip keeps.
         _sheet = compositor.CreateContainerVisual();
         _shape = compositor.CreateRoundedRectangleGeometry();
-        _sheet.Clip = compositor.CreateGeometricClip(_shape);
+        _clip = compositor.CreateGeometricClip(_shape);
+        _sheet.Clip = _clip;
 
         // Blurs what is behind the window, which is what the taskbar shows and what the web
         // component's backdrop-filter does.
@@ -218,8 +240,13 @@ internal sealed class CompositionBackdrop : IDisposable
     /// Fractions of a pixel are kept — the bar's width drifts by well under a pixel a frame
     /// near the ends of a wave, and an edge that followed it in whole pixels would step.
     /// </remarks>
-    public void SetShape(double x, double y, double width, double height, double radius, double scale)
+    /// <param name="corners">The corners' shape. All but round ones are drawn as paths, and drawn
+    /// round where this machine will not build one.</param>
+    public void SetShape(
+        double x, double y, double width, double height, double radius, double scale, BarCorners corners = BarCorners.Round)
     {
+        _bar = (x, y, width, height, radius);
+        var shaped = corners != BarCorners.Round && !_noPaths;
         _sheet.Offset = new Vector3((float)x, (float)y, 0);
         _sheet.Size = new Vector2((float)width, (float)height);
         SetRoundedRect(_shape, 0, 0, width, height, radius);
@@ -235,14 +262,61 @@ internal sealed class CompositionBackdrop : IDisposable
             SetRoundedRect(_cutShape, x, y, width, height, radius);
         }
 
+        SetCorners(shaped ? corners : BarCorners.Round, x, y, width, height, radius, inset, scale);
+
         Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
-        BarShadow.Rings(new System.Windows.Rect(x, y, width, height), radius, scale, rings);
+        BarShadow.Rings(
+            new System.Windows.Rect(x, y, width, height),
+            BarOutline.EnclosedBy(radius, shaped ? corners : BarCorners.Round), scale, rings);
         for (var i = 0; i < _rings.Length; i++)
         {
             var ring = rings[i];
             SetRoundedRect(_rings[i], ring.Bounds.X, ring.Bounds.Y, ring.Bounds.Width, ring.Bounds.Height, ring.Radius);
         }
     }
+
+    /// <summary>
+    /// Draws the clip, the face and the cut as paths of the corners' shape, or puts the rounded
+    /// rectangles back for round ones. The shadow's rings stay rounded rectangles, of a radius
+    /// that keeps them inside the shape (<see cref="BarOutline.EnclosedBy"/>): soft as the shadow
+    /// is, the difference does not show, and a path for each ring on every frame of the wave would.
+    /// </summary>
+    private void SetCorners(BarCorners corners, double x, double y, double width, double height, double radius, double inset, double scale)
+    {
+        var squircle = corners != BarCorners.Round;
+        if (squircle)
+        {
+            try
+            {
+                _shapePath ??= _compositor.CreatePathGeometry();
+                _outlinePath ??= _compositor.CreatePathGeometry();
+                _shapePath.Path = Path(0, 0, width, height, radius, corners);
+                _outlinePath.Path = Path(x + inset, y + inset, width - scale, height - scale, radius, corners);
+                if (_cutSprite is not null)
+                {
+                    _cutPath ??= _compositor.CreatePathGeometry();
+                    _cutPath.Path = Path(x, y, width, height, radius, corners);
+                }
+            }
+            catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
+                or NotSupportedException or UnauthorizedAccessException)
+            {
+                _noPaths = true;
+                squircle = false;
+            }
+        }
+
+        _corners = squircle ? corners : BarCorners.Round;
+        _clip.Geometry = squircle ? _shapePath : (CompositionGeometry)_shape;
+        _faceShape.Geometry = squircle ? _outlinePath : (CompositionGeometry)_outline;
+        if (_cutSprite is not null)
+        {
+            _cutSprite.Geometry = squircle && _cutPath is not null ? _cutPath : (CompositionGeometry?)_cutShape;
+        }
+    }
+
+    private static CompositionPath Path(double x, double y, double width, double height, double radius, BarCorners corners) =>
+        new(new D2DOutline(new System.Windows.Rect(x, y, Math.Max(0, width), Math.Max(0, height)), radius, corners));
 
     /// <summary>
     /// Cuts everything off outside <paramref name="left"/> to <paramref name="right"/> across
@@ -401,6 +475,23 @@ internal sealed class CompositionBackdrop : IDisposable
         _cutSprite = _compositor.CreateSpriteShape(_cutShape);
         _cutSprite.FillBrush = _cutBrush;
 
+        // Made after the bar was last set, so given its shape now: nothing may set it again
+        // before the cut shows.
+        if (_corners != BarCorners.Round)
+        {
+            try
+            {
+                _cutPath ??= _compositor.CreatePathGeometry();
+                _cutPath.Path = Path(_bar.X, _bar.Y, _bar.Width, _bar.Height, _bar.Radius, _corners);
+                _cutSprite.Geometry = _cutPath;
+            }
+            catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
+                or NotSupportedException or UnauthorizedAccessException)
+            {
+                // The cut stays round: a sliver of shadow, at most, under the corners.
+            }
+        }
+
         _cut = _compositor.CreateShapeVisual();
         _cut.RelativeSizeAdjustment = Vector2.One;
         _cut.Shapes.Add(_cutSprite);
@@ -479,6 +570,9 @@ internal sealed class CompositionBackdrop : IDisposable
         _cut?.Shapes.Clear();
         _cutSprite?.Dispose();
         _cutShape?.Dispose();
+        _cutPath?.Dispose();
+        _shapePath?.Dispose();
+        _outlinePath?.Dispose();
         _cutBrush?.Dispose();
         _cut?.Dispose();
         _cutLayer?.Dispose();
@@ -488,6 +582,8 @@ internal sealed class CompositionBackdrop : IDisposable
         _grain?.Dispose();
         _grainSurface?.Dispose();
         _images?.Dispose();
+        _sheet.Clip = null;
+        _clip.Dispose();
         _shape.Dispose();
         _sheet.Dispose();
 

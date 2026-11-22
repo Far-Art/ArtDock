@@ -535,27 +535,44 @@
                         <!-- First: the one setting of the bar's look that matching the
                              taskbar leaves to the dock. -->
                         <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="220" />
-                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Roundness}" />
-                                <Slider
-                                    x:Name="RoundnessSlider"
-                                    AutomationProperties.Name="{DynamicResource Settings.Appearance.Roundness}"
-                                    Grid.Column="1"
-                                    Style="{StaticResource RowSlider}"
-                                    Maximum="1"
-                                    Minimum="0"
-                                    TickFrequency="0.02" />
-                                <TextBlock
-                                    Grid.Column="2"
-                                    Style="{StaticResource RowValue}"
-                                    loc:Localized.Key="Settings.Appearance.Roundness.Value"
-                                    loc:Localized.Value="{Binding ElementName=RoundnessSlider, Path=Value}" />
-                            </Grid>
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Corners}" />
+                                    <ComboBox
+                                        x:Name="CornersBox"
+                                        AutomationProperties.Name="{DynamicResource Settings.Appearance.Corners}"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Center" />
+                                </Grid>
+
+                                <Grid Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="220" />
+                                        <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Roundness}" />
+                                    <Slider
+                                        x:Name="RoundnessSlider"
+                                        AutomationProperties.Name="{DynamicResource Settings.Appearance.Roundness}"
+                                        Grid.Column="1"
+                                        Style="{StaticResource RowSlider}"
+                                        Maximum="1"
+                                        Minimum="0"
+                                        TickFrequency="0.02" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Style="{StaticResource RowValue}"
+                                        loc:Localized.Key="Settings.Appearance.Roundness.Value"
+                                        loc:Localized.Value="{Binding ElementName=RoundnessSlider, Path=Value}" />
+                                </Grid>
+                            </StackPanel>
                         </Border>
 
                         <!-- Why the blur's card below is greyed, and what the opacity does now,

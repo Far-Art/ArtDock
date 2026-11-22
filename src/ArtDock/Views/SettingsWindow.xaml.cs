@@ -237,6 +237,7 @@ public sealed partial class SettingsWindow : Window
         ShowAbout();
 
         FillThemeBox();
+        FillCornersBox();
         BuildSwatches();
         BuildAddMenu();
         FillScreenBox();
@@ -332,6 +333,7 @@ public sealed partial class SettingsWindow : Window
         GapSlider.Value = settings.GapFraction;
         OpacitySlider.Value = settings.BarOpacity;
         RoundnessSlider.Value = Math.Clamp(settings.BarRoundness, 0, 1);
+        CornersBox.SelectedIndex = (int)settings.CornerShape;
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(settings.BarColor));
         TaskbarColorCheck.IsChecked = settings.UseTaskbarColor;
         BlurCheck.IsChecked = settings.BlurBackground;
@@ -455,6 +457,7 @@ public sealed partial class SettingsWindow : Window
         // refills in a new language choose nothing, and pass while the pages are loading.
         LabelFontBox.SelectionChanged += (_, _) => Preview();
         LabelStyleBox.SelectionChanged += (_, _) => Preview();
+        CornersBox.SelectionChanged += (_, _) => Preview();
         ReduceMotionCheck.Checked += (_, _) => Preview();
         ReduceMotionCheck.Unchecked += (_, _) => Preview();
         NoGpuCheck.Checked += (_, _) => OnNoGpuToggled();
@@ -660,6 +663,7 @@ public sealed partial class SettingsWindow : Window
             UseTaskbarColor = TaskbarColorCheck.IsChecked == true,
             CustomColors = [.. _savedColors],
             BarRoundness = RoundnessSlider.Value,
+            BarCorners = SelectedCorners.ToString(),
             BlurBackground = BlurCheck.IsChecked == true,
             IconShadows = IconShadowsCheck.IsChecked == true,
             IconSet = SelectedIconSet,
@@ -2030,6 +2034,7 @@ public sealed partial class SettingsWindow : Window
         _loading = true;
         OpacitySlider.Value = defaults.BarOpacity;
         RoundnessSlider.Value = Math.Clamp(defaults.BarRoundness, 0, 1);
+        CornersBox.SelectedIndex = (int)defaults.CornerShape;
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(defaults.BarColor));
         TaskbarColorCheck.IsChecked = defaults.UseTaskbarColor;
         BlurCheck.IsChecked = defaults.BlurBackground;
@@ -3238,6 +3243,34 @@ public sealed partial class SettingsWindow : Window
         ThemeBox.SelectedIndex = selected;
     }
 
+    /// <summary>The corners' shape the picker is on, in the order <see cref="BarCorners"/> lists them.</summary>
+    private BarCorners SelectedCorners =>
+        Enum.IsDefined((BarCorners)CornersBox.SelectedIndex) ? (BarCorners)CornersBox.SelectedIndex : BarCorners.Round;
+
+    /// <summary>The corner shape picker's entries, in the order <see cref="BarCorners"/> lists them.</summary>
+    public static readonly string[] CornerLabels =
+    [
+        "Settings.Appearance.Corners.Round",
+        "Settings.Appearance.Corners.Squircle",
+        "Settings.Appearance.Corners.Beveled",
+        "Settings.Appearance.Corners.Scooped",
+        "Settings.Appearance.Corners.Leaf"
+    ];
+
+    /// <summary>Fills the corner shape picker in the current language, keeping its selection.</summary>
+    private void FillCornersBox()
+    {
+        var selected = CornersBox.SelectedIndex;
+
+        CornersBox.Items.Clear();
+        foreach (var key in CornerLabels)
+        {
+            CornersBox.Items.Add(Localizer.Get(key));
+        }
+
+        CornersBox.SelectedIndex = selected;
+    }
+
     // ---- the labels' lettering -----------------------------------------------
 
     /// <summary>What each typeface entry stands for: a family's name, or null for the dock's own.</summary>
@@ -3481,6 +3514,7 @@ public sealed partial class SettingsWindow : Window
             _relabelling = true;
 
             FillThemeBox();
+            FillCornersBox();
             FillScreenBox();
             BuildLanguageList(SelectedLanguage);
             BuildIconSetList(SelectedIconSet);

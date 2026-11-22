@@ -542,6 +542,19 @@ public sealed class DockSettings
     public double BarRoundness { get; set; } = 0.40;
 
     /// <summary>
+    /// The shape of the bar's corners, by name: <c>Round</c> or <c>Squircle</c>. A string, as
+    /// <see cref="Edge"/> is, so the settings file stays readable; anything else reads as round.
+    /// </summary>
+    public string BarCorners { get; set; } = nameof(Dock.BarCorners.Round);
+
+    /// <summary>The corners as the dock understands them, defaulting to round.</summary>
+    [JsonIgnore]
+    public BarCorners CornerShape =>
+        Enum.TryParse<BarCorners>(BarCorners, ignoreCase: true, out var corners) && Enum.IsDefined(corners)
+            ? corners
+            : Dock.BarCorners.Round;
+
+    /// <summary>
     /// Whether a sheet of system acrylic sits behind the bar, blurring what is under it.
     /// </summary>
     /// <remarks>
@@ -1232,7 +1245,8 @@ public sealed class DockSettings
             // rather than reshaping it.
             InfluenceRange = Neighbours * (size + gap),
             Gap = gap,
-            Roundness = Math.Clamp(BarRoundness, 0, 1)
+            Roundness = Math.Clamp(BarRoundness, 0, 1),
+            Corners = CornerShape
         };
     }
 
@@ -1252,6 +1266,7 @@ public sealed class DockSettings
         UseTaskbarColor = UseTaskbarColor,
         CustomColors = [.. CustomColors],
         BarRoundness = BarRoundness,
+        BarCorners = BarCorners,
         BlurBackground = BlurBackground,
         IconShadows = IconShadows,
         GroupFitsContents = GroupFitsContents,

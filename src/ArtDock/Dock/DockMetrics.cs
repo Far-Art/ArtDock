@@ -32,6 +32,9 @@ public sealed record DockMetrics
     /// </summary>
     public double Roundness { get; init; } = 1;
 
+    /// <summary>The shape of the bar's corners; <see cref="Roundness"/> sets their size.</summary>
+    public BarCorners Corners { get; init; } = BarCorners.Round;
+
     /// <summary>
     /// The radius at <see cref="Roundness"/> 0.
     /// </summary>
