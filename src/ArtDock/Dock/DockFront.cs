@@ -89,41 +89,36 @@ public static class DockFront
         : FrontAction.Show;
 
     /// <summary>
-    /// How much of the dock's display a window left there has taken while the focus is on
-    /// another — the windows there given front to back, as a walk down the z-order finds them.
+    /// How much of the dock's display is taken by the windows on it, given front to back as a
+    /// walk down the z-order finds them: what the first that fills it has taken, or
+    /// <see cref="FrontFill.None"/> when none does.
     /// </summary>
     /// <param name="frontToBack">
-    /// The windows on the dock's display that could be in front of it, from the top: overlays,
-    /// the shell's own and the dock's are left out before they get here.
+    /// What each window on the dock's display has taken of it, from the top: overlays, the
+    /// shell's own windows and the dock's are left out before they get here.
     /// </param>
     /// <remarks>
     /// <para>
-    /// Asked on 2026-11-22: with a window fullscreen or maximized on the dock's display, a click
-    /// on the other display brought the dock back up over it, since only the foreground was
-    /// asked. That window still fills the display, so the dock stays down for it as it does while
-    /// the window has the focus — and the handle marks it over a maximized one, as there. Until
-    /// then a maximized window left behind had the dock back over it, deliberately, since
-    /// 2026-09-30.
+    /// Asked on 2026-11-22, in three steps. A window fullscreen on the dock's display, and then
+    /// one maximized there, had the dock back over it at a click on the other display, since
+    /// only the foreground was asked; the same day, a window maximized there with a smaller one
+    /// in front of it had the dock over it too. So any window that fills the dock's display
+    /// counts, wherever it is in the z-order and wherever the focus is: a maximized window lies
+    /// under the dock whatever is in front of it. Until then a maximized window not in front
+    /// had the dock back over it, deliberately, since 2026-09-30.
     /// </para>
     /// <para>
-    /// The walk passes over topmost windows that do not fill the display — a picture-in-picture
-    /// player, a widget — which float over everything, the filling window included, without
-    /// being what the user left there. An ordinary window does stop it: above a filling window
-    /// on the same display, it was put there by the user and is what that display shows.
+    /// The first one met settles the handle: none over a fullscreen window, a mark over a
+    /// maximized one, as for the foreground (<see cref="Marks"/>).
     /// </para>
     /// </remarks>
-    public static FrontFill LeftBehind(IEnumerable<StackedWindow> frontToBack)
+    public static FrontFill Filled(IEnumerable<FrontFill> frontToBack)
     {
-        foreach (var window in frontToBack)
+        foreach (var fill in frontToBack)
         {
-            if (window.Fill != FrontFill.None)
+            if (fill != FrontFill.None)
             {
-                return window.Fill;
-            }
-
-            if (!window.Topmost)
-            {
-                return FrontFill.None;
+                return fill;
             }
         }
 
@@ -179,8 +174,3 @@ public static class DockFront
             || (hides && visibility is DockVisibility.Hiding or DockVisibility.Hidden)
             || (visibility is DockVisibility.Shown && outOfSight));
 }
-
-/// <summary>One window on the dock's display, as <see cref="DockFront.LeftBehind"/> sees it.</summary>
-/// <param name="Fill">How much of the display it has taken (<c>ForegroundApp.FillOf</c>).</param>
-/// <param name="Topmost">It is in the topmost band.</param>
-public readonly record struct StackedWindow(FrontFill Fill, bool Topmost);

@@ -2695,8 +2695,8 @@ public sealed partial class DockWindow : Window
     /// foreground is asked, as the Exclusions page has always asked it: overlays are never the
     /// foreground, and a window that is has the user's attention — so a maximized window left
     /// behind while the user works on the other display had the dock back over it, until
-    /// 2026-11-22: while the focus is on another display, the dock's own is looked at as well,
-    /// and a window left filling it still counts (<see cref="ForegroundApp.LeftBehind"/>).
+    /// 2026-11-22: since then any window filling the dock's display counts, in front or not,
+    /// wherever the focus is (<see cref="ForegroundApp.AnyFilling"/>).
     /// </para>
     /// <para>
     /// <b>A program on the Exclusions page outranks all of that</b>: the dock goes under it as
@@ -2738,12 +2738,12 @@ public sealed partial class DockWindow : Window
 
             // The general test is not asked once the list has answered, which settles it: a
             // listed program counts only when it fills the display.
-            // And with the focus on another display, a window left filling this one still counts
-            // — see ForegroundApp.LeftBehind.
+            // And any other window filling this display, under a smaller one or left there while
+            // the focus is on the other display — see ForegroundApp.AnyFilling.
             var fill = excluded ? FrontFill.Fullscreen : ForegroundApp.Filling(_display, _workArea);
             if (fill == FrontFill.None)
             {
-                fill = ForegroundApp.LeftBehind(_display, _workArea);
+                fill = ForegroundApp.AnyFilling(_display, _workArea);
             }
 
             var action = DockFront.Decide(excluded, filledInFront: fill != FrontFill.None);

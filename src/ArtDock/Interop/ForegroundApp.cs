@@ -174,20 +174,19 @@ internal sealed class ForegroundApp
     }
 
     /// <summary>
-    /// How much of the dock's display a window left there has taken, while the focus is
-    /// somewhere else — a game, a video or a maximized browser left on it while the user works on
-    /// the other display. <see cref="FrontFill.None"/> while the focus is on the dock's display.
+    /// How much of the dock's display the windows on it have taken — any of them, not only the
+    /// one in front: a maximized browser under a smaller window, or left there while the user
+    /// works on the other display.
     /// </summary>
     /// <param name="display">The dock's display, in physical pixels.</param>
     /// <param name="workArea">Its work area, likewise.</param>
     /// <remarks>
     /// <para>
-    /// Asked on 2026-11-22, when a click on the other display brought the dock up over a window
-    /// filling its own — fullscreen first, and maximized the same day; the rule is
-    /// <see cref="DockFront.LeftBehind"/>. While the foreground is on the dock's display it
-    /// answers alone (<see cref="Filling"/>), as it always has, so this walks the z-order only
-    /// while the focus is elsewhere — on the other display, or on the desktop, which spans both
-    /// and is clicked on the other display while a window fills this one.
+    /// Asked on 2026-11-22; the rule is <see cref="DockFront.Filled"/>, and this is the walk
+    /// down the z-order that feeds it — asked only once the foreground has not settled it
+    /// (<see cref="Filling"/>), so four times a second while no window fills the display, and
+    /// over every top-level window then. Cheap: most are passed by on being hidden or on another
+    /// display, before anything costlier than their style is read.
     /// </para>
     /// <para>
     /// The walk is what TODO.md's "Only the foreground counts" held off, for overlays: whole-
@@ -197,13 +196,14 @@ internal sealed class ForegroundApp
     /// windows that cannot be activated (read again on 2026-11-22), and the walk passes over
     /// both kinds, which are no program's main window: notifications, widgets, the dock's own.
     /// Not over every layered window: Claude's own window is layered, like many a Chromium or
-    /// Electron program's, and is an ordinary window. Passed over too: click-through windows,
-    /// windows with no area, the shell's passing surfaces and the desktop. A window belongs to the
-    /// display Windows says it is mostly on, so a window maximized on the other display, whose
-    /// invisible frame reaches a few pixels onto this one, is not here.
+    /// Electron program's, and is an ordinary window. Passed over too: minimized windows,
+    /// windows on other virtual desktops (cloaked), click-through windows, windows with no area,
+    /// the shell's passing surfaces and the desktop. A window belongs to the display Windows says
+    /// it is mostly on, so a window maximized on the other display, whose invisible frame
+    /// reaches a few pixels onto this one, is not here.
     /// </para>
     /// </remarks>
-    public static FrontFill LeftBehind(Rect display, Rect workArea)
+    public static FrontFill AnyFilling(Rect display, Rect workArea)
     {
         if (display.IsEmpty || display.Width <= 0 || display.Height <= 0)
         {
@@ -218,27 +218,16 @@ internal sealed class ForegroundApp
             Bottom = (int)display.Bottom
         };
         var monitor = NativeMethods.MonitorFromRect(ref area, NativeMethods.MONITOR_DEFAULTTONULL);
-        if (monitor == 0)
-        {
-            return FrontFill.None;
-        }
-
-        var foreground = WindowsApi.GetForegroundWindow();
-        if (foreground != 0
-            && !IsDesktop(foreground)
-            && NativeMethods.MonitorFromWindow(foreground, NativeMethods.MONITOR_DEFAULTTONEAREST) == monitor)
-        {
-            return FrontFill.None;
-        }
-
-        return DockFront.LeftBehind(WindowsOn(monitor, display, workArea));
+        return monitor == 0
+            ? FrontFill.None
+            : DockFront.Filled(WindowsOn(monitor, display, workArea));
     }
 
     /// <summary>
-    /// The windows on a display that could be what it shows, front to back — see
-    /// <see cref="LeftBehind"/> for what is passed over.
+    /// What each window on a display has taken of it, front to back — see
+    /// <see cref="AnyFilling"/> for what is passed over.
     /// </summary>
-    private static IEnumerable<StackedWindow> WindowsOn(nint monitor, Rect display, Rect workArea)
+    private static IEnumerable<FrontFill> WindowsOn(nint monitor, Rect display, Rect workArea)
     {
         var ownProcess = (uint)Environment.ProcessId;
         var any = WindowsApi.GetForegroundWindow() is var foreground and not 0 ? foreground : WindowsApi.GetShellWindow();
@@ -279,9 +268,7 @@ internal sealed class ForegroundApp
             }
 
             var rect = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-            yield return new StackedWindow(
-                FillOf(window, rect, display, workArea),
-                (exStyle & NativeMethods.WS_EX_TOPMOST) != 0);
+            yield return FillOf(window, rect, display, workArea);
         }
     }
 

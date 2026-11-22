@@ -159,45 +159,51 @@ public class DockFrontTests
         Assert.True(Marks(previewing: true, hides: false, visibility: DockVisibility.Shown));
     }
 
-    // ---- a window left filling the dock's display -----------------------------------------
+    // ---- any window filling the dock's display ------------------------------------------
 
     /// <summary>
     /// Asked on 2026-11-22: a game or a video fullscreen on the dock's display, and a click on
     /// the other display — the dock stays down, and no handle is drawn over the picture.
     /// </summary>
     [Fact]
-    public void A_fullscreen_window_left_on_the_docks_display_still_counts()
+    public void A_fullscreen_window_on_the_docks_display_counts()
     {
-        Assert.Equal(FrontFill.Fullscreen, DockFront.LeftBehind([Window(FrontFill.Fullscreen)]));
+        Assert.Equal(FrontFill.Fullscreen, DockFront.Filled([FrontFill.Fullscreen]));
     }
 
     /// <summary>The same day, maximized as well — with the handle, as while it has the focus.</summary>
     [Fact]
-    public void A_maximized_window_left_on_the_docks_display_still_counts()
+    public void A_maximized_window_on_the_docks_display_counts()
     {
-        Assert.Equal(FrontFill.Maximized, DockFront.LeftBehind([Window(FrontFill.Maximized)]));
+        Assert.Equal(FrontFill.Maximized, DockFront.Filled([FrontFill.Maximized]));
     }
 
     [Fact]
-    public void A_display_with_nothing_on_it_has_nothing_left_behind()
+    public void A_display_with_nothing_filling_it_has_the_dock()
     {
-        Assert.Equal(FrontFill.None, DockFront.LeftBehind([]));
+        Assert.Equal(FrontFill.None, DockFront.Filled([]));
+        Assert.Equal(FrontFill.None, DockFront.Filled([FrontFill.None, FrontFill.None]));
     }
 
-    /// <summary>A window brought up over the filling one on the same display is what it shows.</summary>
+    /// <summary>
+    /// And the same day again: a maximized window under smaller ones still lies under the dock,
+    /// so it counts wherever it is in the z-order.
+    /// </summary>
     [Fact]
-    public void An_ordinary_window_over_it_is_what_the_display_shows()
-    {
-        Assert.Equal(FrontFill.None, DockFront.LeftBehind([Window(FrontFill.None), Window(FrontFill.Fullscreen)]));
-    }
-
-    /// <summary>A picture-in-picture player or a widget floats over everything without being it.</summary>
-    [Fact]
-    public void A_small_topmost_window_over_it_is_passed_over()
+    public void A_maximized_window_under_smaller_ones_still_counts()
     {
         Assert.Equal(
             FrontFill.Maximized,
-            DockFront.LeftBehind([Window(FrontFill.None, topmost: true), Window(FrontFill.Maximized)]));
+            DockFront.Filled([FrontFill.None, FrontFill.None, FrontFill.Maximized]));
+    }
+
+    /// <summary>The first window that fills the display settles the handle.</summary>
+    [Theory]
+    [InlineData(FrontFill.Maximized, FrontFill.Fullscreen)]
+    [InlineData(FrontFill.Fullscreen, FrontFill.Maximized)]
+    public void The_first_window_that_fills_the_display_settles_it(FrontFill first, FrontFill second)
+    {
+        Assert.Equal(first, DockFront.Filled([FrontFill.None, first, second]));
     }
 
     /// <summary>The walk stops at the first window that settles it, and reads no further.</summary>
@@ -206,19 +212,17 @@ public class DockFrontTests
     {
         var read = 0;
 
-        IEnumerable<StackedWindow> Windows()
+        IEnumerable<FrontFill> Windows()
         {
             read++;
-            yield return Window(FrontFill.None);
+            yield return FrontFill.Maximized;
             read++;
-            yield return Window(FrontFill.Fullscreen);
+            yield return FrontFill.Fullscreen;
         }
 
-        Assert.Equal(FrontFill.None, DockFront.LeftBehind(Windows()));
+        Assert.Equal(FrontFill.Maximized, DockFront.Filled(Windows()));
         Assert.Equal(1, read);
     }
-
-    private static StackedWindow Window(FrontFill fill, bool topmost = false) => new(fill, topmost);
 
     private static bool Marks(
         bool showHandle = true,

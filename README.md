@@ -130,9 +130,10 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   pointer has left; when that window goes, the dock slides back. If the pointer is on the
   dock when the window takes the display — an icon just clicked that opens maximized — it
   waits until the pointer leaves. The taskbar, Alt+Tab, Start and the like coming to the
-  front leave it as it is, so switching between windows does not bounce it. A window left
-  fullscreen or maximized on the dock's display keeps it away while you work on another
-  display. A dock put away from the tray stays away through all of this.
+  front leave it as it is, so switching between windows does not bounce it. Any window
+  fullscreen or maximized on the dock's display keeps it away, even under a smaller window or
+  while you work on another display. A dock put away from the tray stays away through all of
+  this.
 - **Auto-hides** to the screen edge and returns when the cursor reaches the bottom — over
   whatever has the focus, *Always on top* or not. It used to slide up *under* the focused
   window when the dock did not float. With the setting off it still hides, as above, while a
@@ -1262,10 +1263,10 @@ fullscreen where the taskbar shows, and where it hides, unless it is maximized w
 windows are not asked at all: while the taskbar, Alt+Tab's switcher, Start or the like is in
 front, the dock holds still (`ForegroundApp.IsPassingShellInFront`) — Alt+Tab's switcher is
 exactly the work area, and would otherwise slide the dock away and back on every switch.
-While the focus is on another display, or on the desktop, the dock's own display is looked at
-as well (`ForegroundApp.LeftBehind`): a walk down the z-order that passes over tool,
-non-activating and click-through windows — overlays among them — and small topmost ones, and
-keeps the dock away if the first window it meets there is fullscreen or maximized. An
+When the window in front does not fill the display, the rest of the dock's display is looked
+at (`ForegroundApp.AnyFilling`): a walk down the z-order that passes over tool,
+non-activating and click-through windows — overlays among them — and minimized ones, and
+keeps the dock away if any window there is fullscreen or maximized. An
 empty list — the default — stops the list's test before it reads any window at all. The hiding
 is auto-hide's own path, run while such a window is in front whatever the setting
 (`AutoHideController.Yield`), and the rules — hide, show, and when the handle shows — are
@@ -1450,7 +1451,7 @@ that open as a grid instead are built); and built-in translations beyond English
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand three hundred and ten tests cover the cosine falloff (peak, range boundary,
+One thousand three hundred and eleven tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
