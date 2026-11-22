@@ -23,9 +23,7 @@ public static class DockSlide
     /// <summary>The slide back on screen, at the stock pace.</summary>
     public static readonly TimeSpan RevealDuration = TimeSpan.FromMilliseconds(280);
 
-    /// <summary>
-    /// The slide away, at the stock pace. The handle fades in over the same time, as the dock goes.
-    /// </summary>
+    /// <summary>The slide away, at the stock pace.</summary>
     public static readonly TimeSpan HideDuration = TimeSpan.FromMilliseconds(320);
 
     /// <summary>The slowest the Behaviour page offers, as a percentage of the stock pace.</summary>

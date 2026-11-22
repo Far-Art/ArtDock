@@ -208,107 +208,13 @@ public sealed class WindowChrome
     }
 
     /// <summary>
-    /// True when every one of <paramref name="points"/>, in physical screen pixels, lies under
-    /// a window of another program over the dock — so nothing of the dock there can be seen.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// What decides whether the dock is out of sight, for the handle that marks it then. Every
-    /// point rather than any: a dock partly covered can still be seen, and has no need of a
-    /// mark. Points rather than the bar's whole rectangle because two windows side by side —
-    /// snapped halves — can hide a bar that neither covers alone.
-    /// </para>
-    /// <para>
-    /// Any band, since a window that floats hides the dock as well as one that does not. One
-    /// walk for all the points, stopped as soon as the last is found covered — a dock that is
-    /// buried is usually buried by the first window above it.
-    /// </para>
-    /// </remarks>
-    public bool IsHiddenAt(ReadOnlySpan<Point> points)
-    {
-        if (points.IsEmpty)
-        {
-            return false;
-        }
-
-        Span<bool> hidden = stackalloc bool[points.Length];
-        var left = points.Length;
-        var ownProcess = (uint)Environment.ProcessId;
-
-        for (var window = Above(_hwnd); window != 0 && left > 0; window = Above(window))
-        {
-            if (!NativeMethods.GetWindowRect(window, out var rect) || !TakesThePointer(window))
-            {
-                continue;
-            }
-
-            WindowsApi.GetWindowThreadProcessId(window, out var process);
-            if (process == ownProcess)
-            {
-                continue;
-            }
-
-            for (var i = 0; i < points.Length; i++)
-            {
-                if (!hidden[i]
-                    && points[i].X >= rect.Left && points[i].X < rect.Right
-                    && points[i].Y >= rect.Top && points[i].Y < rect.Bottom)
-                {
-                    hidden[i] = true;
-                    left--;
-                }
-            }
-        }
-
-        return left == 0;
-    }
-
-    /// <summary>
-    /// True when a window of another program lies over <paramref name="hwnd"/> — one that can
-    /// be seen and takes the pointer, in any band.
-    /// </summary>
-    /// <remarks>
-    /// For the handle, which floats and has to stay in view: whatever is over a window that
-    /// floats floats as well, and has come to the front since.
-    /// </remarks>
-    public static bool IsUnderAnother(nint hwnd)
-    {
-        if (!NativeMethods.GetWindowRect(hwnd, out var own))
-        {
-            return false;
-        }
-
-        var ownProcess = (uint)Environment.ProcessId;
-
-        for (var window = Above(hwnd); window != 0; window = Above(window))
-        {
-            if (!NativeMethods.GetWindowRect(window, out var rect)
-                || rect.Left >= own.Right || rect.Right <= own.Left
-                || rect.Top >= own.Bottom || rect.Bottom <= own.Top
-                || !TakesThePointer(window))
-            {
-                continue;
-            }
-
-            WindowsApi.GetWindowThreadProcessId(window, out var process);
-            if (process != ownProcess)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// True when any of <paramref name="windows"/> is above <paramref name="hwnd"/> in the
     /// z-order, wherever either is on the screen. Zeros are ignored.
     /// </summary>
     /// <remarks>
-    /// For the handle and the dock's own windows, which are this process's and so passed over
-    /// by <see cref="IsUnderAnother"/>. No test of where they lie: only the order matters, and
-    /// on the fallback path the sheet has a shadow of DWM's, which reaches past the window's
-    /// rectangle.
+    /// For the window previews, kept over the dock's own windows. No test of where they lie:
+    /// only the order matters, and on the fallback path the sheet has a shadow of DWM's, which
+    /// reaches past the window's rectangle.
     /// </remarks>
     public static bool IsUnderAny(nint hwnd, ReadOnlySpan<nint> windows)
     {

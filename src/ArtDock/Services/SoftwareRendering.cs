@@ -13,7 +13,7 @@ namespace ArtDock.Services;
 /// is the process's preference, and what every window made from then on is drawn by — the
 /// menus, the tooltips, a dialog opened later. A window that is already up has a render target
 /// of its own, and <see cref="HwndTarget.RenderMode"/> is the documented way to move one of
-/// those: so the dock, the handle and the settings dialog whose checkbox this is are each told.
+/// those: so the dock and the settings dialog whose checkbox this is are each told.
 /// </para>
 /// <para>
 /// A machine with no graphics card draws in software whatever is asked — WPF falls back by

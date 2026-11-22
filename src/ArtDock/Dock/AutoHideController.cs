@@ -107,8 +107,8 @@ public sealed class AutoHideController
     private readonly Func<bool> _standDown;
 
     /// <summary>
-    /// The bar at rest on the screen, in physical pixels — the owner's, which measures it the way
-    /// the handle is placed from; empty before the dock has been laid out. Only its left and
+    /// The bar at rest on the screen, in physical pixels — the owner's; empty before the dock
+    /// has been laid out. Only its left and
     /// right are asked: they bound both zones sideways, see <see cref="IsUnderDock(double, Rect, Rect)"/>.
     /// </summary>
     private readonly Func<Rect> _restingBar;
@@ -213,8 +213,7 @@ public sealed class AutoHideController
     /// <para>
     /// Not the edge, and not a window in front going: a dock put away from the tray while a
     /// maximized window is in front would otherwise come back the moment that window did, or
-    /// the moment the pointer brushed the bottom of the screen. Nor is it marked by the handle,
-    /// which would be offering something the pointer cannot do.
+    /// the moment the pointer brushed the bottom of the screen.
     /// </para>
     /// <para>
     /// Whatever holds the dock up — the settings dialog, for its preview — brings it back for
@@ -331,8 +330,7 @@ public sealed class AutoHideController
     } = DockVisibility.Shown;
 
     /// <summary>
-    /// Raised as the dock starts to leave, has gone, starts to come back and is back — so the
-    /// handle it leaves behind can arrive as it goes and go as it arrives.
+    /// Raised as the dock starts to leave, has gone, starts to come back and is back.
     /// </summary>
     public event EventHandler? VisibilityChanged;
 
@@ -566,11 +564,9 @@ public sealed class AutoHideController
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The edge and nothing else. The handle marks where the dock is and does not bring it: it
-    /// did, by resting the pointer on it, until 2026-09-30, when it was made a mark only on
-    /// request. It lies over the bottom rows of other windows — status bars, scroll bars —
-    /// where the pointer goes on business of its own, whereas the edge is only reached by
-    /// pushing past the taskbar.
+    /// The edge and nothing else: it is only reached by pushing past the taskbar, where the
+    /// bottom rows of other windows — status bars, scroll bars — are where the pointer goes on
+    /// business of its own.
     /// </para>
     /// <para>
     /// Standing down resets the hold rather than pausing it. The pointer can sit at the edge
@@ -779,9 +775,8 @@ public sealed class AutoHideController
     /// As wide as the bar and no wider, since 2026-09-30. It was the dock's whole window and
     /// 80 DIPs more at each end — the window keeps room beside the bar for the wave to grow
     /// into, and for the slot a drop opens — which came out at about half as wide again as the
-    /// dock, so the edge brought the dock up for a pointer well to the side of it. Measured the
-    /// way the handle is placed from, so where the handle is as wide as the dock the two line up.
-    /// The window's own width was WPF's too, which lags a change of scale; the bar is read off
+    /// dock, so the edge brought the dock up for a pointer well to the side of it. The window's
+    /// own width was WPF's too, which lags a change of scale; the bar is read off
     /// the screen.
     /// </para>
     /// <para>
@@ -855,7 +850,7 @@ public sealed class AutoHideController
             return;
         }
 
-        // Before the change of visibility, which the handle hears about and asks this.
+        // Before the change of visibility, whose listeners may ask this.
         IsPutAway = putAway;
 
         // Not on the screen yet, it is not slid anywhere but counted hidden from the start, and

@@ -18,7 +18,7 @@ namespace ArtDock.Views;
 /// <remarks>
 /// <para>
 /// A window of its own because the dock's clips what it draws to itself, and it is only a slot
-/// wider than the bar. Made by hand, like <see cref="HandleWindow"/>, so its size is set in
+/// wider than the bar. Made by hand, like <see cref="BackdropWindow"/>, so its size is set in
 /// device pixels: the icon is as big as the dock's magnified one on the dock's display, and
 /// stays that size across a display of another scale, because <c>WM_DPICHANGED</c> is swallowed
 /// and what is drawn is stretched to whatever the window is (a <see cref="Viewbox"/>), whatever
@@ -363,7 +363,7 @@ public sealed class LiftedIconWindow : IDisposable
 
     private nint OnWindowMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
     {
-        // Swallowed, as the handle's is: its size is the dock's to set, and WPF's handling of a
+        // Swallowed: its size is the dock's to set, and WPF's handling of a
         // move to a display of another scale would resize it by the ratio between the two.
         if (msg == NativeMethods.WM_DPICHANGED)
         {

@@ -763,43 +763,9 @@ public sealed class DockSettings
     public int PreviewDelayMs { get; set; } = 150;
 
     /// <summary>
-    /// Whether a slim handle marks where the dock is while it cannot be seen — slid away by
-    /// auto-hide, or under the windows in front.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The phone's home indicator, on a desktop: a short bar just above the taskbar, under
-    /// where the dock will come up. A dock out of sight otherwise leaves no trace that it is
-    /// there at all. A mark and nothing more: resting the pointer on it brought the dock up
-    /// until 2026-09-30, and was taken away on request, so the edge is the one way up. It
-    /// floats over everything but the programs of <see cref="NoRevealApps"/>, which the dock
-    /// does not come up over. One hidden from the tray was put away on purpose, and is left
-    /// without one.
-    /// </para>
-    /// <para>
-    /// Off by default since 2026-11-22, asked for; on before then. Until 2026-09-30 it appeared
-    /// only with auto-hide on, and the name is from then. A settings file without the property
-    /// comes up without one.
-    /// </para>
-    /// </remarks>
-    public bool ShowHandle { get; set; }
-
-    /// <summary>
-    /// Whether the handle is as wide as the dock's bar, rather than <see cref="HandleWidth"/>.
-    /// </summary>
-    /// <remarks>
-    /// The width of its own is kept underneath, the way <see cref="BarColor"/> is under
-    /// <see cref="UseTaskbarColor"/>, so going back to it puts back the one that was chosen.
-    /// </remarks>
-    public bool HandleMatchesDock { get; set; } = true;
-
-    /// <summary>The handle's width in DIPs, when it is not the dock's.</summary>
-    public double HandleWidth { get; set; } = DockHandle.DefaultWidth;
-
-    /// <summary>
     /// The programs the dock stays down for: while one of them is in front and fills the
     /// dock's display, the dock is under it, holding the pointer against the edge neither
-    /// brings a hidden dock back nor lifts a covered one, and no handle is shown over it. While
+    /// brings a hidden dock back nor lifts a covered one. While
     /// one is in front at all, whatever its size and whichever display it is on, the dock lets
     /// go of its hotkeys, so their keys reach the program.
     /// </summary>
@@ -967,8 +933,8 @@ public sealed class DockSettings
     /// that the settings dialog only says when that is so and the box is not ticked. On, the dock is
     /// drawn in software, with no Direct3D device at all (<see cref="SoftwareRendering"/>), and
     /// gives up what leans on the compositor: the blur behind the bar (<see cref="Blurs"/>),
-    /// the bar's translucency (<see cref="BarAlpha"/>), the handle's inversion
-    /// (<see cref="HandleInverts"/>) and the dialogs' Mica. And it draws less: neither the
+    /// the bar's translucency (<see cref="BarAlpha"/>) and the dialogs' Mica. And it draws
+    /// less: neither the
     /// bar nor the icons cast a shadow (<see cref="CastsBarShadow"/>,
     /// <see cref="CastsIconShadows"/>). The wave itself stays, at the display's own pace —
     /// <see cref="ReduceMotion"/> is beside it for a machine that cannot keep up even so.
@@ -1016,8 +982,8 @@ public sealed class DockSettings
     /// <summary>
     /// Whether the bar is solid, with no blur behind it: under <see cref="NoGpu"/>, or with
     /// Windows' transparency effects off (<see cref="WindowsTransparency"/>) — where Windows makes
-    /// its own taskbar solid, and the dock's bar follows it. Only the bar: the shadows and the
-    /// handle's inversion are not transparency, and are No GPU's alone.
+    /// its own taskbar solid, and the dock's bar follows it. Only the bar: the shadows are not
+    /// transparency, and are No GPU's alone.
     /// </summary>
     [JsonIgnore]
     public bool SolidBar => NoGpu || !WindowsTransparency;
@@ -1053,13 +1019,6 @@ public sealed class DockSettings
     public string BarPaint(string color) => SolidBar
         ? BarPalette.ToHex(BarPalette.Over(BarPalette.Parse(color), BarOpacity, BarPalette.Underlay))
         : color;
-
-    /// <summary>
-    /// Whether the handle shows what is behind it inverted, which takes reading the screen
-    /// under it, or takes the dock's colour — as it does under <see cref="NoGpu"/>.
-    /// </summary>
-    [JsonIgnore]
-    public bool HandleInverts => !NoGpu;
 
     /// <summary>
     /// Whether the icons cast their shadows: asked for in <see cref="IconShadows"/>, and not
@@ -1312,9 +1271,6 @@ public sealed class DockSettings
         SlideSpeed = SlideSpeed,
         WindowPreviews = WindowPreviews,
         PreviewDelayMs = PreviewDelayMs,
-        ShowHandle = ShowHandle,
-        HandleMatchesDock = HandleMatchesDock,
-        HandleWidth = HandleWidth,
         NoRevealApps = [.. NoRevealApps],
         BottomMargin = BottomMargin,
         Hotkeys = new Dictionary<string, string>(Hotkeys, StringComparer.Ordinal),

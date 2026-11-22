@@ -34,7 +34,6 @@
     "Settings.Position.Centre": "Centre",
 
     "Settings.Behaviour.Title": "Behaviour",
-    "Settings.Behaviour.Handle.Hint": "A slim bar just above the taskbar marks where the dock is while you cannot see it — slid away, or under other windows. It is only a mark: hold the pointer against the bottom edge under the dock to bring it up. It shows the colours behind it reversed, so it stands out on any background, and screenshots and recordings leave it out. It is not shown over anything fullscreen, such as a video or a game.",
     "Settings.Behaviour.Reset": "Reset Behaviour to defaults",
 
     "Scan.Hint": "Tick a game to exclude all of its programs, or tick them one by one. Programs that give the same name share a row, since a launcher often starts a game under another file name — and a program that never fills the screen changes nothing, so when unsure, tick it. A game that is running is marked Open now and listed first.",
@@ -44,7 +43,6 @@
 
     "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
     "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",
-    "Settings.System.NoGpu.Hint": "For a computer with no graphics card to draw with — a virtual machine, a remote session. The dock is drawn by the processor alone and gives up what needs one: the bar is solid with no blur behind it, neither it nor the icons cast a shadow, the handle takes the bar's colour, and these windows go without Mica. Magnification stays.",
 
     "Settings.About.StartOver.Hint": "Puts every page back the way ArtDock ships, and the dock back to the items a new dock starts with. Saved colours and excluded apps are left alone. Nothing is written until you press Save.",
 

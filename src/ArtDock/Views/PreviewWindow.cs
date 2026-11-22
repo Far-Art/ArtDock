@@ -461,7 +461,7 @@ internal sealed class PreviewWindow : IDisposable
     /// <summary>The panel's windows: the one it is drawn in and the one that takes the pointer.</summary>
     public (nint Drawing, nint Input) Windows => (_hwnd, _input);
 
-    /// <summary>Keeps the panel above the dock, its sheet and its handle: topmost, and at the top of the topmost band.</summary>
+    /// <summary>Keeps the panel above the dock and its sheet: topmost, and at the top of the topmost band.</summary>
     public void BringToTop()
     {
         if (_disposed)

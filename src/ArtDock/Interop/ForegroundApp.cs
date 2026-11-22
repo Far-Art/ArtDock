@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Windows;
-using ArtDock.Dock;
 using ArtDock.Services;
 
 namespace ArtDock.Interop;
@@ -91,16 +90,12 @@ internal sealed class ForegroundApp
         return _path;
     }
 
-    /// <summary>A title bar: <c>WS_BORDER | WS_DLGFRAME</c>.</summary>
-    private const uint WS_CAPTION = 0x00C0_0000;
-
     /// <summary>
-    /// How much of the dock's display the window in front has taken — all of the work area,
-    /// as a maximized window does, or the whole display for itself, as a fullscreen one does —
-    /// whichever program it belongs to.
+    /// True when the window in front has taken all of the dock's work area — as a maximized
+    /// window does, or a fullscreen one, which covers the whole display — whichever program it
+    /// belongs to.
     /// </summary>
-    /// <param name="display">The dock's display, in physical pixels.</param>
-    /// <param name="workArea">Its work area, likewise.</param>
+    /// <param name="workArea">The dock's work area, in physical pixels.</param>
     /// <remarks>
     /// <para>
     /// What the dock hides for, whatever <em>Always on top</em> says, until the pointer brings
@@ -121,69 +116,30 @@ internal sealed class ForegroundApp
     /// and only then the desktop ruled out, which settles it for nearly every window without
     /// reading its class: it is asked four times a second for as long as the dock runs.
     /// </para>
-    /// <para>
-    /// The two were told apart again on 2026-10-01, for the handle alone, which is not drawn over
-    /// a fullscreen window — a video, mostly — and still marks a dock hidden for a maximized one
-    /// (<see cref="FullscreenApps.IsFullscreen"/>). The window's state and style are read only
-    /// for a window that covers the whole display, which is rare enough not to count.
-    /// </para>
     /// </remarks>
-    public static FrontFill Filling(Rect display, Rect workArea)
+    public static bool Filling(Rect workArea)
     {
         var window = WindowsApi.GetForegroundWindow();
         if (window == 0 || !NativeMethods.GetWindowRect(window, out var bounds))
         {
-            return FrontFill.None;
+            return false;
         }
 
         var rect = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-        if (!FullscreenApps.Fills(rect, workArea) || IsDesktop(window))
-        {
-            return FrontFill.None;
-        }
-
-        return FillOf(window, rect, display, workArea);
+        return FullscreenApps.Fills(rect, workArea) && !IsDesktop(window);
     }
 
     /// <summary>
-    /// How much of a display a window has taken, by its bounds and, only for one that covers the
-    /// whole display, its state and style — see <see cref="Filling"/>.
-    /// </summary>
-    private static FrontFill FillOf(nint window, Rect rect, Rect display, Rect workArea)
-    {
-        if (!FullscreenApps.Fills(rect, workArea))
-        {
-            return FrontFill.None;
-        }
-
-        if (!FullscreenApps.Fills(rect, display))
-        {
-            return FrontFill.Maximized;
-        }
-
-        var style = (uint)NativeMethods.GetWindowLongPtr(window, NativeMethods.GWL_STYLE);
-
-        return FullscreenApps.IsFullscreen(
-            rect,
-            display,
-            workArea,
-            maximized: WindowsApi.IsZoomed(window),
-            captioned: (style & WS_CAPTION) == WS_CAPTION)
-            ? FrontFill.Fullscreen
-            : FrontFill.Maximized;
-    }
-
-    /// <summary>
-    /// How much of the dock's display the windows on it have taken — any of them, not only the
-    /// one in front: a maximized browser under a smaller window, or left there while the user
-    /// works on the other display.
+    /// True when any of the windows on the dock's display has taken all of its work area — not
+    /// only the one in front: a maximized browser under a smaller window, or left there while
+    /// the user works on the other display.
     /// </summary>
     /// <param name="display">The dock's display, in physical pixels.</param>
     /// <param name="workArea">Its work area, likewise.</param>
     /// <remarks>
     /// <para>
-    /// Asked on 2026-11-22; the rule is <see cref="DockFront.Filled"/>, and this is the walk
-    /// down the z-order that feeds it — asked only once the foreground has not settled it
+    /// Asked on 2026-11-22: a walk down the z-order, stopped at the first window that fills the
+    /// display — asked only once the foreground has not settled it
     /// (<see cref="Filling"/>), so four times a second while no window fills the display, and
     /// over every top-level window then. Cheap: most are passed by on being hidden or on another
     /// display, before anything costlier than their style is read.
@@ -203,11 +159,11 @@ internal sealed class ForegroundApp
     /// reaches a few pixels onto this one, is not here.
     /// </para>
     /// </remarks>
-    public static FrontFill AnyFilling(Rect display, Rect workArea)
+    public static bool AnyFilling(Rect display, Rect workArea)
     {
         if (display.IsEmpty || display.Width <= 0 || display.Height <= 0)
         {
-            return FrontFill.None;
+            return false;
         }
 
         var area = new NativeMethods.NativeRect
@@ -218,16 +174,14 @@ internal sealed class ForegroundApp
             Bottom = (int)display.Bottom
         };
         var monitor = NativeMethods.MonitorFromRect(ref area, NativeMethods.MONITOR_DEFAULTTONULL);
-        return monitor == 0
-            ? FrontFill.None
-            : DockFront.Filled(WindowsOn(monitor, display, workArea));
+        return monitor != 0 && WindowsOn(monitor).Any(rect => FullscreenApps.Fills(rect, workArea));
     }
 
     /// <summary>
-    /// What each window on a display has taken of it, front to back — see
-    /// <see cref="AnyFilling"/> for what is passed over.
+    /// The bounds of each window on a display, front to back — see <see cref="AnyFilling"/> for
+    /// what is passed over.
     /// </summary>
-    private static IEnumerable<FrontFill> WindowsOn(nint monitor, Rect display, Rect workArea)
+    private static IEnumerable<Rect> WindowsOn(nint monitor)
     {
         var ownProcess = (uint)Environment.ProcessId;
         var any = WindowsApi.GetForegroundWindow() is var foreground and not 0 ? foreground : WindowsApi.GetShellWindow();
@@ -267,8 +221,7 @@ internal sealed class ForegroundApp
                 continue;
             }
 
-            var rect = new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
-            yield return FillOf(window, rect, display, workArea);
+            yield return new Rect(bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
         }
     }
 

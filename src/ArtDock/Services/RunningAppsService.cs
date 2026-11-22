@@ -559,7 +559,7 @@ public sealed class RunningAppsService : IDisposable
     /// the answer to the dock's thread — never on the dock's thread: see the remarks above.
     /// </summary>
     /// <remarks>
-    /// Anything thrown loses that reading and no more, as <c>HandleWindow</c>'s reading does: an
+    /// Anything thrown loses that reading and no more: an
     /// exception on a background thread would take the dock down with it.
     /// </remarks>
     private void ReadFolders(Dispatcher dock)

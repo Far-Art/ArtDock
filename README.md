@@ -20,9 +20,6 @@ responsive and built to feel at home on Windows.
   the settings dialog reaches the dock at once, so a change is judged on the dock itself
   rather than imagined. Nothing is written until Save, and Cancel puts the dock back the way
   it was found.
-- **A handle that marks a hidden dock**, if turned on. While the dock is out of sight — slid
-  away, or under other windows — a slim bar just above the taskbar shows where it will come up. It inverts
-  the colours behind it, so it stands out on any background.
 - **Blur behind the bar.** The bar sits on a sheet of Windows acrylic, which blurs whatever
   is behind it — drawn with the bar and its shadow in one piece, so the three never come apart.
 
@@ -138,52 +135,12 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   whatever has the focus, *Always on top* or not. It used to slide up *under* the focused
   window when the dock did not float. With the setting off it still hides, as above, while a
   maximized or fullscreen window is in front. The bottom **under the dock**, that is: across
-  the bar and no wider, so it lines up with a handle as wide as the dock, and the strip below a
-  dock that is up keeps it up across the same width. Until 2026-09-30 it was the dock's whole
+  the bar and no wider, and the strip below a dock that is up keeps it up across the same
+  width. Until 2026-09-30 it was the dock's whole
   window and 80 pixels more at each end — the window keeps room beside the bar for the wave —
   about half as wide again as the dock. A dock that hides **starts hidden** — auto-hide on, or
   a window in front filling its display — rather than coming up as it starts and sliding off a
   moment later, which it did at every sign-in until 2026-10-14.
-- **Marks itself with a handle while it is out of sight**, when turned on on the Behaviour
-  page (off by default since 2026-11-22): a slim bar just above the taskbar, centred under where the dock will come up — the
-  phone's home indicator, on a desktop. Out of sight means slid away — by auto-hide, or for a
-  maximized or fullscreen window in front — or on screen with none of the bar showing for the
-  windows over it, as a dock that does not float can be; a dock only partly covered can be
-  seen, and has none. So it works with auto-hide off as well, and the setting is no longer
-  greyed without it. It fades in as the dock slides away or is covered, at the slide's pace,
-  and out in a fraction of that as it comes back — gone before the rising bar has passed it,
-  since the bar comes to rest just above it. **It is a mark only**: the pointer resting on it does nothing, and holding
-  the edge is what brings the dock up — resting on it used to, and was taken away because it
-  lies over the bottom rows of other windows, where the pointer goes on business of its own.
-  Clicks go straight through it to the window underneath, which is usually the bottom row of
-  something maximized. It is as wide as the dock, following it as
-  icons come and go, or a width of its own. It **inverts the colours behind it**, so it stands
-  out on anything; the inverse is pushed away from the colour behind, since plain inversion
-  gives mid-grey back as mid-grey and the handle would vanish into a grey status bar. What is
-  behind is read off the screen on a thread of its own: fifteen times a second while it keeps
-  still, for about half a percent of one core, and every frame while it moves, so a page
-  scrolling or a video playing under it is followed frame for frame. Reading every frame costs
-  Windows' compositor about a tenth of one core, so it is kept for movement — two changes close
-  together; a caret blinking under the handle does not count. The handle is kept out of
-  screenshots and recordings — which is
-  what keeps it out of its own reads (see *Known gaps*). There is no other look to choose: a
-  checkbox offered the bar's colour instead, and was taken away as a choice not worth a
-  setting. The bar's colour remains only as a fallback, where Windows will not keep a window
-  out of captures, and as what *No GPU* gives it, where the screen is not read at all. It
-  **floats over everything**, and climbs
-  back to the top when a window that floats comes to the front over it — the dock's own
-  included, so a dock set to float does not lay its bar's shadow across the handle while the
-  settings dialog shows one under the other. **It is not drawn over anything fullscreen**: a
-  video, a game or a presentation has the whole display, and the handle would sit on the
-  picture. A dock hidden for a maximized window is still marked, and the edge brings the dock
-  up over either. A program on the **Exclusions** page counts only when it fills the display,
-  so it never has a handle over it either — and the dock does not come up over one at all.
-  Fullscreen is the window in front covering the whole display, past the taskbar; where the
-  taskbar hides itself a maximized window covers it too, and is told apart by its title bar —
-  a game's borderless fullscreen is a maximized window without one. A dock hidden from the
-  tray has none: it was put away on
-  purpose, and only the tray brings it back for good. While the settings dialog is open it shows under
-  the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
 - **Matches the taskbar**, by default since 2026-11-22 (*Match the taskbar*, first on the Appearance page): the
@@ -199,7 +156,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
 - **Follows Windows' *Transparency effects*** (Settings › Personalization › Colors). Off, Windows
   makes the taskbar solid, and the bar goes solid with it, with no blur behind it — painted as
   *No GPU* paints it, its colour at its opacity over grey, so the Opacity slider still does
-  something. Only the bar: the shadows and the handle stay as they were. The blur keeps its
+  something. Only the bar: the shadows stay as they were. The blur keeps its
   setting, greyed on the Appearance page with a line saying why, and comes back when the
   switch does; the switch is heard while the dock runs, and the dialogs and window previews,
   which are on Windows' own materials, follow it as they always have.
@@ -209,9 +166,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   what leans on one: the bar is solid, with no blur behind it — painted not in its colour
   alone, which came out far lighter than the bar had ever looked, but in its colour at its
   opacity over a fixed grey that stands in for the desktop, so it keeps about the look it was
-  chosen for and the Opacity slider still does something; the handle takes the bar's
-  colour instead of reading the screen to invert it, and is back in screenshots; and every
-  dialog goes without Mica, on the theme's plain background. It also draws less: **neither the bar nor the
+  chosen for and the Opacity slider still does something; and every dialog goes without Mica, on the theme's plain background. It also draws less: **neither the bar nor the
   icons cast a shadow**. The bar's is a stack of see-through rounded rectangles under a clip,
   drawn again on every frame of the wave, which on a graphics card is about a tenth of what the
   wave costs and in software was measured at most of it — the settings dialog's sweep at about
@@ -594,8 +549,7 @@ lands; bring it back into the
   time the map moved. While a program on the **Exclusions** page is in front and fills the
   dock's display, fullscreen or borderless, holding the pointer against the edge does
   nothing: a hidden dock stays hidden, a covered one stays covered, and the strip under a
-  dock that was already out stops holding it up. The handle is not drawn over it either. Any
-  window filling the display sends the dock away, but only a listed one keeps it away: **the
+  dock that was already out stops holding it up. Any window filling the display sends the dock away, but only a listed one keeps it away: **the
   list outranks the pointer as well as *Always on top*** — the edge does not bring the dock
   back over such a program, and the dock goes under it as well as away, so its slide happens
   behind the game rather than over it. It comes back the moment the program is not in front,
@@ -748,10 +702,8 @@ export a copy of it and import one back.
 src/ArtDock/
   Dock/        DockMagnify, DockLayout, DockMetrics, DockItem, DockEdge, BarPalette,
                BarShadow (the bar's shadow, for whichever window draws it),
-               AutoHideController, DockHandle (where the dock's handle goes),
-               HandlePace (how often it reads what is behind it),
-               DockFront (what the dock does about a fullscreen window, and when the
-               handle shows)
+               AutoHideController,
+               DockFront (what the dock does about a fullscreen window)
   Controls/    DockBar (the rendering surface), DockItemVisual, ColorWheel,
                AnimatedRowPanel
   Views/       DockWindow (the floating dock), BackdropWindow (the acrylic sheet, which
@@ -760,10 +712,10 @@ src/ArtDock/
                images, and the same glyphs on the settings dialog's buttons),
                PopupShadows (room for the shadows under drop-down lists and tooltips),
                SettingsWindow, EditPinWindow,
-               AlreadyRunningWindow, ScanWindow, HandleWindow (the handle itself)
+               AlreadyRunningWindow, ScanWindow
   Interop/     WindowChrome, NativeMethods, DesktopComposition, CompositionBackdrop,
                WindowsApi, ShellIcons, ShellLink, AppLauncher, Autostart, MonitorDpi,
-               TaskbarColour, TaskbarAcrylic, CompositionEffects, RecycleBin, RecycleBinWatch, ForegroundApp, ScreenCapture,
+               TaskbarColour, TaskbarAcrylic, CompositionEffects, RecycleBin, RecycleBinWatch, ForegroundApp,
                ShellIdList (what Explorer drags besides paths), ExplorerWindows (which
                folder each File Explorer window shows, for the folders' dots)
   Services/    SettingsStore, DockSettings, AppTheme, PinnedAppsService,
@@ -784,7 +736,7 @@ tests/ArtDock.Tests/   DockMagnify, DockLayout, DockItemVisual, DockBar focus, m
                        pin targets, settings portability, Recycle Bin icon,
                        moving along the edge, localization, icon sets, display
                        identity, excluded apps, scanning for programs, game
-                       libraries, installed apps, the dock's handle, what
+                       libraries, installed apps, what
                        the dock does about a fullscreen window,
                        dropping shell places, the menus' glyphs, the updater's
                        install folder, the shell's images' transparency, the
@@ -1176,7 +1128,7 @@ only when the row fills its room
 (`DockLayout.ReachWithin`) — equally at both ends, so placing the row and the window still
 composes — and whatever then reaches past the display's side, the slot a drop opens on a full
 dock above all, is cut off there: the dock is clipped to `DockBar.OnScreen`, the acrylic sheet to
-the same span, the handle to the work area, and the pointer is not on the dock over there. The
+the same span, and the pointer is not on the dock over there. The
 settings dialog says under *Dock size* when the dock has shrunk or overflowed.
 
 **The icons are outside WPF's hit-test.** They have to be. The window never takes focus, so
@@ -1256,10 +1208,8 @@ is looked at four times a second and at every change of foreground (`DockWindow.
 since the dock hides for any window that fills its display. That test asks a different
 question from the list's: whether the window in front covers the display's *work area*
 (`ForegroundApp.Filling`), which a window maximized with the taskbar showing does and a
-fullscreen one does too — geometry, and no program named. Only the handle tells the two
-apart, since it is not drawn over a fullscreen window: one that covers the whole display is
-fullscreen where the taskbar shows, and where it hides, unless it is maximized with a title bar
-(`FullscreenApps.IsFullscreen`). That is the only time a window's style or state is read. The shell's passing
+fullscreen one does too — geometry, and no program named; no window's style or state is read
+to tell the two apart, since nothing treats them differently. The shell's passing
 windows are not asked at all: while the taskbar, Alt+Tab's switcher, Start or the like is in
 front, the dock holds still (`ForegroundApp.IsPassingShellInFront`) — Alt+Tab's switcher is
 exactly the work area, and would otherwise slide the dock away and back on every switch.
@@ -1269,7 +1219,7 @@ non-activating and click-through windows — overlays among them — and minimiz
 keeps the dock away if any window there is fullscreen or maximized. An
 empty list — the default — stops the list's test before it reads any window at all. The hiding
 is auto-hide's own path, run while such a window is in front whatever the setting
-(`AutoHideController.Yield`), and the rules — hide, show, and when the handle shows — are
+(`AutoHideController.Yield`), and the rules — hide and show — are
 `Dock/DockFront`, apart from the windows, and unit-tested.
 
 **Memory is given back when the dock goes quiet.** The garbage collector runs when an
@@ -1409,16 +1359,6 @@ that open as a grid instead are built); and built-in translations beyond English
   `SystemApps` or `SystemResources`, no parsing name that resolves to it, and the only
   Windows mark in `imageres.dll` is welded onto the system-drive icon. So the dock draws its
   own and ships it in `Assets/icons`. It will not follow a future change to the logo.
-- **The dock's handle is missing from screenshots and recordings.** It inverts what is
-  behind it, and to read that without reading itself it asks Windows to leave it out of every
-  capture of the screen — the Snipping Tool, Print Screen and recorders included. It is on the
-  monitor all the same. The price of having no other look — but for *No GPU*, under which it
-  is the bar's colour, reads nothing, and is captured like any other window.
-- **Only the window in front counts as fullscreen.** A video left playing fullscreen on the
-  dock's display while you work on the other one has the dock back over it, if the dock
-  floats, or under it with the handle drawn over the picture, if it does not. Overlays — a
-  game's frame counter, NVIDIA's — are full-display windows that are never in front, and
-  asking the window in front is what keeps them from counting.
 - **Icons are read once and kept for as long as the dock runs**, not cached to disk. The
   Recycle Bin is the exception — never kept, and re-read whenever the shell says its icon
   changed. Invisible for most applications, whose icon does not change while they are
@@ -1451,7 +1391,7 @@ that open as a grid instead are built); and built-in translations beyond English
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand three hundred and eleven tests cover the cosine falloff (peak, range boundary,
+One thousand two hundred and twenty-nine tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1754,8 +1694,7 @@ changed counts, while the open page, *Run at login* and the dock's own changes t
 not until the list is edited there — or every update would ask. Eleven cover telling Windows 11
 from what came before it (`SupportedWindowsTests`), by build, since both call themselves 10.0.
 
-Thirty-five cover the Exclusions page's two questions, the dock's own third, and the handle's
-fourth. Nine are about
+Twenty-four cover the Exclusions page's two questions and the dock's own third. Nine are about
 which program: one moved to another folder by an update is still matched, case is ignored, a
 hand-written file name
 matches as a path does — and nothing overreaches, so `mygame.exe` is not `game.exe`, a
@@ -1772,12 +1711,6 @@ matters is the maximize button with the taskbar showing, as Windows reports the 
 invisible border hanging past the work area on every side; then a window that draws its own
 frame and is the work area exactly, and a fullscreen one, which covers more. Not a snapped
 half, not a window one row short of the taskbar, and not one maximized on the other display.
-The last eleven hold the line between fullscreen and merely maximized, which only the handle
-asks, since it is not drawn over a fullscreen window: anything over the taskbar is fullscreen
-however it is styled, a maximized window is not, and where the taskbar hides itself the title
-bar decides — StarCraft II's window, maximized with no title bar over the whole main display,
-is the case that matters there. Seven held that line once before, and went when the dock came
-to hide for both alike; it came back when the handle was taken off fullscreen windows.
 
 Seventy-four cover the scans' arranging, and the case they are built around is StarCraft II's folder
 as it really is on this machine — twelve programs, three of which call themselves
@@ -1829,18 +1762,12 @@ means under it, not beside it — "StarCraft II Beta" begins with "StarCraft II"
 test reads real files: Explorer has an icon of its own, a file that is not a program and one
 that is not there have none.
 
-Twenty-two cover what the dock does about the window in front of its display, and when the handle
-marks it (`DockFront`). Nothing filling the display has the dock where the settings have it; a
+Four cover what the dock does about the window in front of its display (`DockFront`). Nothing
+filling the display has the dock where the settings have it; a
 window filling it — maximized or fullscreen — has it hide; and a program on the Exclusions page
 outranks both. Keeping a dock the pointer has brought up is not tested here: while the dock
 hides for a window, that is auto-hide's own keeping of a revealed dock under the pointer,
-reused whole. The handle comes as the dock hides and goes as it comes back, even from under a
-window; marks a dock on screen that cannot be seen, hiding or not, and not one that can; is
-not offered for a dock put away from the tray, which only the tray brings back; marks nothing
-turned off; is never drawn over a fullscreen window — a listed program among them — even for a
-hidden dock or with the settings dialog open; marks a dock hidden for a maximized window and
-not one hidden for a fullscreen one; and shows under a dock in plain sight while that dialog is
-open.
+reused whole.
 
 Fourteen cover the Items page's *New* mark (`RecentPinTests`): a pin is new for a day after it
 was added and not a minute longer, never with no stamp, nor one stamped ahead of the clock,
@@ -1862,37 +1789,11 @@ more hold the row that all but fills its room to it at every alignment, its plac
 same whatever the window's width, wider than the display included, and a row with room to
 spare placed as it always was.
 
-Eleven cover where across the screen the edge brings the dock up, and the strip below a dock
+Ten cover where across the screen the edge brings the dock up, and the strip below a dock
 that is up keeps it there (`AutoHideController.IsUnderDock`), in physical pixels on both
 displays: under the bar and no wider — not a pixel past either end, nor out in the room the
-window keeps for the wave, where the edge answered until 2026-09-30 — so it lines up exactly
-with a handle as wide as the dock; a bar wider than its display cut at the display's sides, so
+window keeps for the wave, where the edge answered until 2026-09-30; a bar wider than its display cut at the display's sides, so
 a pointer on the display next door is not under it; and nothing under a dock not yet laid out.
-
-Thirty-three cover the handle itself, most in physical pixels against this
-machine's two displays at their real scales, since the handle is placed by `SetWindowPos` and
-the scale is what is likeliest to go wrong. As wide as the dock it is the bar exactly; with a
-width of its own it is centred on the bar wherever the dock sits along its edge, wider than the
-bar included, and that width is in DIPs, so it is half as wide again in pixels on the 4K
-display; it sits just above the taskbar and never on it, its thickness and lift scale too, and
-every edge is a whole pixel. A width off the slider's range is held to it, and a scale or
-width that is no number falls back rather than placing a window nowhere. (Three more held
-where the pointer counted as on it, and went when resting on it stopped bringing the dock.)
-Six more hold that the resting bar it is measured from is the bar a
-dock at rest actually draws, at either end of its edge and empty. The last seven are the
-inverted look: white comes back black and black white, a colour comes back as its opposite,
-what is shown is opaque whatever the read said of alpha, and nothing past the last whole pixel
-is touched — and the one that matters, that no grey from 0 to 255 comes back within fifty
-levels of itself, which a plain inversion fails at mid-grey.
-
-Twelve cover how often the handle reads what is behind it (`HandlePace`), against a simulated
-display at 120 Hz where a read finishes at the next frame, as a real one does. Something still
-is read about fifteen times a second; something moving every frame is read every frame, and a
-video at 24 fps is followed within a frame once it has been seen to move; the first change of
-something moving is seen at the quiet pace at worst; once it keeps still the reads slow down
-again; a read that did not wait for a frame is held to one a frame, and a slower display is
-read every frame of its own. And the one that matters for the cost: a caret blinking under the
-handle does not keep it reading every frame, which reading fast after any change at all would.
 
 Eleven cover an app counting as closing — its last window gone, its process not — measured on
 Rider, whose process outlived its window by 5.2 s: that it is closing while any of its
@@ -1972,12 +1873,11 @@ taskbar, all of which were painted as asked all along; and migrating twice chang
 
 Seventeen hold *No GPU*, and Windows' *Transparency effects*, to what they promise. With
 transparency effects off the bar is solid and unblurred, painted as *No GPU* paints it, and the
-shadows and the handle are left as chosen; the switch is the system's, on until the dock reads
+shadows are left as chosen; the switch is the system's, on until the dock reads
 it otherwise, and never written to the file. Off in a new dock and in a file written before it
 existed; turned on by the dock itself at a first run with no hardware to draw with, and at no
 other time — not with a graphics card, and not for a dock that already has settings; on, the
-bar is solid, the blur off, the handle not inverting, neither the bar nor the icons casting a
-shadow, whatever is stored; the solid bar is its colour at its opacity
+bar is solid, the blur off, neither the bar nor the icons casting a shadow, whatever is stored; the solid bar is its colour at its opacity
 over grey, from the grey itself to the colour itself; and what it overrides is kept underneath
 through a save and a load, so turning it off puts back the dock that was there. The file
 carries the setting and none of what follows from it. And the one read from the source: the

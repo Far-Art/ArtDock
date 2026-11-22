@@ -137,11 +137,6 @@ internal static class WindowsApi
     [DllImport("user32.dll")]
     internal static extern short GetAsyncKeyState(int vKey);
 
-    /// <summary>True when the window is maximized.</summary>
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool IsZoomed(nint hWnd);
-
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool AttachThreadInput(

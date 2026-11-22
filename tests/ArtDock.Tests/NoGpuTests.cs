@@ -7,7 +7,7 @@ namespace ArtDock.Tests;
 
 /// <summary>
 /// Holds <see cref="DockSettings.NoGpu"/> to what it promises: it overrides the blur, the
-/// bar's opacity and the handle's inversion, and rewrites none of them.
+/// bar's opacity and the shadows, and rewrites none of them.
 /// </summary>
 /// <remarks>
 /// The second half is the one worth a test. The settings it overrides are kept underneath, as
@@ -44,7 +44,6 @@ public class NoGpuTests : IDisposable
         Assert.False(settings.NoGpu);
         Assert.True(settings.Blurs);
         Assert.Equal(settings.BarOpacity, settings.BarAlpha);
-        Assert.True(settings.HandleInverts);
         Assert.True(settings.CastsIconShadows);
         Assert.True(settings.CastsBarShadow);
     }
@@ -107,13 +106,12 @@ public class NoGpuTests : IDisposable
     }
 
     [Fact]
-    public void WithoutAGpu_TheBarIsSolid_Unblurred_AndTheHandleDoesNotInvert()
+    public void WithoutAGpu_TheBarIsSolid_AndUnblurred()
     {
         var settings = new DockSettings { NoGpu = true, BlurBackground = true, BarOpacity = 0.4 };
 
         Assert.False(settings.Blurs);
         Assert.Equal(1, settings.BarAlpha);
-        Assert.False(settings.HandleInverts);
     }
 
     [Fact]
@@ -203,7 +201,7 @@ public class NoGpuTests : IDisposable
 
     /// <summary>
     /// Windows' <i>Transparency effects</i>, off, make the bar solid as No GPU does — and only
-    /// the bar: the shadows and the handle are not transparency.
+    /// the bar: the shadows are not transparency.
     /// </summary>
     [Fact]
     public void WithWindowsTransparencyOff_TheBarIsSolidAndUnblurred_AndTheRestIsAsChosen()
@@ -220,7 +218,6 @@ public class NoGpuTests : IDisposable
             new DockSettings { NoGpu = true, BarOpacity = 0.4 }.BarPaint("#EEF1FF"),
             settings.BarPaint("#EEF1FF"));
 
-        Assert.True(settings.HandleInverts);
         Assert.True(settings.CastsIconShadows);
         Assert.True(settings.CastsBarShadow);
     }
@@ -260,7 +257,6 @@ public class NoGpuTests : IDisposable
         Assert.Contains(nameof(DockSettings.NoGpu), names);
         Assert.DoesNotContain(nameof(DockSettings.Blurs), names);
         Assert.DoesNotContain(nameof(DockSettings.BarAlpha), names);
-        Assert.DoesNotContain(nameof(DockSettings.HandleInverts), names);
         Assert.DoesNotContain(nameof(DockSettings.CastsIconShadows), names);
         Assert.DoesNotContain(nameof(DockSettings.CastsBarShadow), names);
     }
@@ -288,7 +284,6 @@ public class NoGpuTests : IDisposable
 
         Assert.Contains("." + nameof(DockSettings.Blurs), source);
         Assert.Contains("." + nameof(DockSettings.BarAlpha), source);
-        Assert.Contains("." + nameof(DockSettings.HandleInverts), source);
         Assert.Contains("." + nameof(DockSettings.CastsIconShadows), source);
         Assert.Contains("." + nameof(DockSettings.CastsBarShadow), source);
 

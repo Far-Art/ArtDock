@@ -4000,11 +4000,8 @@ public sealed class DockBar : Canvas
     /// coordinates.
     /// </summary>
     /// <remarks>
-    /// What the handle an auto-hidden dock leaves behind is measured from
-    /// (<see cref="DockHandle"/>). It marks where the dock will come up, and a mark that
-    /// breathed with the wave would be following something the dock is not doing while it is
-    /// away — or, while the settings dialog demonstrates the wave, wobbling under a dock that is
-    /// plainly not going anywhere.
+    /// What the edge that brings the dock up, and a lift's look at what covers it, are measured
+    /// from: where the dock will come up, which a bar breathing with the wave is not.
     /// </remarks>
     public Rect RestingBarRect
     {

@@ -49,21 +49,6 @@ public class RevealZoneTests
     }
 
     /// <summary>
-    /// The edge and the handle line up where the handle is as wide as the dock: both are the
-    /// bar, measured the same way.
-    /// </summary>
-    [Fact]
-    public void A_handle_as_wide_as_the_dock_spans_the_zone_exactly()
-    {
-        var handle = DockHandle.Place(Bar.Left, Bar.Right, 1392, 1, matchDock: true, width: 140);
-
-        Assert.True(AutoHideController.IsUnderDock(handle.Left, Bar, Main));
-        Assert.True(AutoHideController.IsUnderDock(handle.Right - 1, Bar, Main));
-        Assert.False(AutoHideController.IsUnderDock(handle.Left - 1, Bar, Main));
-        Assert.False(AutoHideController.IsUnderDock(handle.Right, Bar, Main));
-    }
-
-    /// <summary>
     /// A bar with more icons than its display is wide reaches past the sides, and a pointer on
     /// the display next door — at whatever height this one's bottom falls — is not under it.
     /// </summary>

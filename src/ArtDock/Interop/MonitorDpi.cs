@@ -51,11 +51,10 @@ internal static class MonitorDpi
     /// The scale of the display a point is on, or the nearest one to it.
     /// </summary>
     /// <remarks>
-    /// For what is placed on a display rather than moved with a window: the handle a hidden dock
-    /// leaves behind goes on the dock's display, and the dock's own window is no guide to that
-    /// while it is hidden. It is parked below the bottom of the screen then, and a dock moved to
-    /// one end reaches past the side of it — which on this machine is the other display, at
-    /// another scale.
+    /// For what is measured on a display rather than moved with a window: the dock's own window
+    /// is no guide to that while it is hidden. It is parked below the bottom of the screen then,
+    /// and a dock moved to one end reaches past the side of it — which on this machine is the
+    /// other display, at another scale.
     /// </remarks>
     public static double ScaleAt(int x, int y)
     {
