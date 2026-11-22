@@ -42,9 +42,9 @@ public class TaskbarMatchTests : IDisposable
     private static readonly TaskbarMaterial Light = TaskbarMaterial.Neutral(light: true);
 
     [Fact]
-    public void ANewDock_DoesNotMatchTheTaskbar()
+    public void ANewDock_MatchesTheTaskbar()
     {
-        Assert.False(new DockSettings().UseTaskbarColor);
+        Assert.True(new DockSettings().UseTaskbarColor);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public class TaskbarMatchTests : IDisposable
         Assert.True(new DockSettings { UseTaskbarColor = true, BlurBackground = true }.Blurs);
 
         // And not matching, the blur is the user's own, as it was.
-        Assert.False(new DockSettings { BlurBackground = false }.Blurs);
+        Assert.False(new DockSettings { UseTaskbarColor = false, BlurBackground = false }.Blurs);
     }
 
     /// <summary>

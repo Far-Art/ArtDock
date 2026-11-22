@@ -102,7 +102,7 @@ public class BarStockLookTests : IDisposable
     [Fact]
     public void AFileOfTheOldFormat_OnTheOldStockBar_IsMovedToTheLookItHad()
     {
-        var loaded = Read($$"""{ "Version": 1, "BarColor": "{{FormerColor}}", "BarOpacity": {{FormerOpacity}} }""");
+        var loaded = Read($$"""{ "Version": 1, "UseTaskbarColor": false, "BarColor": "{{FormerColor}}", "BarOpacity": {{FormerOpacity}} }""");
 
         Assert.Equal(DockSettings.CurrentVersion, loaded.Version);
         Assert.Equal(DockSettings.DefaultBarColor, loaded.BarColor);

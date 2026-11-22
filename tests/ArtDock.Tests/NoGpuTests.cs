@@ -130,9 +130,9 @@ public class NoGpuTests : IDisposable
     [Fact]
     public void WithAGpu_TheBlurTheOpacityAndTheShadowsAreTheUsersOwn()
     {
-        Assert.False(new DockSettings { BlurBackground = false }.Blurs);
-        Assert.True(new DockSettings { BlurBackground = true }.Blurs);
-        Assert.Equal(0.4, new DockSettings { BarOpacity = 0.4 }.BarAlpha);
+        Assert.False(new DockSettings { UseTaskbarColor = false, BlurBackground = false }.Blurs);
+        Assert.True(new DockSettings { UseTaskbarColor = false, BlurBackground = true }.Blurs);
+        Assert.Equal(0.4, new DockSettings { UseTaskbarColor = false, BarOpacity = 0.4 }.BarAlpha);
         Assert.False(new DockSettings { IconShadows = false }.CastsIconShadows);
         Assert.True(new DockSettings { IconShadows = true }.CastsIconShadows);
     }

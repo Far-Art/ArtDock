@@ -489,8 +489,11 @@ public sealed class DockSettings
     /// is kept underneath it, as under <see cref="NoGpu"/>, so turning this off puts back the
     /// bar that was there rather than leaving whatever the taskbar happened to be.
     /// </para>
+    /// <para>
+    /// On by default since 2026-11-22, asked for: a new dock looks like part of Windows.
+    /// </para>
     /// </remarks>
-    public bool UseTaskbarColor { get; set; }
+    public bool UseTaskbarColor { get; set; } = true;
 
     /// <summary>
     /// What the dock itself paints the bar with while it matches the taskbar: the colour, and
@@ -710,7 +713,11 @@ public sealed class DockSettings
     /// </remarks>
     public bool AlwaysOnTop { get; set; } = true;
 
-    public bool AutoHide { get; set; }
+    /// <summary>
+    /// Whether the dock slides away until the pointer reaches the edge under it.
+    /// </summary>
+    /// <remarks>On by default since 2026-11-22, asked for.</remarks>
+    public bool AutoHide { get; set; } = true;
 
     public int HideDelayMs { get; set; } = 700;
 
@@ -770,12 +777,12 @@ public sealed class DockSettings
     /// without one.
     /// </para>
     /// <para>
-    /// On by default. Until 2026-09-30 it appeared only with auto-hide on, and the name is from
-    /// then. A settings file written before this existed has no such property, so it comes up
-    /// on as well.
+    /// Off by default since 2026-11-22, asked for; on before then. Until 2026-09-30 it appeared
+    /// only with auto-hide on, and the name is from then. A settings file without the property
+    /// comes up without one.
     /// </para>
     /// </remarks>
-    public bool ShowHandle { get; set; } = true;
+    public bool ShowHandle { get; set; }
 
     /// <summary>
     /// Whether the handle is as wide as the dock's bar, rather than <see cref="HandleWidth"/>.

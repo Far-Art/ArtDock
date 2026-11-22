@@ -20,8 +20,8 @@ responsive and built to feel at home on Windows.
   the settings dialog reaches the dock at once, so a change is judged on the dock itself
   rather than imagined. Nothing is written until Save, and Cancel puts the dock back the way
   it was found.
-- **A handle that marks a hidden dock.** While the dock is out of sight — slid away, or under
-  other windows — a slim bar just above the taskbar shows where it will come up. It inverts
+- **A handle that marks a hidden dock**, if turned on. While the dock is out of sight — slid
+  away, or under other windows — a slim bar just above the taskbar shows where it will come up. It inverts
   the colours behind it, so it stands out on any background.
 - **Blur behind the bar.** The bar sits on a sheet of Windows acrylic, which blurs whatever
   is behind it — drawn with the bar and its shadow in one piece, so the three never come apart.
@@ -134,7 +134,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   fullscreen or maximized on the dock's display keeps it away, even under a smaller window or
   while you work on another display. A dock put away from the tray stays away through all of
   this.
-- **Auto-hides** to the screen edge and returns when the cursor reaches the bottom — over
+- **Auto-hides**, by default since 2026-11-22, to the screen edge and returns when the cursor reaches the bottom — over
   whatever has the focus, *Always on top* or not. It used to slide up *under* the focused
   window when the dock did not float. With the setting off it still hides, as above, while a
   maximized or fullscreen window is in front. The bottom **under the dock**, that is: across
@@ -144,8 +144,8 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   about half as wide again as the dock. A dock that hides **starts hidden** — auto-hide on, or
   a window in front filling its display — rather than coming up as it starts and sliding off a
   moment later, which it did at every sign-in until 2026-10-14.
-- **Marks itself with a handle while it is out of sight**, unless told not to on the Behaviour
-  page: a slim bar just above the taskbar, centred under where the dock will come up — the
+- **Marks itself with a handle while it is out of sight**, when turned on on the Behaviour
+  page (off by default since 2026-11-22): a slim bar just above the taskbar, centred under where the dock will come up — the
   phone's home indicator, on a desktop. Out of sight means slid away — by auto-hide, or for a
   maximized or fullscreen window in front — or on screen with none of the bar showing for the
   windows over it, as a dock that does not float can be; a dock only partly covered can be
@@ -186,7 +186,7 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   the dock, so its width can be seen while it is set.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
-- **Matches the taskbar**, if asked (*Match the taskbar*, first on the Appearance page): the
+- **Matches the taskbar**, by default since 2026-11-22 (*Match the taskbar*, first on the Appearance page): the
   bar is then painted with the taskbar's own material rather than a colour taken from it —
   Windows' acrylic, by the recipe the taskbar uses (`Dock/TaskbarMaterial`,
   `Interop/TaskbarAcrylic`), with the taskbar's edge line as its rim — and follows the light

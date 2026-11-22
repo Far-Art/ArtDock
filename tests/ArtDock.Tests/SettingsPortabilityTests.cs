@@ -164,7 +164,7 @@ public class SettingsPortabilityTests : IDisposable
         // would read as the current format, and no migration would ever touch it — so the
         // stock bar of its day, which format 2 moves, is what shows that it was taken for 1.
         var path = Write("legacy.json", """
-            { "BaseSize": 44, "AutoHide": true, "BarColor": "#EEF1FF", "BarOpacity": 0.76 }
+            { "BaseSize": 44, "AutoHide": true, "UseTaskbarColor": false, "BarColor": "#EEF1FF", "BarOpacity": 0.76 }
             """);
 
         var loaded = SettingsStore.Import(path);
