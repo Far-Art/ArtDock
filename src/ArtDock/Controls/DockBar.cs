@@ -112,7 +112,7 @@ public sealed class DockBar : Canvas
     private static readonly Brush StandInBrush = Frozen(Color.FromArgb(0x01, 0x00, 0x00, 0x00));
     /// <summary>
     /// The running dot's radius and its rim's width, in DIPs: a 6 DIP dot inside a 1 DIP rim,
-    /// which leaves a DIP of the bar's padding above and below it.
+    /// which fills all but two DIPs of the bar's bottom padding (where it sits: <see cref="DotLift"/>).
     /// </summary>
     /// <remarks>
     /// The dot was 4 DIP across with no edge, and on a pale bar — the stock lavender at a half,
@@ -123,6 +123,14 @@ public sealed class DockBar : Canvas
     private const double DotRadius = 3;
 
     private const double DotRim = 1;
+
+    /// <summary>
+    /// How far the dot's centre sits above the middle of the bar's bottom padding, in DIPs. It
+    /// was centred there, which read as low — sitting on the bar's edge more than under the icon.
+    /// Raised 2026-11-28; the icon's own transparent margin takes the DIP it now reaches into
+    /// the icon's square.
+    /// </summary>
+    private const double DotLift = 2;
 
     private static readonly Brush DotBrush = Frozen(Colors.White);
 
@@ -4246,7 +4254,7 @@ public sealed class DockBar : Canvas
     /// </summary>
     private void DrawRunningIndicators(DrawingContext drawingContext)
     {
-        var y = BarBottom - (Metrics.PaddingY / 2);
+        var y = BarBottom - (Metrics.PaddingY / 2) - DotLift;
 
         for (var i = 0; i < _items.Count; i++)
         {
