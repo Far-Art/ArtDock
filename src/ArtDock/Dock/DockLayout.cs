@@ -291,7 +291,8 @@ public sealed class DockLayout(DockMetrics metrics)
     /// <para>
     /// <see cref="SteadyBarWidth"/> depends on the amplitude alone, and the amplitude only
     /// rises while the pointer is already inside, so the boundary can no longer be moved out
-    /// from under it. It is also never narrower than the icons occupy, so the span always
+    /// from under it. (A pointer arriving while the dock is still settling sees it finish
+    /// turning round first — a few frames of a little less — and is by then further in.) It is also never narrower than the icons occupy, so the span always
     /// covers the bar as it is drawn.
     /// </para>
     /// </remarks>

@@ -29,9 +29,6 @@ namespace ArtDock.Controls;
 /// </remarks>
 public sealed class DockBar : Canvas
 {
-    private const double EnterRampMs = 140;
-    private const double LeaveRampMs = 200;
-
     /// <summary>
     /// How long the launch flash runs, covering both of its pulses.
     /// </summary>
@@ -290,10 +287,10 @@ public sealed class DockBar : Canvas
     /// <summary>Wave amplitude, 0 (flat) to 1 (full).</summary>
     private double _progress;
 
-    private double _rampFrom;
+    /// <summary>How fast the amplitude is changing, per second: see <see cref="WaveRamp"/>.</summary>
+    private double _rampVelocity;
     private double _rampTo;
-    private double _rampElapsedMs;
-    private double _rampDurationMs;
+    private double _rampRate;
     private bool _rampRunning;
 
     private TimeSpan _lastFrame;
@@ -2144,7 +2141,7 @@ public sealed class DockBar : Canvas
 
         SetWaveCentre(_layout.RestingCentre(_focusIndex), WaveDriver.Parked, ease);
         EnsureRendering();
-        StartRamp(1, EnterRampMs);
+        StartRamp(1, WaveRamp.EnterRate);
     }
 
     /// <summary>Sets the bar's fill colour and how opaque it is, 0 to 1.</summary>
@@ -3027,7 +3024,7 @@ public sealed class DockBar : Canvas
     {
         EnsureRendering();
         TrackCursor();
-        StartRamp(1, EnterRampMs);
+        StartRamp(1, WaveRamp.EnterRate);
     }
 
     private void EnsureRendering()
@@ -3095,7 +3092,14 @@ public sealed class DockBar : Canvas
         }
     }
 
-    private void EndGesture() => StartRamp(0, LeaveRampMs);
+    private void EndGesture() => StartRamp(0, WaveRamp.LeaveRate);
+
+    /// <summary>The time the loop's first frame stands for: one of the frames it works on.</summary>
+    private double FirstFrameMs()
+    {
+        var frame = Math.Max(_frameIntervalMs, _refreshMs);
+        return double.IsFinite(frame) && frame > 0 ? Math.Min(frame, 50) : 1000.0 / 60;
+    }
 
     private void UnhookRendering()
     {
@@ -3110,22 +3114,23 @@ public sealed class DockBar : Canvas
 
     /// <summary>
     /// Ramps the wave's amplitude only. The pointer keeps updating independently, so moving
-    /// the cursor during the entry ramp neither restarts nor stalls the animation.
+    /// the cursor during the entry ramp neither restarts nor stalls the animation. A new target
+    /// keeps the speed the amplitude already has (<see cref="WaveRamp"/>), so turning round
+    /// part-way is a slowing and a turn rather than a jump.
     /// </summary>
-    private void StartRamp(double target, double fullDurationMs)
+    private void StartRamp(double target, double rate)
     {
-        if (Math.Abs(_progress - target) < 0.0001)
+        if (Math.Abs(_progress - target) < 0.0001 && Math.Abs(_rampVelocity) < 0.0001)
         {
             _rampRunning = false;
             _progress = target;
+            _rampVelocity = 0;
             _rampTo = target;
             return;
         }
 
-        _rampFrom = _progress;
         _rampTo = target;
-        _rampElapsedMs = 0;
-        _rampDurationMs = fullDurationMs * Math.Abs(target - _rampFrom);
+        _rampRate = rate;
         _rampRunning = true;
     }
 
@@ -3136,8 +3141,12 @@ public sealed class DockBar : Canvas
             return;
         }
 
+        // The first frame after the loop is hooked is given a frame's time, not none: given none,
+        // it drew nothing new, and WPF raised the next one 20 to 30 ms on (recorded 2026-11-28,
+        // 120 Hz) — so the wave's first visible step was a quarter of its whole entry. Drawing
+        // something on it keeps WPF on the display's frames from the start.
         var deltaMs = _lastFrame == TimeSpan.Zero
-            ? 0
+            ? FirstFrameMs()
             : (args.RenderingTime - _lastFrame).TotalMilliseconds;
 
         // Under a cap, a frame that comes too soon after the last one worked on is let go by,
@@ -3178,6 +3187,12 @@ public sealed class DockBar : Canvas
         finally
         {
             _inFrame = false;
+        }
+
+        if (ArtDock.Services.WaveTrace.On)
+        {
+            ArtDock.Services.WaveTrace.Note(
+                args.RenderingTime.TotalMilliseconds, deltaMs, _progress, _rampTo, _barLeft, _barWidth);
         }
 
         // Once the wave is flat, the pointer has gone and nothing is animating, there is
@@ -3279,7 +3294,7 @@ public sealed class DockBar : Canvas
             SetWaveCentre(local.X - RestingBarLeft(), WaveDriver.Pointer);
             if (_rampTo < 1)
             {
-                StartRamp(1, EnterRampMs);
+                StartRamp(1, WaveRamp.EnterRate);
             }
 
             return;
@@ -3314,7 +3329,7 @@ public sealed class DockBar : Canvas
 
             if (_rampTo < 1)
             {
-                StartRamp(1, EnterRampMs);
+                StartRamp(1, WaveRamp.EnterRate);
             }
 
             return;
@@ -3335,7 +3350,7 @@ public sealed class DockBar : Canvas
                 WaveDriver.Parked);
             if (_rampTo < 1)
             {
-                StartRamp(1, EnterRampMs);
+                StartRamp(1, WaveRamp.EnterRate);
             }
 
             return;
@@ -3356,7 +3371,7 @@ public sealed class DockBar : Canvas
 
             if (_rampTo < 1)
             {
-                StartRamp(1, EnterRampMs);
+                StartRamp(1, WaveRamp.EnterRate);
             }
 
             return;
@@ -3652,16 +3667,8 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        _rampElapsedMs += deltaMs;
-        var t = _rampDurationMs <= 0 ? 1 : Math.Min(_rampElapsedMs / _rampDurationMs, 1);
-
-        // Cubic ease-out, matching the web original's 1 - (1 - t)^3.
-        var eased = 1 - Math.Pow(1 - t, 3);
-        _progress = _rampFrom + ((_rampTo - _rampFrom) * eased);
-
-        if (t >= 1)
+        if (WaveRamp.Step(ref _progress, ref _rampVelocity, _rampTo, _rampRate, deltaMs))
         {
-            _progress = _rampTo;
             _rampRunning = false;
             if (_rampTo <= 0)
             {

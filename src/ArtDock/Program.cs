@@ -40,6 +40,7 @@ public static class Program
         // dock opens gets the user's environment, not whatever shell started the dock.
         // A measuring run is asked for in the environment, which Adopt is about to replace: read first.
         _ = Bench.On;
+        _ = WaveTrace.On;
 
         Interop.SignInEnvironment.Adopt();
 

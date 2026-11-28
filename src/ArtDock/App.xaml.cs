@@ -546,6 +546,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        WaveTrace.Flush();
         _memoryTrim?.Dispose();
         _tray?.Dispose();
         _menus?.Close();
