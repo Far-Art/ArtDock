@@ -54,7 +54,20 @@ internal sealed class CompositionBackdrop : IDisposable
     /// <summary>The shadow's rings, one shape each, under everything else.</summary>
     private readonly ShapeVisual _shadow;
     private readonly CompositionRoundedRectangleGeometry[] _rings;
+    private readonly CompositionSpriteShape[] _ringShapes;
     private readonly CompositionColorBrush[] _ringBrushes;
+
+    /// <summary>Where the rings were last put, in device pixels, for drawing them again holed or whole.</summary>
+    private readonly BarShadow.Ring[] _ringLayout = new BarShadow.Ring[BarShadow.RingCount];
+
+    /// <summary>
+    /// The rings with the bar taken out of them, for under the material — see
+    /// <see cref="HoleShadow"/>. Made the first time they are wanted.
+    /// </summary>
+    private readonly CompositionPathGeometry?[] _ringPaths = new CompositionPathGeometry?[BarShadow.RingCount];
+
+    /// <summary>True while the rings are drawn with the bar taken out of them.</summary>
+    private bool _holed;
 
     /// <summary>Holds the blur and its wash, sized to the bar and clipped to its shape.</summary>
     private readonly InsetClip _span;
@@ -74,20 +87,6 @@ internal sealed class CompositionBackdrop : IDisposable
     /// </summary>
     private CompositionEffectBrush? _acrylic;
 
-    /// <summary>
-    /// The shadow with the bar's shape cut out of it, for under the material — see
-    /// <see cref="CutShadow"/>. A layer holding the shadow while it is cut, the shape cut out,
-    /// and the effect that does the cutting.
-    /// </summary>
-    private LayerVisual? _cutLayer;
-
-    private ShapeVisual? _cut;
-    private CompositionRoundedRectangleGeometry? _cutShape;
-    private CompositionSpriteShape? _cutSprite;
-    private CompositionColorBrush? _cutBrush;
-    private CompositionEffectBrush? _cutEffect;
-    private bool _shadowCut;
-
     private CompositionBackdropBrush? _behind;
     private CompositionImages? _images;
     private CompositionDrawingSurface? _grainSurface;
@@ -102,7 +101,7 @@ internal sealed class CompositionBackdrop : IDisposable
     private readonly CompositionColorBrush _rim;
 
     /// <summary>
-    /// The sheet's clip, the bar's face and the shadow's cut as paths, for the bar's corners —
+    /// The sheet's clip and the bar's face as paths, for the bar's corners —
     /// none of which the compositor's rounded rectangle can draw, its own round ones being plain
     /// circles. Made the first time they are wanted; the rounded rectangles above are kept up to
     /// date alongside, and swapped back in for a sheet given no corners to draw, as the one under
@@ -111,7 +110,6 @@ internal sealed class CompositionBackdrop : IDisposable
     private CompositionPathGeometry? _shapePath;
 
     private CompositionPathGeometry? _outlinePath;
-    private CompositionPathGeometry? _cutPath;
 
     /// <summary>The corners drawn as paths, or null while the plain rounded rectangles are.</summary>
     private BarCorners? _corners;
@@ -119,7 +117,7 @@ internal sealed class CompositionBackdrop : IDisposable
     /// <summary>Set once a path has failed to build, after which every shape is drawn round.</summary>
     private bool _noPaths;
 
-    /// <summary>The bar last set, in device pixels, for a cut made after it — see <see cref="TryMakeCut"/>.</summary>
+    /// <summary>The bar last set, in device pixels, for the hole in the shadow — see <see cref="HoleShadow"/>.</summary>
     private (double X, double Y, double Width, double Height, double Radius) _bar;
 
     private CompositionBackdrop(Compositor compositor, DesktopWindowTarget target, Color tint)
@@ -141,15 +139,15 @@ internal sealed class CompositionBackdrop : IDisposable
         _shadow.RelativeSizeAdjustment = Vector2.One;
         _ringBrushes = [.. BarShadow.Passes.Select(pass => compositor.CreateColorBrush(Color.FromArgb(pass.Alpha, 0, 0, 0)))];
         _rings = new CompositionRoundedRectangleGeometry[BarShadow.RingCount];
+        _ringShapes = new CompositionSpriteShape[BarShadow.RingCount];
 
-        Span<BarShadow.Ring> layout = stackalloc BarShadow.Ring[BarShadow.RingCount];
-        BarShadow.Rings(default, 0, 1, layout);
+        BarShadow.Rings(default, 0, 1, _ringLayout);
         for (var i = 0; i < _rings.Length; i++)
         {
             _rings[i] = compositor.CreateRoundedRectangleGeometry();
-            var ring = compositor.CreateSpriteShape(_rings[i]);
-            ring.FillBrush = _ringBrushes[layout[i].Pass];
-            _shadow.Shapes.Add(ring);
+            _ringShapes[i] = compositor.CreateSpriteShape(_rings[i]);
+            _ringShapes[i].FillBrush = _ringBrushes[_ringLayout[i].Pass];
+            _shadow.Shapes.Add(_ringShapes[i]);
         }
 
         // The blur, as a sheet the size of the bar, cut to its shape. Sized to the bar rather
@@ -258,29 +256,26 @@ internal sealed class CompositionBackdrop : IDisposable
         SetRoundedRect(_outline, x + inset, y + inset, width - scale, height - scale, radius);
         _faceShape.StrokeThickness = (float)scale;
 
-        if (_cutShape is not null)
-        {
-            SetRoundedRect(_cutShape, x, y, width, height, radius);
-        }
-
         SetCorners(shaped, x, y, width, height, radius, inset, scale);
 
-        Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
         var bar = new System.Windows.Rect(x, y, width, height);
         var (caster, castRadius) = shaped is { } shape ? BarOutline.RoundedInside(bar, radius, shape) : (bar, radius);
-        BarShadow.Rings(caster, castRadius, scale, rings);
-        for (var i = 0; i < _rings.Length; i++)
+        BarShadow.Rings(caster, castRadius, scale, _ringLayout);
+        if (!DrawRings())
         {
-            var ring = rings[i];
-            SetRoundedRect(_rings[i], ring.Bounds.X, ring.Bounds.Y, ring.Bounds.Width, ring.Bounds.Height, ring.Radius);
+            // The hole could not be made this time: the shadow is left whole rather than drawn
+            // with holes in some rings and not others.
+            _holed = false;
+            DrawRings();
         }
     }
 
     /// <summary>
-    /// Draws the clip, the face and the cut as paths of the corners' shape, or puts the rounded
-    /// rectangles back for none. The shadow's rings stay rounded rectangles, of a radius
-    /// that keeps them inside the shape (<see cref="BarOutline.EnclosedBy"/>): soft as the shadow
-    /// is, the difference does not show, and a path for each ring on every frame of the wave would.
+    /// Draws the clip and the face as paths of the corners' shape, or puts the rounded rectangles
+    /// back for none. The shadow's rings stay rounded rectangles, of a size that keeps them inside
+    /// the shape (<see cref="BarOutline.RoundedInside"/>): soft as the shadow is, the difference
+    /// does not show, and a path for each ring on every frame of the wave would — except under the
+    /// material, where each ring has the bar taken out of it (<see cref="HoleShadow"/>).
     /// </summary>
     private void SetCorners(BarCorners? shape, double x, double y, double width, double height, double radius, double inset, double scale)
     {
@@ -293,11 +288,6 @@ internal sealed class CompositionBackdrop : IDisposable
                 _outlinePath ??= _compositor.CreatePathGeometry();
                 _shapePath.Path = Path(0, 0, width, height, radius, corners);
                 _outlinePath.Path = Path(x + inset, y + inset, width - scale, height - scale, radius, corners);
-                if (_cutSprite is not null)
-                {
-                    _cutPath ??= _compositor.CreatePathGeometry();
-                    _cutPath.Path = Path(x, y, width, height, radius, corners);
-                }
             }
             catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
                 or NotSupportedException or UnauthorizedAccessException)
@@ -310,10 +300,6 @@ internal sealed class CompositionBackdrop : IDisposable
         _corners = paths ? shape : null;
         _clip.Geometry = paths ? _shapePath : (CompositionGeometry)_shape;
         _faceShape.Geometry = paths ? _outlinePath : (CompositionGeometry)_outline;
-        if (_cutSprite is not null)
-        {
-            _cutSprite.Geometry = paths && _cutPath is not null ? _cutPath : (CompositionGeometry?)_cutShape;
-        }
     }
 
     private static CompositionPath Path(double x, double y, double width, double height, double radius, BarCorners corners) =>
@@ -366,14 +352,14 @@ internal sealed class CompositionBackdrop : IDisposable
     {
         // The shadow first: the material shows what is under it, so it cannot be had with the
         // shadow lying there.
-        var acrylic = material is { Opaque: false } taskbar && CutShadow(true)
+        var acrylic = material is { Opaque: false } taskbar && HoleShadow(true)
             ? TaskbarAcrylic.TryCreate(
                 _compositor, taskbar, scale, _behind ??= _compositor.CreateBackdropBrush(), Grain())
             : null;
 
         if (acrylic is null)
         {
-            CutShadow(false);
+            HoleShadow(false);
         }
 
         _blur.Brush = acrylic ?? _frost;
@@ -385,7 +371,7 @@ internal sealed class CompositionBackdrop : IDisposable
     }
 
     /// <summary>
-    /// Cuts the bar's shape out of the shadow, or puts the shadow back whole. True when it is
+    /// Takes the bar's shape out of the shadow, or puts the shadow back whole. True when it is
     /// as asked.
     /// </summary>
     /// <remarks>
@@ -397,115 +383,80 @@ internal sealed class CompositionBackdrop : IDisposable
     /// material the shadow has a hole the shape of the bar.
     /// </para>
     /// <para>
-    /// The compositor clips to a shape and not to everything but a shape, so the hole is made
-    /// with arithmetic. The shadow and the bar's shape — in opaque red, over it — are flattened
-    /// into a layer, and the layer's effect makes each pixel black at the layer's alpha less
-    /// its red: where only the shadow is, the shadow; where the shape is, nothing; and along
-    /// the shape's softened edge, the share of the shadow the bar leaves showing. Still in the
-    /// one batch with everything else, so the hole cannot be a frame behind the bar.
+    /// Each ring is drawn with the bar taken out of it, as a path Direct2D combines
+    /// (<see cref="D2DOutline.Holed"/>), in the one batch with everything else, so the hole
+    /// cannot be a frame behind the bar.
     /// </para>
     /// <para>
-    /// The shadow is moved into the layer only while it is wanted. The dock's own blur has
-    /// the tree it always had.
+    /// The hole used to be cut by flattening the shadow and the bar's shape into a layer whose
+    /// effect took one from the other. Found on 2026-11-28: on a 10-bit display with Windows'
+    /// automatic colour management, the monitor showed that layer a couple of pixels off — a
+    /// second outline below and left of the bar, there to the eye and in a photograph, never in
+    /// a screenshot, which the display is composed afresh for. Drawn as plain shapes there is no
+    /// layer to misplace.
     /// </para>
     /// </remarks>
-    private bool CutShadow(bool cut)
+    private bool HoleShadow(bool hole)
     {
-        if (cut == _shadowCut)
+        if (hole == _holed)
         {
             return true;
         }
 
-        if (!cut)
+        _holed = hole;
+        if (DrawRings())
         {
-            _cutLayer!.Children.RemoveAll();
-            _root.Children.Remove(_cutLayer);
-            _root.Children.InsertAtBottom(_shadow);
-            _shadowCut = false;
             return true;
         }
 
-        if (_cutLayer is null && !TryMakeCut())
-        {
-            return false;
-        }
-
-        _root.Children.Remove(_shadow);
-        _cutLayer!.Children.InsertAtBottom(_shadow);
-        _cutLayer.Children.InsertAtTop(_cut);
-        _root.Children.InsertAtBottom(_cutLayer);
-        _shadowCut = true;
-        return true;
+        _holed = false;
+        DrawRings();
+        return false;
     }
 
-    private bool TryMakeCut()
+    /// <summary>
+    /// Puts each ring where <see cref="_ringLayout"/> says, with the bar taken out of it while
+    /// <see cref="_holed"/>. False when a holed ring could not be built, and the caller draws
+    /// them whole.
+    /// </summary>
+    private bool DrawRings()
     {
+        for (var i = 0; i < _rings.Length; i++)
+        {
+            var ring = _ringLayout[i];
+            SetRoundedRect(_rings[i], ring.Bounds.X, ring.Bounds.Y, ring.Bounds.Width, ring.Bounds.Height, ring.Radius);
+        }
+
+        if (!_holed || _noPaths)
+        {
+            for (var i = 0; i < _rings.Length; i++)
+            {
+                _ringShapes[i].Geometry = _rings[i];
+            }
+
+            return !_holed;
+        }
+
         try
         {
-            // Rows are what goes in — red, green, blue, alpha, one — and columns what comes
-            // out: no colour, and alpha less red. Applied to the values as they are stored,
-            // already multiplied by their alpha, which is what makes the softened edge right.
-            float[] alphaLessRed =
-            [
-                0, 0, 0, -1,
-                0, 0, 0, 0,
-                0, 0, 0, 0,
-                0, 0, 0, 1,
-                0, 0, 0, 0
-            ];
+            var bar = new System.Windows.Rect(_bar.X, _bar.Y, Math.Max(0, _bar.Width), Math.Max(0, _bar.Height));
+            for (var i = 0; i < _rings.Length; i++)
+            {
+                var ring = _ringLayout[i];
+                var path = _ringPaths[i] ??= _compositor.CreatePathGeometry();
+                path.Path = new CompositionPath(
+                    D2DOutline.Holed(ring.Bounds, ring.Radius, bar, _bar.Radius, _corners));
+                _ringShapes[i].Geometry = path;
+            }
 
-            var effect = new D2DEffect(
-                D2DEffect.ColorMatrix,
-                [alphaLessRed, ColorMatrixStraight, false],
-                new CompositionEffectSourceParameter("Layer"));
-
-            _cutEffect = _compositor.CreateEffectFactory(effect).CreateBrush();
+            return true;
         }
         catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
-            or UnauthorizedAccessException or NotSupportedException)
+            or NotSupportedException or UnauthorizedAccessException)
         {
             return false;
         }
-
-        _cutBrush = _compositor.CreateColorBrush(Color.FromArgb(0xFF, 0xFF, 0, 0));
-        _cutShape = _compositor.CreateRoundedRectangleGeometry();
-        _cutShape.Offset = _shape.Offset + new Vector2(_sheet.Offset.X, _sheet.Offset.Y);
-        _cutShape.Size = _shape.Size;
-        _cutShape.CornerRadius = _shape.CornerRadius;
-
-        _cutSprite = _compositor.CreateSpriteShape(_cutShape);
-        _cutSprite.FillBrush = _cutBrush;
-
-        // Made after the bar was last set, so given its shape now: nothing may set it again
-        // before the cut shows.
-        if (_corners is { } corners)
-        {
-            try
-            {
-                _cutPath ??= _compositor.CreatePathGeometry();
-                _cutPath.Path = Path(_bar.X, _bar.Y, _bar.Width, _bar.Height, _bar.Radius, corners);
-                _cutSprite.Geometry = _cutPath;
-            }
-            catch (Exception e) when (e is COMException or InvalidCastException or ArgumentException
-                or NotSupportedException or UnauthorizedAccessException)
-            {
-                // The cut stays round: a sliver of shadow, at most, under the corners.
-            }
-        }
-
-        _cut = _compositor.CreateShapeVisual();
-        _cut.RelativeSizeAdjustment = Vector2.One;
-        _cut.Shapes.Add(_cutSprite);
-
-        // The layer's own picture is what the effect's one unnamed input is given.
-        _cutLayer = _compositor.CreateLayerVisual();
-        _cutLayer.RelativeSizeAdjustment = Vector2.One;
-        _cutLayer.Effect = _cutEffect;
-        return true;
     }
-
-    /// <summary>Direct2D's colour matrix told to leave the values as they are stored.</summary>
-    private const uint ColorMatrixStraight = 2;
 
     /// <summary>
     /// The material's grain, as a brush that tiles from the sheet's corner at its own size —
@@ -567,17 +518,8 @@ internal sealed class CompositionBackdrop : IDisposable
         _tint.Dispose();
         _blur.Dispose();
         _acrylic?.Dispose();
-        _cutLayer?.Children.RemoveAll();
-        _cut?.Shapes.Clear();
-        _cutSprite?.Dispose();
-        _cutShape?.Dispose();
-        _cutPath?.Dispose();
         _shapePath?.Dispose();
         _outlinePath?.Dispose();
-        _cutBrush?.Dispose();
-        _cut?.Dispose();
-        _cutLayer?.Dispose();
-        _cutEffect?.Dispose();
         _frost.Dispose();
         _behind?.Dispose();
         _grain?.Dispose();
@@ -588,9 +530,19 @@ internal sealed class CompositionBackdrop : IDisposable
         _shape.Dispose();
         _sheet.Dispose();
 
+        foreach (var ring in _ringShapes)
+        {
+            ring.Dispose();
+        }
+
         foreach (var ring in _rings)
         {
             ring.Dispose();
+        }
+
+        foreach (var path in _ringPaths)
+        {
+            path?.Dispose();
         }
 
         foreach (var brush in _ringBrushes)

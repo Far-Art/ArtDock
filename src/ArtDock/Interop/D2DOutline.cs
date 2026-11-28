@@ -7,8 +7,9 @@ using Windows.Graphics;
 namespace ArtDock.Interop;
 
 /// <summary>
-/// A bar's outline with corners the compositor cannot round for itself, handed to the compositor as a Direct2D path — what a
-/// <c>CompositionPath</c> is made from.
+/// A shape the compositor cannot draw for itself, handed to it as a Direct2D path — what a
+/// <c>CompositionPath</c> is made from: the bar's outline, or a rounded rectangle with the bar's
+/// outline taken out of it.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -29,20 +30,46 @@ internal sealed partial class D2DOutline : IGeometrySource2D, ICustomQueryInterf
 
     private const int Ok = 0;
 
+    /// <summary>
+    /// <c>D2D1_COMBINE_MODE_EXCLUDE</c>: the first shape, less the second. Three, after union,
+    /// intersect and xor — 1, tried first, is intersect, and drew every ring as the bar itself.
+    /// </summary>
+    private const int Exclude = 3;
+
+    /// <summary>
+    /// How closely a combined shape's curves follow the originals, in device pixels: a tenth of
+    /// one, finer than Direct2D's default quarter, so the hole's rounded edge does not facet.
+    /// </summary>
+    private const float Tolerance = 0.1f;
+
     private static readonly StrategyBasedComWrappers Wrappers = new();
 
-    private readonly Rect _bounds;
-    private readonly double _radius;
-    private readonly BarCorners _corners;
+    private readonly Shape _shape;
+    private readonly Shape? _hole;
     private readonly Source _source;
 
-    public D2DOutline(Rect bounds, double radius, BarCorners corners)
+    /// <summary>A rounded rectangle, of a corner shape or, for null, plain quarter circles.</summary>
+    private readonly record struct Shape(Rect Bounds, double Radius, BarCorners? Corners);
+
+    /// <summary>The bar's outline, or a plain rounded rectangle for null corners.</summary>
+    public D2DOutline(Rect bounds, double radius, BarCorners? corners)
+        : this(new Shape(bounds, radius, corners), hole: null)
     {
-        _bounds = bounds;
-        _radius = radius;
-        _corners = corners;
+    }
+
+    private D2DOutline(Shape shape, Shape? hole)
+    {
+        _shape = shape;
+        _hole = hole;
         _source = new Source(this);
     }
+
+    /// <summary>
+    /// A plain rounded rectangle with a shape taken out of it — a ring of the bar's shadow with
+    /// the bar itself taken out, wherever the two overlap.
+    /// </summary>
+    public static D2DOutline Holed(Rect bounds, double radius, Rect hole, double holeRadius, BarCorners? holeCorners) =>
+        new(new Shape(bounds, radius, null), new Shape(hole, holeRadius, holeCorners));
 
     CustomQueryInterfaceResult ICustomQueryInterface.GetInterface(ref Guid iid, out nint ppv)
     {
@@ -102,8 +129,74 @@ internal sealed partial class D2DOutline : IGeometrySource2D, ICustomQueryInterf
         }
     }
 
-    /// <summary>Builds the outline as a new path geometry in <paramref name="factory"/>, owned by the caller.</summary>
+    /// <summary>Builds the whole shape as a new geometry in <paramref name="factory"/>, owned by the caller.</summary>
+    /// <remarks>
+    /// A hole is taken out by Direct2D's own combine, not by tracing both shapes into one path:
+    /// the shadow's rings are pushed down, so the bar reaches past the top of the innermost, and
+    /// filled by winding or alternation a hole reaching past its ring is filled back in there.
+    /// </remarks>
     private unsafe int Build(nint factory, out nint geometry)
+    {
+        geometry = 0;
+        var hr = BuildPath(factory, _shape, out var outer);
+        if (hr < 0 || _hole is not { } hole)
+        {
+            geometry = outer;
+            return hr;
+        }
+
+        nint inner = 0, result = 0, sink = 0;
+        try
+        {
+            hr = BuildPath(factory, hole, out inner);
+            if (hr < 0)
+            {
+                return hr;
+            }
+
+            hr = Direct2D.CreatePathGeometry(factory, &result);
+            if (hr < 0)
+            {
+                return hr;
+            }
+
+            hr = Direct2D.Open(result, &sink);
+            if (hr < 0)
+            {
+                return hr;
+            }
+
+            hr = Direct2D.CombineWithGeometry(outer, inner, Exclude, Tolerance, sink);
+            var closed = Direct2D.Close(sink);
+            hr = hr < 0 ? hr : closed;
+            if (hr < 0)
+            {
+                return hr;
+            }
+
+            geometry = result;
+            result = 0;
+            return Ok;
+        }
+        finally
+        {
+            Release(sink);
+            Release(result);
+            Release(inner);
+            Release(outer);
+        }
+    }
+
+    private static void Release(nint unknown)
+    {
+        if (unknown != 0)
+        {
+            Marshal.Release(unknown);
+        }
+    }
+
+    /// <summary>Traces one shape into a new path geometry in <paramref name="factory"/>, owned by the caller.</summary>
+    private static unsafe int BuildPath(nint factory, Shape shape, out nint geometry)
     {
         geometry = 0;
         nint path = 0;
@@ -123,7 +216,15 @@ internal sealed partial class D2DOutline : IGeometrySource2D, ICustomQueryInterf
 
         Direct2D.SetFillMode(sink, 1); // D2D1_FILL_MODE_WINDING
         var tracer = new Sink(sink);
-        BarOutline.Trace(_bounds, _radius, _corners, ref tracer);
+        if (shape.Corners is { } corners)
+        {
+            BarOutline.Trace(shape.Bounds, shape.Radius, corners, ref tracer);
+        }
+        else
+        {
+            BarOutline.TraceRounded(shape.Bounds, shape.Radius, smoothing: 0, ref tracer);
+        }
+
         Direct2D.EndFigure(sink, 1); // D2D1_FIGURE_END_CLOSED
         hr = Direct2D.Close(sink);
         Marshal.Release(sink);
@@ -189,6 +290,14 @@ internal static unsafe class Direct2D
     /// <summary><c>ID2D1Factory::CreatePathGeometry</c>, slot 10.</summary>
     public static int CreatePathGeometry(nint factory, nint* path) =>
         ((delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtable(factory)[10])(factory, path);
+
+    /// <summary>
+    /// <c>ID2D1Geometry::CombineWithGeometry</c>, slot 11: this geometry combined with another
+    /// by <paramref name="mode"/>, untransformed, written into <paramref name="sink"/>.
+    /// </summary>
+    public static int CombineWithGeometry(nint geometry, nint input, int mode, float tolerance, nint sink) =>
+        ((delegate* unmanaged[Stdcall]<nint, nint, int, void*, float, nint, int>)Vtable(geometry)[11])(
+            geometry, input, mode, null, tolerance, sink);
 
     /// <summary><c>ID2D1PathGeometry::Open</c>, slot 17.</summary>
     public static int Open(nint path, nint* sink) =>
