@@ -281,11 +281,14 @@ public class NoGpuTests : IDisposable
         // looked for: by either of the two names the window has them under.
         Assert.DoesNotContain("settings." + nameof(DockSettings.IconShadows), source);
         Assert.DoesNotContain("_applied." + nameof(DockSettings.IconShadows), source);
+        Assert.DoesNotContain("settings." + nameof(DockSettings.ShadowStrength), source);
+        Assert.DoesNotContain("_applied." + nameof(DockSettings.ShadowStrength), source);
 
         Assert.Contains("." + nameof(DockSettings.Blurs), source);
         Assert.Contains("." + nameof(DockSettings.BarAlpha), source);
         Assert.Contains("." + nameof(DockSettings.CastsIconShadows), source);
         Assert.Contains("." + nameof(DockSettings.CastsBarShadow), source);
+        Assert.Contains("." + nameof(DockSettings.BarShadowStrength), source);
 
         // And it tells the settings what Windows' transparency effects are before reading them.
         Assert.Contains("." + nameof(DockSettings.WindowsTransparency) + " = TransparencyEffects.Enabled", source);

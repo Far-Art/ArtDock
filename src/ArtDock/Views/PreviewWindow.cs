@@ -191,18 +191,20 @@ internal sealed class PreviewWindow : IDisposable
         _root = compositor.CreateContainerVisual();
         _root.Size = new Vector2(stage.Width, stage.Height);
 
-        // The shadow, ring for ring as the bar's, under the card.
+        // The shadow, ring for ring as the bar's, under the card — at the strength a dock starts
+        // with, whatever the bar's is set to: the setting is the bar's, and a card raised over
+        // the desktop needs its shadow to stand off it either way.
         _shadow = compositor.CreateShapeVisual();
         _shadow.Size = _root.Size;
+        _shadow.Opacity = (float)BarShadow.Opacity(BarShadow.DefaultStrength);
         _rings = new CompositionRoundedRectangleGeometry[BarShadow.RingCount];
         Span<BarShadow.Ring> layout = stackalloc BarShadow.Ring[BarShadow.RingCount];
         BarShadow.Rings(default, 0, 1, layout);
-        var ringBrushes = BarShadow.Passes.Select(pass => compositor.CreateColorBrush(CompositionColor.FromArgb(pass.Alpha, 0, 0, 0))).ToArray();
         for (var i = 0; i < _rings.Length; i++)
         {
             _rings[i] = compositor.CreateRoundedRectangleGeometry();
             var ring = compositor.CreateSpriteShape(_rings[i]);
-            ring.FillBrush = ringBrushes[layout[i].Pass];
+            ring.FillBrush = compositor.CreateColorBrush(CompositionColor.FromArgb(layout[i].Alpha, 0, 0, 0));
             _shadow.Shapes.Add(ring);
         }
 

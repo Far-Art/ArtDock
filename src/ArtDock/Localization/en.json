@@ -69,6 +69,8 @@
     "Settings.Appearance.Corners.Beveled": "Beveled",
     "Settings.Appearance.Roundness": "Corner roundness",
     "Settings.Appearance.Roundness.Value": "{0:P0}",
+    "Settings.Appearance.Shadow": "Shadow",
+    "Settings.Appearance.Shadow.Value": "{0:P0}",
     "Settings.Appearance.Colour": "Color",
     "Settings.Appearance.MatchTaskbar": "Match the taskbar",
     "Settings.Appearance.MatchTaskbar.Hint": "Paints the bar as Windows paints the taskbar, with the same blur, tint and edge, and keeps following it when the accent changes or the system switches between light and dark. The opacity, color and blur set here are kept, and come back when this is turned off.",
@@ -79,7 +81,7 @@
     "Settings.Appearance.SavedSwatch.Tip": "{0} — right-click to remove",
     "Settings.Appearance.Blur": "Blur what is behind the bar",
     "Settings.Appearance.Blur.Hint": "Puts a sheet of Windows acrylic behind the bar. Lower the opacity above to see it.",
-    "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid and the blur off. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur keeps its setting, and comes back when No GPU is turned off.",
+    "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid, with no blur and no shadow. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur and the shadow keep their settings, and come back when No GPU is turned off.",
     "Settings.Appearance.TransparencyOff.Note": "Transparency effects are off in Windows (Settings › Personalization › Colors), so the bar is solid with no blur behind it, like the taskbar. Opacity now mixes the bar's color with gray instead of letting the desktop show through; the blur keeps its setting, and comes back when transparency effects are turned on.",
     "Settings.Appearance.Reset": "Reset Appearance to defaults",
 

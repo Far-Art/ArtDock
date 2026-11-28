@@ -143,6 +143,12 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   moment later, which it did at every sign-in until 2026-10-14.
 - **Blurs what is behind the bar**, with a sheet of Windows acrylic, which draws the bar and
   its shadow along with the blur, so the three move as one.
+- **Casts a soft shadow under the bar**, as light from above would: a tight shade where the bar
+  meets the desktop, and a softer one pushed down below it — darkest below the bar, lighter
+  beside it and faint above, rather than a halo the same all round, and fading out slowly and
+  wide. *Shadow* on the Appearance page sets how strong it is, from none to 100%, a little
+  stronger than the 85% a dock starts with. Its faint outer edge takes no clicks: what takes them for the shadow, as the
+  strip below the bar always has, stops where the shadow used to.
 - **Matches the taskbar**, by default since 2026-11-22 (*Match the taskbar*, first on the Appearance page): the
   bar is then painted with the taskbar's own material rather than a colour taken from it —
   Windows' acrylic, by the recipe the taskbar uses (`Dock/TaskbarMaterial`,
@@ -175,9 +181,9 @@ cover, are in [docs/downloads.md](docs/downloads.md).
   display's own pace, as it is everywhere: for an evening it was held to thirty frames a
   second, which with the shadow gone saved three points more for two frames in three, and was
   taken out again. Magnification itself stays — *Disable magnification* is beside it
-  for a machine that cannot keep up even so. The blur and the icons' shadows keep their own
-  values underneath, greyed on their pages with a line saying why, and come back when it is
-  turned off. The
+  for a machine that cannot keep up even so. The blur, the bar's shadow and the icons' shadows
+  keep their own values underneath, greyed on their pages with a line saying why, and come back
+  when it is turned off. The
   dock turns it on by itself once only: at its first run, if WPF reports that it has no
   hardware to draw with, it starts with *No GPU* on and says so in a message — what it did, and
   that it is turned off in Settings, on the System page. A dock that already has settings is
@@ -826,11 +832,21 @@ since the bar is far wider than it is tall — carrying a sizing frame, collapse
 it always did, and on that path the blur can still trail the bar.
 
 **The drawn shadow.** A real `DropShadowEffect` would blur again every frame the bar changes
-width, which is every frame of a wave. Two stacked passes of rounded rectangles (a tight contact
-shadow and a displaced key shadow, spaced on a power curve) cost nothing to redraw
-(`BarShadow`). With the blur off the dock draws them, clipping the bar out, because a shadow is
-not visible through the object casting it; with it on the sheet draws the same rings under the
-blur, which is opaque and hides them where the bar is.
+width, which is every frame of a wave. Two stacked passes of rounded rectangles cost nothing to
+redraw (`BarShadow`): a tight contact shadow, and a key shadow drawn in a little and pushed
+down, so it falls below the bar more than beside it and hardly above it. Each pass stands for a
+Gaussian blur of the bar's shape — the rings are evenly spaced, about a DIP apart, each
+painted at the alpha that brings the stack to the blur's falloff at that distance, so the stack
+follows the blur's own curve; spaced on a power curve at one alpha, as they were until
+2026-11-28, the outermost ring was a wide band of one shade, which on a plain desktop read as an
+outline round the shadow. Rings that would lie wholly under the bar are left out. The strength is
+an opacity over all of the rings at once, 100% on the *Shadow* slider being 60% of what they are
+laid out for — the whole of it was tried on the dock and was too heavy. In WPF it is a pushed opacity, so the stack is rounded to the window's eight
+bits once rather than ring by ring, where a fraction of a step on each would be lost. With the
+blur off the dock draws them, clipping the bar out, because a shadow is not visible through the
+object casting it; with it on the sheet draws the same rings under the blur, which is opaque and
+hides them where the bar is. The window previews' cards cast the same shadow, at the strength a
+dock starts with whatever the bar's is set to.
 
 **The icons' shadow is a picture, worked out once.** An icon's shadow is made from its own
 outline the first time the icon is drawn with one — moved down, drawn in a little so that it
@@ -1391,7 +1407,7 @@ that open as a grid instead are built); and built-in translations beyond English
 dotnet test tests/ArtDock.Tests
 ```
 
-One thousand two hundred and twenty-nine tests cover the cosine falloff (peak, range boundary,
+One thousand three hundred and twenty-four tests cover the cosine falloff (peak, range boundary,
 monotonicity, zero range), the layout (prefix sums, bar width, non-overlap across a full pointer
 sweep, empty and single-icon docks, the room the window keeps for the widest bar and its
 shadow, and the hover span, which covers the bar wherever the wave is without moving when the
@@ -1595,6 +1611,15 @@ on the icon and grows with it, a photo's thumbnail included; that an icon is sha
 an empty picture not at all; that none is drawn when it is turned off; that the dock shadows
 every icon, ones added later included, and takes them all away again; and that it is on for a
 new dock, and for one whose settings were written before it existed.
+
+Twenty cover the bar's shadow and how strong it is. The one that matters is that below the
+bar, where the shadow is seen most, the stack of rings makes what a real Gaussian blur of the
+bar would, to within a step; the rest: that it falls darker below the bar than beside it, and
+darker beside than above; that no ring lies wholly under the bar; that the normal distribution
+and its inverse undo each other; that full strength is the cap chosen on the dock and the default about half the layout; that a dock starts at the default strength, and so does one
+whose settings were written before the setting existed; that the strength is written, read back
+and copied, and kept to none through full on its way to the bar; that *No GPU* draws no shadow
+and keeps the strength underneath; and that the bar keeps its own strength in range.
 
 Fifteen cover the room drop-down lists and tooltips are given for their shadows. One shows a
 combo box in a window off every display and finds it fitted with nothing but the app-wide

@@ -137,16 +137,18 @@ internal sealed class CompositionBackdrop : IDisposable
         // them here: the blur laid over the bar next is opaque, and hides whatever is under it.
         _shadow = compositor.CreateShapeVisual();
         _shadow.RelativeSizeAdjustment = Vector2.One;
-        _ringBrushes = [.. BarShadow.Passes.Select(pass => compositor.CreateColorBrush(Color.FromArgb(pass.Alpha, 0, 0, 0)))];
+        _shadow.Opacity = (float)BarShadow.Opacity(BarShadow.DefaultStrength);
         _rings = new CompositionRoundedRectangleGeometry[BarShadow.RingCount];
         _ringShapes = new CompositionSpriteShape[BarShadow.RingCount];
+        _ringBrushes = new CompositionColorBrush[BarShadow.RingCount];
 
         BarShadow.Rings(default, 0, 1, _ringLayout);
         for (var i = 0; i < _rings.Length; i++)
         {
             _rings[i] = compositor.CreateRoundedRectangleGeometry();
             _ringShapes[i] = compositor.CreateSpriteShape(_rings[i]);
-            _ringShapes[i].FillBrush = _ringBrushes[_ringLayout[i].Pass];
+            _ringBrushes[i] = compositor.CreateColorBrush(Color.FromArgb(_ringLayout[i].Alpha, 0, 0, 0));
+            _ringShapes[i].FillBrush = _ringBrushes[i];
             _shadow.Shapes.Add(_ringShapes[i]);
         }
 
@@ -330,8 +332,26 @@ internal sealed class CompositionBackdrop : IDisposable
     /// </summary>
     public void SetOpacity(double opacity) => _root.Opacity = (float)Math.Clamp(opacity, 0, 1);
 
+    private bool _shadowShown = true;
+    private double _shadowStrength = BarShadow.DefaultStrength;
+
     /// <summary>Whether the shadow is drawn round the shape: not under what casts its own.</summary>
-    public void ShowShadow(bool show) => _shadow.IsVisible = show;
+    public void ShowShadow(bool show)
+    {
+        _shadowShown = show;
+        _shadow.IsVisible = show && _shadowStrength > 0;
+    }
+
+    /// <summary>
+    /// How strong the shadow is, 0 to 1: the opacity its rings are drawn at, as a whole — the
+    /// dock's own <c>DockBar.ShadowStrength</c>, which this one must match.
+    /// </summary>
+    public void SetShadowStrength(double strength)
+    {
+        _shadowStrength = double.IsFinite(strength) ? Math.Clamp(strength, 0, 1) : BarShadow.DefaultStrength;
+        _shadow.Opacity = (float)BarShadow.Opacity(_shadowStrength);
+        _shadow.IsVisible = _shadowShown && _shadowStrength > 0;
+    }
 
     /// <summary>
     /// Makes the sheet the taskbar's own material, or puts it back to the dock's: the bare blur

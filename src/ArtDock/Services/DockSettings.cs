@@ -565,6 +565,13 @@ public sealed class DockSettings
     public bool BlurBackground { get; set; } = true;
 
     /// <summary>
+    /// How strong the bar's shadow is, 0 (none) to 1 (the strongest it gets): the opacity of the
+    /// shadow <see cref="BarShadow"/> lays out. A settings file from before it had no such property
+    /// and reads as the default.
+    /// </summary>
+    public double ShadowStrength { get; set; } = BarShadow.DefaultStrength;
+
+    /// <summary>
     /// Whether each icon casts a faint shadow onto the bar, falling a little below it.
     /// </summary>
     /// <remarks>
@@ -1057,6 +1064,16 @@ public sealed class DockSettings
     [JsonIgnore]
     public bool CastsBarShadow => !NoGpu;
 
+    /// <summary>
+    /// How strong the bar's shadow is drawn: <see cref="ShadowStrength"/>, kept to 0 to 1, and
+    /// nothing at all where <see cref="CastsBarShadow"/> rules the shadow out — the stored value
+    /// stays underneath, and comes back with it.
+    /// </summary>
+    [JsonIgnore]
+    public double BarShadowStrength => !CastsBarShadow
+        ? 0
+        : double.IsFinite(ShadowStrength) ? Math.Clamp(ShadowStrength, 0, 1) : BarShadow.DefaultStrength;
+
     // ---- contents ------------------------------------------------------------
 
     /// <summary>
@@ -1273,6 +1290,7 @@ public sealed class DockSettings
         BarRoundness = BarRoundness,
         BarCorners = BarCorners,
         BlurBackground = BlurBackground,
+        ShadowStrength = ShadowStrength,
         IconShadows = IconShadows,
         GroupFitsContents = GroupFitsContents,
         IconSet = IconSet,

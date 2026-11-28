@@ -69,15 +69,31 @@ public sealed class DockBar : Canvas
     /// <summary>
     /// Slack on each side of the widest the bar ever gets. Without it the bar's rounded caps
     /// sit exactly on the window edge at peak magnification, leaving nowhere for the drop
-    /// shadow to fall.
+    /// shadow to fall. Wide enough for the whole of <see cref="BarShadow"/> beside the bar,
+    /// which <c>BarShadowTests</c> holds it to.
     /// </summary>
-    private const double HorizontalSlack = 24;
+    private const double HorizontalSlack = 32;
+
+    /// <summary>
+    /// How far round the bar the stand-in takes clicks for the shadow, at most: the depth the
+    /// shadow reached before it was softened and widened on 2026-11-28.
+    /// </summary>
+    /// <remarks>
+    /// The window reaches down past the work area, over the taskbar, for the shadow to fall
+    /// into, and the stand-in takes every click it is painted under. Over the whole of the
+    /// softer shadow's reach that would be the top half of the taskbar's icons under the dock;
+    /// its faint tail is no part of the dock anyone means to click.
+    /// </remarks>
+    private const double StandInReach = 26;
 
     // ---- shadow ---------------------------------------------------------------
 
-    /// <summary>One brush per pass of <see cref="BarShadow"/>, which says what the shadow is.</summary>
+    /// <summary>
+    /// One brush per ring of <see cref="BarShadow"/>, which says what the shadow is, in the order
+    /// the rings are painted.
+    /// </summary>
     private static readonly Brush[] ShadowBrushes =
-        [.. BarShadow.Passes.Select(pass => Frozen(Color.FromArgb(pass.Alpha, 0x00, 0x00, 0x00)))];
+        [.. BarShadow.Passes.SelectMany(pass => pass.Alphas).Select(alpha => Frozen(Color.FromArgb(alpha, 0x00, 0x00, 0x00)))];
 
     /// <summary>
     /// Room below the bar for the shadow to fall into. The window clips its own content, so
@@ -746,6 +762,29 @@ public sealed class DockBar : Canvas
             InvalidateVisual();
         }
     } = true;
+
+    /// <summary>
+    /// How strong the bar's shadow is, 0 to 1: the opacity <see cref="BarShadow"/>'s rings are
+    /// drawn at, as a whole. Nothing at 0 — not even the faint footprint that takes clicks.
+    /// </summary>
+    public double ShadowStrength
+    {
+        get;
+        set
+        {
+            value = double.IsFinite(value) ? Math.Clamp(value, 0, 1) : BarShadow.DefaultStrength;
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            InvalidateVisual();
+        }
+    } = BarShadow.DefaultStrength;
+
+    /// <summary>Whether there is any shadow to draw, or to keep the footprint of.</summary>
+    private bool CastsShadow => DrawsShadow && ShadowStrength > 0;
 
     /// <summary>
     /// Whether this control paints the bar — its fill, its rim and its shadow. Off while the
@@ -4058,9 +4097,9 @@ public sealed class DockBar : Canvas
             return;
         }
 
-        if (DrawsShadow)
+        if (CastsShadow)
         {
-            DrawShadow(drawingContext, bar, radius);
+            DrawShadow(drawingContext, bar, radius, ShadowStrength);
         }
 
         // Inset by half the pen so the 1px border lands inside the bar's bounds.
@@ -4084,7 +4123,7 @@ public sealed class DockBar : Canvas
         var area = new GeometryGroup { FillRule = FillRule.Nonzero };
         area.Children.Add(BarOutline.Geometry(bar, radius, Metrics.Corners));
 
-        if (DrawsShadow)
+        if (CastsShadow)
         {
             var (caster, castRadius) = BarOutline.RoundedInside(bar, radius, Metrics.Corners);
             for (var pass = 0; pass < BarShadow.Passes.Count; pass++)
@@ -4095,7 +4134,9 @@ public sealed class DockBar : Canvas
         }
 
         area.Freeze();
+        drawingContext.PushClip(new RectangleGeometry(Rect.Inflate(bar, StandInReach, StandInReach)));
         drawingContext.DrawGeometry(StandInBrush, pen: null, area);
+        drawingContext.Pop();
     }
 
     /// <summary>
@@ -4114,8 +4155,14 @@ public sealed class DockBar : Canvas
     /// its colour. The sheet, when it draws the shadow, gets the same effect for nothing: the
     /// blur it lays over the bar is opaque.
     /// </para>
+    /// <para>
+    /// The strength is an opacity over the rings together rather than a fainter brush on each:
+    /// the rings are a few steps of alpha apiece, and a fraction of a step on every one of them
+    /// is lost to rounding in the window's eight bits, where the whole stack faded at once is
+    /// rounded only the one time.
+    /// </para>
     /// </remarks>
-    private void DrawShadow(DrawingContext drawingContext, Rect bar, double radius)
+    private void DrawShadow(DrawingContext drawingContext, Rect bar, double radius, double strength)
     {
         // Even-odd over two figures punches the bar out of the region: the standard donut,
         // and far cheaper per frame than a boolean geometry combine.
@@ -4125,17 +4172,20 @@ public sealed class DockBar : Canvas
         region.Freeze();
 
         drawingContext.PushClip(region);
+        drawingContext.PushOpacity(BarShadow.Opacity(strength));
 
         Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
         var (caster, castRadius) = BarOutline.RoundedInside(bar, radius, Metrics.Corners);
         BarShadow.Rings(caster, castRadius, scale: 1, rings);
 
-        foreach (var ring in rings)
+        for (var i = 0; i < rings.Length; i++)
         {
+            var ring = rings[i];
             drawingContext.DrawRoundedRectangle(
-                ShadowBrushes[ring.Pass], pen: null, ring.Bounds, ring.Radius, ring.Radius);
+                ShadowBrushes[i], pen: null, ring.Bounds, ring.Radius, ring.Radius);
         }
 
+        drawingContext.Pop();
         drawingContext.Pop();
     }
 

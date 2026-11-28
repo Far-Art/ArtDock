@@ -508,6 +508,7 @@ public sealed partial class DockWindow : Window
             // Before the window is sized: a label in a bigger lettering needs more room above
             // the bar, which is the room SizeToDock gives it.
             _dock.SetLabelFont(settings.LabelFontFamily, settings.LabelFontSize, settings.LabelFontStyle);
+            _dock.ShadowStrength = settings.BarShadowStrength;
             ApplyBackdrop(settings.Blurs, settings.CastsBarShadow, taskbar);
 
             if (_previewing)
@@ -877,6 +878,9 @@ public sealed partial class DockWindow : Window
         }
 
         _backdrop.Material = taskbar;
+
+        // The sheet draws the shadow the dock would have, at the strength the dock was given.
+        _backdrop.SetShadowStrength(_dock.ShadowStrength);
         SyncBackdrop();
     }
 

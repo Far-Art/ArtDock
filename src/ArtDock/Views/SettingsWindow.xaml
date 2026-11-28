@@ -575,6 +575,32 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Beside the roundness, as the other part of the bar's look that matching
+                             the taskbar leaves alone. Greyed under No GPU, which draws no shadow. -->
+                        <Border x:Name="ShadowCard" Style="{StaticResource Card}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource RowLabel}" Text="{DynamicResource Settings.Appearance.Shadow}" />
+                                <Slider
+                                    x:Name="ShadowSlider"
+                                    AutomationProperties.Name="{DynamicResource Settings.Appearance.Shadow}"
+                                    Grid.Column="1"
+                                    Style="{StaticResource RowSlider}"
+                                    Maximum="1"
+                                    Minimum="0"
+                                    TickFrequency="0.02" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Style="{StaticResource RowValue}"
+                                    loc:Localized.Key="Settings.Appearance.Shadow.Value"
+                                    loc:Localized.Value="{Binding ElementName=ShadowSlider, Path=Value}" />
+                            </Grid>
+                        </Border>
+
                         <!-- Why the blur's card below is greyed, and what the opacity does now,
                              said at full strength: a note inside the greyed card would be
                              dimmed with it. -->

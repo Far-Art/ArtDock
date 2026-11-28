@@ -334,6 +334,7 @@ public sealed partial class SettingsWindow : Window
         OpacitySlider.Value = settings.BarOpacity;
         RoundnessSlider.Value = Math.Clamp(settings.BarRoundness, 0, 1);
         CornersBox.SelectedIndex = (int)settings.CornerShape;
+        ShadowSlider.Value = double.IsFinite(settings.ShadowStrength) ? Math.Clamp(settings.ShadowStrength, 0, 1) : BarShadow.DefaultStrength;
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(settings.BarColor));
         TaskbarColorCheck.IsChecked = settings.UseTaskbarColor;
         BlurCheck.IsChecked = settings.BlurBackground;
@@ -395,7 +396,7 @@ public sealed partial class SettingsWindow : Window
         foreach (var slider in new[]
                  {
                      BaseSizeSlider, MinIconSizeSlider, MaxScaleSlider, InfluenceSlider, GapSlider,
-                     OpacitySlider, RoundnessSlider, LabelSizeSlider, HideDelaySlider,
+                     OpacitySlider, RoundnessSlider, ShadowSlider, LabelSizeSlider, HideDelaySlider,
                      RevealDelaySlider, RevealSpeedSlider, PreviewDelaySlider
                  })
         {
@@ -664,6 +665,9 @@ public sealed partial class SettingsWindow : Window
             CustomColors = [.. _savedColors],
             BarRoundness = RoundnessSlider.Value,
             BarCorners = SelectedCorners.ToString(),
+
+            // To the slider's own step, for the same reason as the offset along the edge below.
+            ShadowStrength = Math.Round(ShadowSlider.Value, 2),
             BlurBackground = BlurCheck.IsChecked == true,
             IconShadows = IconShadowsCheck.IsChecked == true,
             IconSet = SelectedIconSet,
@@ -2035,6 +2039,7 @@ public sealed partial class SettingsWindow : Window
         OpacitySlider.Value = defaults.BarOpacity;
         RoundnessSlider.Value = Math.Clamp(defaults.BarRoundness, 0, 1);
         CornersBox.SelectedIndex = (int)defaults.CornerShape;
+        ShadowSlider.Value = defaults.ShadowStrength;
         BarColorBox.Text = BarPalette.ToHex(BarPalette.Parse(defaults.BarColor));
         TaskbarColorCheck.IsChecked = defaults.UseTaskbarColor;
         BlurCheck.IsChecked = defaults.BlurBackground;
@@ -2769,6 +2774,7 @@ public sealed partial class SettingsWindow : Window
         NoGpuNote.Visibility = note;
         TransparencyOffNote.Visibility = opaque ? Visibility.Visible : Visibility.Collapsed;
 
+        ShadowCard.IsEnabled = !noGpu;
         IconShadowsCard.IsEnabled = !noGpu;
         NoGpuIconsNote.Visibility = note;
 

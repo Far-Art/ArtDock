@@ -148,6 +148,13 @@ public sealed class BackdropWindow : IDisposable
     /// </summary>
     public bool HasNativeShadow => _acrylic && _composition is null;
 
+    /// <summary>
+    /// How strong the shadow the sheet draws round the bar is, 0 to 1 — see
+    /// <c>DockBar.ShadowStrength</c>, which it must match. Nothing to do on the fallback path,
+    /// whose shadow is DWM's.
+    /// </summary>
+    public void SetShadowStrength(double strength) => _composition?.SetShadowStrength(strength);
+
     public bool IsVisible => _visible;
 
     public nint Hwnd => _hwnd;
