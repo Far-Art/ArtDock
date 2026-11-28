@@ -79,6 +79,7 @@ public sealed class SettingsStore
                     BringUpToDate(loaded, json);
                     loaded.RepairPinIds();
                     loaded.AdoptPinLettering();
+                    loaded.JoinMinimal();
                     _current = loaded;
                     LoadedFromDisk = true;
                 }
@@ -208,6 +209,7 @@ public sealed class SettingsStore
         BringUpToDate(loaded, json);
         loaded.RepairPinIds();
         loaded.AdoptPinLettering();
+        loaded.JoinMinimal();
         return loaded;
     }
 
@@ -237,6 +239,12 @@ public sealed class SettingsStore
     public void Save(DockSettings settings)
     {
         _current = settings;
+
+        // A measuring run changes the dock in memory only; see Bench.
+        if (Bench.On)
+        {
+            return;
+        }
 
         try
         {

@@ -67,7 +67,7 @@ public partial class App : Application
         var noGpuAdopted = settings.AdoptNoGpu(firstRun, SoftwareRendering.HardwareMissing);
 
         // Before any window exists, so that none is ever given a Direct3D device to give back.
-        SoftwareRendering.Apply(settings.NoGpu);
+        SoftwareRendering.Apply(settings.NoGpu || Bench.Software);
 
         ApplyTheme(settings);
 
@@ -143,6 +143,11 @@ public partial class App : Application
             }
         };
         _dockWindow.Show();
+
+        if (Bench.On)
+        {
+            StartBench(_dockWindow);
+        }
 
         // Now that there is a dock to ask about, a later launch has somewhere to be sent — and
         // the uninstaller somewhere to ask for the dock to go, which it does the way Exit does.
@@ -362,7 +367,7 @@ public partial class App : Application
     /// </remarks>
     private static void ApplyRendering(DockSettings settings)
     {
-        if (SoftwareRendering.Apply(settings.NoGpu))
+        if (SoftwareRendering.Apply(settings.NoGpu || Bench.Software))
         {
             WindowMaterial.ApplyToOpen(solid: settings.NoGpu);
         }
@@ -470,6 +475,30 @@ public partial class App : Application
         // launch with --settings is another process, and the tray icon is a background
         // window too.
         _settingsWindow.Activate();
+    }
+
+    /// <summary>Runs a measuring pass (<see cref="Bench"/>): a warm-up, the measured stretch, then quits.</summary>
+    private void StartBench(DockWindow dock)
+    {
+        dock.StartBench();
+
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(Bench.WarmupSeconds) };
+        var measuring = false;
+        timer.Tick += (_, _) =>
+        {
+            if (!measuring)
+            {
+                measuring = true;
+                Bench.Begin();
+                timer.Interval = TimeSpan.FromSeconds(Bench.Seconds);
+                return;
+            }
+
+            timer.Stop();
+            Bench.End(dock.IsDockShown);
+            Quit();
+        };
+        timer.Start();
     }
 
     /// <summary>

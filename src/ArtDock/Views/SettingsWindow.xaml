@@ -2206,58 +2206,65 @@
                         </Border>
 
                         <Border Style="{StaticResource Card}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{DynamicResource Settings.System.ReduceMotion}" />
-                                    <TextBlock
-                                        Style="{StaticResource CardHint}"
-                                        Text="{DynamicResource Settings.System.ReduceMotion.Hint}" />
-                                </StackPanel>
-                                <CheckBox
-                                    x:Name="ReduceMotionCheck"
-                                    AutomationProperties.Name="{DynamicResource Settings.System.ReduceMotion}"
-                                    AutomationProperties.HelpText="{DynamicResource Settings.System.ReduceMotion.Hint}"
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-
-                        <!-- For a machine with nothing but the processor to draw with. The dock
-                             ticks this for itself once only, on a first run where WPF reports
-                             no hardware to draw with, and says so then; after that the line
-                             under it only says when that is so and the box is not ticked.
-
-                             In Windows' own caution colours, the ones its warning bars are
-                             drawn in, and the only card that is: ticking it takes the blur, the
-                             bar's opacity and the dialog's material away, and it should not be
-                             ticked in passing. The theme's keys, so it follows light and dark. -->
-                        <Border
-                            Style="{StaticResource Card}"
-                            Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
-                            BorderBrush="{DynamicResource SystemFillColorCautionBrush}">
                             <StackPanel>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="{StaticResource ReadoutWidth}" />
                                     </Grid.ColumnDefinitions>
+                                    <!-- Four stops, lowest first: Minimal (ReduceMotion and NoGpu
+                                         together), then DockSettings.PerformanceLight, Balanced and
+                                         Full. The lines under the name say what the stop chosen
+                                         does; the code-behind keeps them and the readout in step.
+
+                                         Every stop's lines are laid out, one over another, and
+                                         only the chosen stop's shown: the card is always as tall as
+                                         the longest, so dragging the slider moves nothing below. -->
                                     <StackPanel Margin="0,0,16,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{DynamicResource Settings.System.NoGpu}" />
-                                        <TextBlock
-                                            Style="{StaticResource CardHint}"
-                                            Text="{DynamicResource Settings.System.NoGpu.Hint}" />
+                                        <TextBlock Text="{DynamicResource Settings.System.Performance}" />
+                                        <Grid>
+                                            <TextBlock
+                                                x:Name="PerformanceMinimalHint"
+                                                Style="{StaticResource CardHint}"
+                                                Text="{DynamicResource Settings.System.Performance.Minimal.Hint}"
+                                                Visibility="Hidden" />
+                                            <TextBlock
+                                                x:Name="PerformanceLightHint"
+                                                Style="{StaticResource CardHint}"
+                                                Text="{DynamicResource Settings.System.Performance.Light.Hint}"
+                                                Visibility="Hidden" />
+                                            <TextBlock
+                                                x:Name="PerformanceBalancedHint"
+                                                Style="{StaticResource CardHint}"
+                                                Text="{DynamicResource Settings.System.Performance.Balanced.Hint}"
+                                                Visibility="Hidden" />
+                                            <TextBlock
+                                                x:Name="PerformanceFullHint"
+                                                Style="{StaticResource CardHint}"
+                                                Text="{DynamicResource Settings.System.Performance.Full.Hint}"
+                                                Visibility="Hidden" />
+                                        </Grid>
                                     </StackPanel>
-                                    <CheckBox
-                                        x:Name="NoGpuCheck"
-                                        AutomationProperties.Name="{DynamicResource Settings.System.NoGpu}"
-                                        AutomationProperties.HelpText="{DynamicResource Settings.System.NoGpu.Hint}"
+                                    <Slider
+                                        x:Name="PerformanceSlider"
+                                        AutomationProperties.Name="{DynamicResource Settings.System.Performance}"
                                         Grid.Column="1"
-                                        VerticalAlignment="Center" />
+                                        Width="160"
+                                        Style="{StaticResource RowSlider}"
+                                        Maximum="3"
+                                        Minimum="0"
+                                        TickFrequency="1"
+                                        TickPlacement="BottomRight" />
+                                    <TextBlock
+                                        x:Name="PerformanceValue"
+                                        Grid.Column="2"
+                                        Style="{StaticResource RowValue}" />
                                 </Grid>
+                                <!-- Only while the slider is above Minimal and WPF reports no
+                                     hardware to draw with: the dock sets Minimal for itself once
+                                     only, on such a first run, and says so then. In Windows' own
+                                     caution colour, the theme's key, so it follows light and dark. -->
                                 <TextBlock
                                     x:Name="NoGpuDetected"
                                     Margin="0,8,0,0"

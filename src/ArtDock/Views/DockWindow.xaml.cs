@@ -473,7 +473,7 @@ public sealed partial class DockWindow : Window
         // Windows' transparency effects, which make the bar solid as No GPU does. Put on the
         // settings rather than read beside them, so every reading of the blur and the opacity in
         // force below — and the sheet's own, later — has it.
-        settings.WindowsTransparency = TransparencyEffects.Enabled;
+        settings.WindowsTransparency = TransparencyEffects.Enabled && !Bench.SolidBar;
 
         // The sheet is placed once, after both the row and the window have moved. Moving the
         // dock along its edge re-lays the row out inside the window and moves the window, and
@@ -503,7 +503,9 @@ public sealed partial class DockWindow : Window
             }
 
             _dock.SetBarRim(taskbar is null ? DockBar.BarBorder : TaskbarMaterial.Stroke);
-            _dock.IconShadows = settings.CastsIconShadows;
+            _dock.IconShadows = settings.CastsIconShadows && !Bench.NoIconShadows;
+            // A measuring run sets its own, the full rate included.
+            _dock.MaxFrameRate = Bench.On ? Bench.Fps : settings.MaxFrameRate;
 
             // Before the window is sized: a label in a bigger lettering needs more room above
             // the bar, which is the room SizeToDock gives it.
@@ -2379,6 +2381,13 @@ public sealed partial class DockWindow : Window
     /// would otherwise do.
     /// </summary>
     public void HoldRevealed(bool hold) => _autoHide?.HoldRevealed(hold);
+
+    /// <summary>Holds the dock up and, unless told not to, sweeps its wave, for a measuring run (<see cref="Bench"/>).</summary>
+    public void StartBench()
+    {
+        HoldRevealed(true);
+        _dock.PreviewSweep(Bench.Sweep);
+    }
 
     /// <summary>
     /// Puts the dock into the state the settings dialog wants: the wave up and moving, and

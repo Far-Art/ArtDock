@@ -372,8 +372,10 @@ public sealed partial class SettingsWindow : Window
         // Read the registry rather than the stored flag: the user may have turned the dock off
         // in Task Manager's Startup tab, and the checkbox should reflect reality.
         RunAtLoginCheck.IsChecked = Autostart.IsEnabled();
-        ReduceMotionCheck.IsChecked = settings.ReduceMotion;
-        NoGpuCheck.IsChecked = settings.NoGpu;
+        _keptPerformance = Math.Clamp(settings.Performance, DockSettings.PerformanceLight, DockSettings.PerformanceFull);
+        PerformanceSlider.Value = settings.ReduceMotion || settings.NoGpu ? 0 : _keptPerformance;
+        _shownMinimal = IsMinimal;
+        ShowPerformance();
         UpdateNoGpuControls();
 
         LockOrderCheck.IsChecked = settings.LockItemOrder;
@@ -459,10 +461,25 @@ public sealed partial class SettingsWindow : Window
         LabelFontBox.SelectionChanged += (_, _) => Preview();
         LabelStyleBox.SelectionChanged += (_, _) => Preview();
         CornersBox.SelectionChanged += (_, _) => Preview();
-        ReduceMotionCheck.Checked += (_, _) => Preview();
-        ReduceMotionCheck.Unchecked += (_, _) => Preview();
-        NoGpuCheck.Checked += (_, _) => OnNoGpuToggled();
-        NoGpuCheck.Unchecked += (_, _) => OnNoGpuToggled();
+        PerformanceSlider.ValueChanged += (_, _) =>
+        {
+            if (PerformanceStop >= DockSettings.PerformanceLight)
+            {
+                _keptPerformance = PerformanceStop;
+            }
+
+            ShowPerformance();
+            if (IsMinimal != _shownMinimal)
+            {
+                _shownMinimal = IsMinimal;
+                OnMinimalChanged();
+            }
+            else
+            {
+                UpdateNoGpuControls();
+                Preview();
+            }
+        };
 
         // Autostart is a system change, so it waits for Save like everything else —
         // otherwise Cancel would leave it altered.
@@ -594,6 +611,51 @@ public sealed partial class SettingsWindow : Window
         };
     }
 
+    /// <summary>
+    /// The Performance slider's stop: 0 for no magnification, then
+    /// <see cref="DockSettings.PerformanceLight"/> to <see cref="DockSettings.PerformanceFull"/>.
+    /// </summary>
+    private int PerformanceStop => (int)Math.Round(PerformanceSlider.Value);
+
+    /// <summary>
+    /// Whether the slider is at Minimal, which is <see cref="DockSettings.ReduceMotion"/> and
+    /// <see cref="DockSettings.NoGpu"/> both.
+    /// </summary>
+    private bool IsMinimal => PerformanceStop == 0;
+
+    /// <summary>Whether the cards and the dialog's material were last set for Minimal.</summary>
+    private bool _shownMinimal;
+
+    /// <summary>
+    /// The level the slider last stood at above its lowest stop, which is what is kept while it
+    /// stands there — see <see cref="DockSettings.Performance"/>.
+    /// </summary>
+    private int _keptPerformance = DockSettings.PerformanceFull;
+
+    /// <summary>Names the Performance slider's stop and says what it does, in the language in force.</summary>
+    private void ShowPerformance()
+    {
+        // Hidden rather than collapsed, so each still takes its room — see the XAML.
+        var stop = PerformanceStop;
+        PerformanceMinimalHint.Visibility = stop == 0 ? Visibility.Visible : Visibility.Hidden;
+        PerformanceLightHint.Visibility = stop == DockSettings.PerformanceLight ? Visibility.Visible : Visibility.Hidden;
+        PerformanceBalancedHint.Visibility = stop == DockSettings.PerformanceBalanced ? Visibility.Visible : Visibility.Hidden;
+        PerformanceFullHint.Visibility = stop >= DockSettings.PerformanceFull ? Visibility.Visible : Visibility.Hidden;
+
+        // Whole keys, so the localization tests can see each is used.
+        var (name, hint) = PerformanceStop switch
+        {
+            0 => ("Settings.System.Performance.Minimal", "Settings.System.Performance.Minimal.Hint"),
+            DockSettings.PerformanceLight => ("Settings.System.Performance.Light", "Settings.System.Performance.Light.Hint"),
+            DockSettings.PerformanceBalanced => ("Settings.System.Performance.Balanced", "Settings.System.Performance.Balanced.Hint"),
+            _ => ("Settings.System.Performance.Full", "Settings.System.Performance.Full.Hint")
+        };
+
+        // References rather than text, so a change of language relabels them with the rest.
+        PerformanceValue.SetResourceReference(TextBlock.TextProperty, name);
+        PerformanceSlider.SetResourceReference(System.Windows.Automation.AutomationProperties.HelpTextProperty, hint);
+    }
+
     /// <summary>Pushes the current controls onto the dock without persisting them.</summary>
     private void Preview()
     {
@@ -702,8 +764,9 @@ public sealed partial class SettingsWindow : Window
             RunAtLogin = RunAtLoginCheck.IsChecked == true,
             Theme = SelectedTheme,
             Language = SelectedLanguage,
-            ReduceMotion = ReduceMotionCheck.IsChecked == true,
-            NoGpu = NoGpuCheck.IsChecked == true,
+            ReduceMotion = IsMinimal,
+            Performance = _keptPerformance,
+            NoGpu = IsMinimal,
             LockItemOrder = OrderLocked,
             LockItemContents = ContentsLocked,
             PinnedApps = [.. _pinned]
@@ -2725,8 +2788,10 @@ public sealed partial class SettingsWindow : Window
         ThemeBox.SelectedIndex = AppTheme.IndexOf(defaults.Theme);
         BuildLanguageList(defaults.Language);
         RunAtLoginCheck.IsChecked = defaults.RunAtLogin;
-        ReduceMotionCheck.IsChecked = defaults.ReduceMotion;
-        NoGpuCheck.IsChecked = defaults.NoGpu;
+        _keptPerformance = defaults.Performance;
+        PerformanceSlider.Value = defaults.Minimal ? 0 : defaults.Performance;
+        _shownMinimal = IsMinimal;
+        UpdateNoGpuControls();
         _loading = false;
 
         // The theme picker's own handler is suppressed while loading, and Mica is DWM's
@@ -2736,10 +2801,10 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// No GPU was ticked or unticked: the cards it overrides say so, the dialog's own material
-    /// goes or comes back, and the dock is shown the change.
+    /// The slider came to Minimal or left it: the cards No GPU overrides say so, the dialog's own
+    /// material goes or comes back, and the dock is shown the change.
     /// </summary>
-    private void OnNoGpuToggled()
+    private void OnMinimalChanged()
     {
         UpdateNoGpuControls();
         ApplyMica();
@@ -2747,16 +2812,17 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Greys out what No GPU overrides, and says when this machine looks like one it is for.
+    /// Greys out what No GPU, half of Minimal, overrides, and says when this machine looks like
+    /// one it is for.
     /// </summary>
     /// <remarks>
     /// The blur and the icons' shadows keep their own values while they are greyed — it is the
     /// dock that sets them aside, in <see cref="DockSettings.Blurs"/> and
     /// <see cref="DockSettings.CastsIconShadows"/> — so they are still what is saved, and what
-    /// comes back when the box is unticked. The opacity is not greyed: the bar is solid, but the
+    /// comes back when the slider leaves Minimal. The opacity is not greyed: the bar is solid, but the
     /// slider still sets how much grey is mixed into its colour
-    /// (<see cref="DockSettings.BarPaint"/>). The hint is only for a box that is not ticked:
-    /// ticked, there is nothing left to suggest.
+    /// (<see cref="DockSettings.BarPaint"/>). The hint is only for a slider above Minimal: at it,
+    /// there is nothing left to suggest.
     /// <para>
     /// Windows' transparency effects, switched off, hold the bar solid in the same way
     /// (<see cref="DockSettings.SolidBar"/>), and grey the blur with a note of their own — but not
@@ -2765,7 +2831,7 @@ public sealed partial class SettingsWindow : Window
     /// </remarks>
     private void UpdateNoGpuControls()
     {
-        var noGpu = NoGpuCheck.IsChecked == true;
+        var noGpu = IsMinimal;
         var note = noGpu ? Visibility.Visible : Visibility.Collapsed;
         var opaque = !noGpu && !TransparencyEffects.Enabled;
 
@@ -2775,8 +2841,12 @@ public sealed partial class SettingsWindow : Window
         TransparencyOffNote.Visibility = opaque ? Visibility.Visible : Visibility.Collapsed;
 
         ShadowCard.IsEnabled = !noGpu;
-        IconShadowsCard.IsEnabled = !noGpu;
-        NoGpuIconsNote.Visibility = note;
+        // Light goes without them too, and says so in the same place.
+        var light = PerformanceStop == DockSettings.PerformanceLight;
+        IconShadowsCard.IsEnabled = !noGpu && !light;
+        NoGpuIconsNote.Visibility = noGpu || light ? Visibility.Visible : Visibility.Collapsed;
+        NoGpuIconsNote.SetResourceReference(
+            TextBlock.TextProperty, noGpu ? "Settings.Icons.NoGpu.Note" : "Settings.Icons.Light.Note");
 
         NoGpuDetected.Visibility = !noGpu && SoftwareRendering.HardwareMissing
             ? Visibility.Visible
@@ -3547,11 +3617,11 @@ public sealed partial class SettingsWindow : Window
     /// </summary>
     /// <remarks>
     /// Not under No GPU, where it is given the theme's plain background instead — see
-    /// <see cref="WindowMaterial"/>, which does the same for every dialog. Followed as the box
-    /// is ticked and unticked, since that is previewed like everything else.
+    /// <see cref="WindowMaterial"/>, which does the same for every dialog. Followed as the
+    /// slider comes to Minimal and leaves it, since that is previewed like everything else.
     /// </remarks>
     private void ApplyMica() =>
-        WindowMaterial.Apply(this, solid: NoGpuCheck.IsChecked == true, AppTheme.IsDark(SelectedTheme));
+        WindowMaterial.Apply(this, solid: IsMinimal, AppTheme.IsDark(SelectedTheme));
 
     /// <summary>
     /// Takes a change made outside this dialog while it is open.

@@ -24,7 +24,7 @@
     "Settings.Appearance.NoSavedColours": "None yet. Pick a colour, then Save it to keep it here.",
     "Settings.Appearance.SaveColour": "Save this colour",
 
-    "Settings.Appearance.NoGpu.Note": "No GPU, on the System page, is holding the bar solid, with no blur and no shadow. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur and the shadow keep their settings, and come back when No GPU is turned off.",
+    "Settings.Appearance.NoGpu.Note": "Performance is set to Minimal, on the System page, which holds the bar solid, with no blur and no shadow. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur and the shadow keep their settings, and come back when Performance is set higher.",
     "Settings.Appearance.TransparencyOff.Note": "Transparency effects are off in Windows (Settings › Personalisation › Colours), so the bar is solid with no blur behind it, like the taskbar. Opacity now mixes the bar's colour with grey instead of letting the desktop show through; the blur keeps its setting, and comes back when transparency effects are turned on.",
 
     "Settings.Items.LockOrder.Tip": "Stops a drag rearranging the items, here or on the dock. Adding, removing and editing are unaffected.",
@@ -43,7 +43,6 @@
     "Scan.Hint.Apps.Pin": "The apps installed on this computer, from the Start menu and the desktop — games are left to Search games. Tick the ones to put on the dock. An app that is running is marked Open now and listed first.",
 
     "Settings.System.Theme.Hint": "How these windows look. The dock keeps its own colour.",
-    "Settings.System.ReduceMotion.Hint": "Also honoured automatically when Windows animations are off.",
 
     "Settings.About.StartOver.Hint": "Puts every page back the way ArtDock ships, and the dock back to the items a new dock starts with. Saved colours and excluded apps are left alone. Nothing is written until you press Save.",
 

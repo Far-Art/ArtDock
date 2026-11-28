@@ -38,6 +38,9 @@ public static class Program
 
         // Before anything can be launched, and after Velopack's own launches have gone: what the
         // dock opens gets the user's environment, not whatever shell started the dock.
+        // A measuring run is asked for in the environment, which Adopt is about to replace: read first.
+        _ = Bench.On;
+
         Interop.SignInEnvironment.Adopt();
 
         var app = new App();

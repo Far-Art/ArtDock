@@ -860,6 +860,38 @@ public sealed class DockBar : Canvas
     public bool MagnificationEnabled { get; set; } = true;
 
     /// <summary>
+    /// The most frames a second the wave and the dock's own animations are worked on, or 0 for
+    /// every frame the display shows (<c>DockSettings.Performance</c>).
+    /// </summary>
+    public int MaxFrameRate
+    {
+        get => _maxFrameRate;
+        set
+        {
+            _maxFrameRate = value;
+            PaceFrames();
+        }
+    }
+
+    private int _maxFrameRate;
+
+    /// <summary>One of the display's frames, in ms, as of when the frame loop last started.</summary>
+    private double _refreshMs = 1000.0 / 60;
+
+    /// <summary>The time between the frames worked on under <see cref="MaxFrameRate"/>, or 0 for all of them.</summary>
+    private double _frameIntervalMs;
+
+    /// <summary>
+    /// Works out which frames to take, from the display's rate as it is now — read again each time
+    /// the loop starts, so a display changed to another rate is followed.
+    /// </summary>
+    private void PaceFrames()
+    {
+        _refreshMs = DisplayFrames.RefreshPeriodMs();
+        _frameIntervalMs = FramePacing.IntervalMs(_refreshMs, _maxFrameRate);
+    }
+
+    /// <summary>
     /// Whether a drag along the bar may rearrange the icons.
     /// </summary>
     /// <remarks>
@@ -3006,6 +3038,7 @@ public sealed class DockBar : Canvas
         }
 
         _lastFrame = TimeSpan.Zero;
+        PaceFrames();
         CompositionTarget.Rendering += OnRendering;
         _renderingHooked = true;
     }
@@ -3106,7 +3139,17 @@ public sealed class DockBar : Canvas
         var deltaMs = _lastFrame == TimeSpan.Zero
             ? 0
             : (args.RenderingTime - _lastFrame).TotalMilliseconds;
+
+        // Under a cap, a frame that comes too soon after the last one worked on is let go by,
+        // and the next one advances by the whole time since — see FramePacing.
+        if (_lastFrame != TimeSpan.Zero && FramePacing.Skips(deltaMs, _frameIntervalMs, _refreshMs))
+        {
+            return;
+        }
+
         _lastFrame = args.RenderingTime;
+        System.Threading.Interlocked.Increment(ref ArtDock.Services.Bench.FramesRun);
+        ArtDock.Services.Bench.NoteFrame(deltaMs);
 
         // First, while the shape is still the one the last frame drew.
         _frame++;
@@ -3842,6 +3885,7 @@ public sealed class DockBar : Canvas
         _paintedSizes = (double[])_sizes.Clone();
         ApplyWaveTransforms();
         InvalidateVisual();
+        System.Threading.Interlocked.Increment(ref ArtDock.Services.Bench.FramesPainted);
     }
 
     /// <summary>
@@ -4386,7 +4430,10 @@ public sealed class DockBar : Canvas
 
         var text = GetTooltipLayout(label);
 
-        var iconTop = BarBottom - Metrics.PaddingY - _sizes[index];
+        // Above the icon or the bar, whichever is higher: an icon at its own size, with
+        // magnification off, stands inside the bar, and a label the gap above it sat on the
+        // bar's top edge.
+        var iconTop = Math.Min(BarBottom - Metrics.PaddingY - _sizes[index], BarBottom - Metrics.BarHeight);
         var centreX = _iconsLeft + _offsets[index] + (_sizes[index] / 2) + SlotShift(index);
 
         var width = text.Width + (TooltipPadX * 2);

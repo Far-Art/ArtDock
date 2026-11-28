@@ -940,7 +940,79 @@ public sealed class DockSettings
     /// Forces magnification off regardless of the system animation setting. The system
     /// setting is honoured on its own; this is the explicit override.
     /// </summary>
+    /// <remarks>
+    /// Half of the Performance slider's lowest stop, Minimal, with <see cref="NoGpu"/>: the two
+    /// are set together, and a file with only one of them set is read as both
+    /// (<see cref="JoinMinimal"/>).
+    /// </remarks>
     public bool ReduceMotion { get; set; }
+
+    /// <summary>
+    /// The Performance slider's lowest stop, Minimal: no magnification (<see cref="ReduceMotion"/>)
+    /// and nothing drawn with a graphics card (<see cref="NoGpu"/>).
+    /// </summary>
+    [JsonIgnore]
+    public bool Minimal => ReduceMotion && NoGpu;
+
+    /// <summary>
+    /// Sets both halves of <see cref="Minimal"/> where a file has one: they were two settings
+    /// before the slider, and are one stop on it now. Returns true when it changed anything.
+    /// </summary>
+    /// <remarks>
+    /// Not by the version, which would keep a build from before the slider from reading the
+    /// file: both flags are ones it knows, and set together they still mean what they did.
+    /// </remarks>
+    public bool JoinMinimal()
+    {
+        if (ReduceMotion == NoGpu)
+        {
+            return false;
+        }
+
+        ReduceMotion = NoGpu = true;
+        return true;
+    }
+
+    /// <summary>The lowest <see cref="Performance"/> that still magnifies: about 30 frames a second.</summary>
+    public const int PerformanceLight = 1;
+
+    /// <summary>About 60 frames a second.</summary>
+    public const int PerformanceBalanced = 2;
+
+    /// <summary>Every frame the display shows.</summary>
+    public const int PerformanceFull = 3;
+
+    /// <summary>
+    /// How often the wave and the dock's own animations are drawn: <see cref="PerformanceFull"/>,
+    /// <see cref="PerformanceBalanced"/> or <see cref="PerformanceLight"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The System page's Performance slider, whose lowest stop is <see cref="Minimal"/> rather
+    /// than a value of this: no magnification and no graphics card are what those two flags
+    /// already meant, and leaving them the flags keeps every file meaning what it did — one with
+    /// either set opens the slider at its lowest stop, and a build from before the slider reads
+    /// the files this one writes. So the slider sets the flags at its lowest stop and this at the
+    /// others, and leaves this as it was at the lowest, which is where it comes back to.
+    /// </para>
+    /// <para>
+    /// Only the frame rate, because that was all the measuring found worth anything — see
+    /// <c>Dock.FramePacing</c>. Not per display: the dock is on one.
+    /// </para>
+    /// </remarks>
+    public int Performance { get; set; } = PerformanceFull;
+
+    /// <summary>
+    /// The most frames a second <see cref="Performance"/> allows, or 0 for every frame; a value
+    /// out of range, edited in by hand, is held to the nearest stop.
+    /// </summary>
+    [JsonIgnore]
+    public int MaxFrameRate => Math.Clamp(Performance, PerformanceLight, PerformanceFull) switch
+    {
+        PerformanceFull => 0,
+        PerformanceBalanced => 60,
+        _ => 30
+    };
 
     /// <summary>
     /// Whether the dock is drawn without a graphics card: for a virtual machine, a remote
@@ -948,16 +1020,16 @@ public sealed class DockSettings
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The user's to turn on, and off unless they do. The dock decides it once only, on a first
+    /// The other half of the Performance slider's Minimal stop, with <see cref="ReduceMotion"/>.
+    /// The user's to choose, and off unless they do. The dock decides it once only, on a first
     /// run where WPF reports nothing to draw with (<see cref="AdoptNoGpu"/>), and says so; after
-    /// that the settings dialog only says when that is so and the box is not ticked. On, the dock is
+    /// that the settings dialog only says when that is so and the slider is above Minimal. On, the dock is
     /// drawn in software, with no Direct3D device at all (<see cref="SoftwareRendering"/>), and
     /// gives up what leans on the compositor: the blur behind the bar (<see cref="Blurs"/>),
     /// the bar's translucency (<see cref="BarAlpha"/>) and the dialogs' Mica. And it draws
     /// less: neither the
     /// bar nor the icons cast a shadow (<see cref="CastsBarShadow"/>,
-    /// <see cref="CastsIconShadows"/>). The wave itself stays, at the display's own pace —
-    /// <see cref="ReduceMotion"/> is beside it for a machine that cannot keep up even so.
+    /// <see cref="CastsIconShadows"/>).
     /// </para>
     /// <para>
     /// What it overrides is kept underneath, the way <see cref="BarColor"/> is under
@@ -970,8 +1042,8 @@ public sealed class DockSettings
     public bool NoGpu { get; set; }
 
     /// <summary>
-    /// Turns <see cref="NoGpu"/> on for a dock starting for the first time on a machine with no
-    /// hardware to draw with. Returns true when it did, which is the caller's cue to say so.
+    /// Sets the dock to <see cref="Minimal"/> when it starts for the first time on a machine with
+    /// no hardware to draw with. Returns true when it did, which is the caller's cue to say so.
     /// </summary>
     /// <remarks>
     /// A first run only. A dock with a settings file has an owner, who has had the checkbox and
@@ -986,7 +1058,7 @@ public sealed class DockSettings
             return false;
         }
 
-        NoGpu = true;
+        NoGpu = ReduceMotion = true;
         return true;
     }
 
@@ -1035,6 +1107,10 @@ public sealed class DockSettings
     /// something: it sets how much of the grey comes through, where it used to set how much of
     /// the desktop did. Painted in the stored colour alone, a bar set up translucent was
     /// lighter solid than it had ever been seen.
+    /// <para>
+    /// Nor at the Performance slider's Light stop (<see cref="PerformanceLight"/>), which goes
+    /// without them too; the setting keeps its value underneath, as under No GPU.
+    /// </para>
     /// </remarks>
     public string BarPaint(string color) => SolidBar
         ? BarPalette.ToHex(BarPalette.Over(BarPalette.Parse(color), BarOpacity, BarPalette.Underlay))
@@ -1046,7 +1122,7 @@ public sealed class DockSettings
     /// for every icon on every frame of the wave.
     /// </summary>
     [JsonIgnore]
-    public bool CastsIconShadows => IconShadows && !NoGpu;
+    public bool CastsIconShadows => IconShadows && !NoGpu && Math.Clamp(Performance, PerformanceLight, PerformanceFull) > PerformanceLight;
 
     /// <summary>
     /// Whether the bar casts its shadow: always, but under <see cref="NoGpu"/>.
@@ -1321,6 +1397,7 @@ public sealed class DockSettings
         Language = Language,
         SettingsPage = SettingsPage,
         ReduceMotion = ReduceMotion,
+        Performance = Performance,
         NoGpu = NoGpu,
         WindowsTransparency = WindowsTransparency,
         LockItemOrder = LockItemOrder,

@@ -46,6 +46,22 @@ internal sealed class DisplayFrames
         return true;
     }
 
+    /// <summary>
+    /// How long one of the display's frames lasts, in ms, by DWM's own clock; a 60 Hz frame if
+    /// that cannot be read.
+    /// </summary>
+    public static double RefreshPeriodMs()
+    {
+        var info = new DWM_TIMING_INFO { cbSize = (uint)Marshal.SizeOf<DWM_TIMING_INFO>() };
+        if (DwmGetCompositionTimingInfo(0, ref info) < 0 || info.qpcRefreshPeriod == 0)
+        {
+            return 1000.0 / 60;
+        }
+
+        var ms = info.qpcRefreshPeriod * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        return ms is > 1 and < 100 ? ms : 1000.0 / 60;
+    }
+
     [DllImport("dwmapi.dll")]
     private static extern int DwmGetCompositionTimingInfo(nint hwnd, ref DWM_TIMING_INFO info);
 
