@@ -628,8 +628,8 @@ lands; bring it back into the
   own — the dock is placed again within a quarter of a second, whether or not Windows said so.
 - **Configurable** live: dock size and the smallest the icons may be made to fit,
   magnification, influence range, gap, bar opacity, bar colour (hex, a colour wheel, a stock
-  swatch, or one you have saved), corner
-  roundness, the blurred backdrop, which display the dock
+  swatch, or one you have saved), the corners' shape (round, eased smoothly into the edges, or
+  beveled) and roundness, the blurred backdrop, which display the dock
   lives on — remembered by the monitor itself, so it stays put when Windows renames its
   displays — and where along its edge, always-on-top, hide/reveal delays, how fast the dock
   slides away and back (half to twice the standard pace), the excluded apps
