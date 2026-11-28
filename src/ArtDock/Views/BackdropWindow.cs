@@ -300,7 +300,8 @@ public sealed class BackdropWindow : IDisposable
             return false;
         }
 
-        var (insetX, insetY) = Inset(bar, BarOutline.EnclosedBy(radius, corners));
+        (bar, var inside) = BarOutline.RoundedInside(bar, radius, corners);
+        var (insetX, insetY) = Inset(bar, inside);
         bar.Inflate(-insetX, -insetY);
         if (bar.Width <= 0 || bar.Height <= 0)
         {
@@ -431,7 +432,7 @@ public sealed class BackdropWindow : IDisposable
     }
 
     /// <summary>The bar last drawn, so an unchanged one is not drawn again.</summary>
-    private (double X, double Y, double Width, double Height, double Radius, double Scale, BarCorners Corners) _shape;
+    private (double X, double Y, double Width, double Height, double Radius, double Scale, BarCorners? Corners) _shape;
 
     private bool _shaped;
 
@@ -452,7 +453,7 @@ public sealed class BackdropWindow : IDisposable
     /// sheet at the full width of its window, far past the ends of the bar.
     /// </remarks>
     private void Shape(
-        double x, double y, double width, double height, double radius, double scale, BarCorners corners = BarCorners.Round)
+        double x, double y, double width, double height, double radius, double scale, BarCorners? corners = null)
     {
         // Re-applying the shape it already has re-composes the sheet for nothing, and this
         // runs on every frame of the settings dialog's demonstration wave as well as on

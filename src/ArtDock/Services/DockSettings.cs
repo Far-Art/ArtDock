@@ -542,7 +542,7 @@ public sealed class DockSettings
     public double BarRoundness { get; set; } = 0.40;
 
     /// <summary>
-    /// The shape of the bar's corners, by name: <c>Round</c> or <c>Squircle</c>. A string, as
+    /// The shape of the bar's corners, by name: <c>Round</c> or <c>Beveled</c>. A string, as
     /// <see cref="Edge"/> is, so the settings file stays readable; anything else reads as round.
     /// </summary>
     public string BarCorners { get; set; } = nameof(Dock.BarCorners.Round);
@@ -1234,7 +1234,7 @@ public sealed class DockSettings
         size = Math.Clamp(double.IsFinite(size) ? size : IconSize, IconSizeMin, IconSizeMax);
         var gap = size * GapFraction;
 
-        return new DockMetrics
+        var metrics = new DockMetrics
         {
             BaseSize = size,
             MaxSize = size * Math.Clamp(MaxScale, ScaleMin, ScaleMax),
@@ -1248,6 +1248,11 @@ public sealed class DockSettings
             Roundness = Math.Clamp(BarRoundness, 0, 1),
             Corners = CornerShape
         };
+
+        // A bevel cuts into the room at the bar's ends, and more the deeper it is: given more,
+        // so the end icons keep clear of it. Set here, where everything about the bar's width —
+        // the layout, the window, the fit to the display — reads it from.
+        return metrics with { PaddingX = BarOutline.EndPadding(metrics) };
     }
 
 

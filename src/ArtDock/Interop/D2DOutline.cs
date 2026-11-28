@@ -83,13 +83,29 @@ internal sealed partial class D2DOutline : IGeometrySource2D, ICustomQueryInterf
         }
     }
 
+    /// <summary>The outline, traced into a Direct2D geometry sink.</summary>
+    private readonly unsafe struct Sink(nint sink) : IOutlineSink
+    {
+        public void Begin(Point start) =>
+            Direct2D.BeginFigure(sink, Direct2D.Point(start), 0); // D2D1_FIGURE_BEGIN_FILLED
+
+        public void LineTo(Point end)
+        {
+            var point = Direct2D.Point(end);
+            Direct2D.AddLines(sink, &point, 1);
+        }
+
+        public void BezierTo(Point handle1, Point handle2, Point end)
+        {
+            var bezier = new Direct2D.Bezier(Direct2D.Point(handle1), Direct2D.Point(handle2), Direct2D.Point(end));
+            Direct2D.AddBeziers(sink, &bezier, 1);
+        }
+    }
+
     /// <summary>Builds the outline as a new path geometry in <paramref name="factory"/>, owned by the caller.</summary>
     private unsafe int Build(nint factory, out nint geometry)
     {
         geometry = 0;
-        Span<BarOutline.Corner> corners = stackalloc BarOutline.Corner[4];
-        BarOutline.Corners(_bounds, _radius, _corners, corners);
-
         nint path = 0;
         var hr = Direct2D.CreatePathGeometry(factory, &path);
         if (hr < 0)
@@ -106,21 +122,8 @@ internal sealed partial class D2DOutline : IGeometrySource2D, ICustomQueryInterf
         }
 
         Direct2D.SetFillMode(sink, 1); // D2D1_FILL_MODE_WINDING
-        Direct2D.BeginFigure(sink, Direct2D.Point(corners[0].Start), 0); // D2D1_FIGURE_BEGIN_FILLED
-        for (var i = 0; i < 4; i++)
-        {
-            var corner = corners[i];
-            if (i > 0)
-            {
-                var start = Direct2D.Point(corner.Start);
-                Direct2D.AddLines(sink, &start, 1);
-            }
-
-            var bezier = new Direct2D.Bezier(
-                Direct2D.Point(corner.Handle1), Direct2D.Point(corner.Handle2), Direct2D.Point(corner.End));
-            Direct2D.AddBeziers(sink, &bezier, 1);
-        }
-
+        var tracer = new Sink(sink);
+        BarOutline.Trace(_bounds, _radius, _corners, ref tracer);
         Direct2D.EndFigure(sink, 1); // D2D1_FIGURE_END_CLOSED
         hr = Direct2D.Close(sink);
         Marshal.Release(sink);

@@ -4065,14 +4065,7 @@ public sealed class DockBar : Canvas
 
         // Inset by half the pen so the 1px border lands inside the bar's bounds.
         var bounds = new Rect(bar.X + 0.5, bar.Y + 0.5, bar.Width - 1, bar.Height - 1);
-        if (Metrics.Corners == BarCorners.Round)
-        {
-            drawingContext.DrawRoundedRectangle(_barFill, _barBorder, bounds, radius, radius);
-        }
-        else
-        {
-            drawingContext.DrawGeometry(_barFill, _barBorder, BarOutline.Geometry(bounds, radius, Metrics.Corners));
-        }
+        drawingContext.DrawGeometry(_barFill, _barBorder, BarOutline.Geometry(bounds, radius, Metrics.Corners));
     }
 
     /// <summary>
@@ -4093,9 +4086,10 @@ public sealed class DockBar : Canvas
 
         if (DrawsShadow)
         {
+            var (caster, castRadius) = BarOutline.RoundedInside(bar, radius, Metrics.Corners);
             for (var pass = 0; pass < BarShadow.Passes.Count; pass++)
             {
-                var ring = BarShadow.Outermost(bar, BarOutline.EnclosedBy(radius, Metrics.Corners), pass);
+                var ring = BarShadow.Outermost(caster, castRadius, pass);
                 area.Children.Add(new RectangleGeometry(ring.Bounds, ring.Radius, ring.Radius));
             }
         }
@@ -4133,7 +4127,8 @@ public sealed class DockBar : Canvas
         drawingContext.PushClip(region);
 
         Span<BarShadow.Ring> rings = stackalloc BarShadow.Ring[BarShadow.RingCount];
-        BarShadow.Rings(bar, BarOutline.EnclosedBy(radius, Metrics.Corners), scale: 1, rings);
+        var (caster, castRadius) = BarOutline.RoundedInside(bar, radius, Metrics.Corners);
+        BarShadow.Rings(caster, castRadius, scale: 1, rings);
 
         foreach (var ring in rings)
         {

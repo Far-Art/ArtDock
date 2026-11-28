@@ -3251,10 +3251,7 @@ public sealed partial class SettingsWindow : Window
     public static readonly string[] CornerLabels =
     [
         "Settings.Appearance.Corners.Round",
-        "Settings.Appearance.Corners.Squircle",
-        "Settings.Appearance.Corners.Beveled",
-        "Settings.Appearance.Corners.Scooped",
-        "Settings.Appearance.Corners.Leaf"
+        "Settings.Appearance.Corners.Beveled"
     ];
 
     /// <summary>Fills the corner shape picker in the current language, keeping its selection.</summary>
