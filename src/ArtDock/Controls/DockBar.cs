@@ -3165,6 +3165,7 @@ public sealed class DockBar : Canvas
         }
 
         _lastFrame = args.RenderingTime;
+        var workStarted = ArtDock.Services.WaveTrace.On ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
         System.Threading.Interlocked.Increment(ref ArtDock.Services.Bench.FramesRun);
         ArtDock.Services.Bench.NoteFrame(deltaMs);
 
@@ -3200,7 +3201,9 @@ public sealed class DockBar : Canvas
         if (ArtDock.Services.WaveTrace.On)
         {
             ArtDock.Services.WaveTrace.Note(
-                args.RenderingTime.TotalMilliseconds, deltaMs, _progress, _rampTo, _barLeft, _barWidth);
+                args.RenderingTime.TotalMilliseconds, deltaMs, _progress, _rampTo, _barLeft, _barWidth,
+                System.Diagnostics.Stopwatch.GetElapsedTime(workStarted).TotalMilliseconds, _tracedRenderMs);
+            _tracedRenderMs = 0;
         }
 
         // Once the wave is flat, the pointer has gone and nothing is animating, there is
@@ -4037,7 +4040,26 @@ public sealed class DockBar : Canvas
 
     // ---- rendering -----------------------------------------------------------
 
+    /// <summary>The time <see cref="OnRender"/> took since the last frame traced: see <see cref="ArtDock.Services.WaveTrace"/>.</summary>
+    private double _tracedRenderMs;
+
     protected override void OnRender(DrawingContext drawingContext)
+    {
+        var started = ArtDock.Services.WaveTrace.On ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        try
+        {
+            Render(drawingContext);
+        }
+        finally
+        {
+            if (ArtDock.Services.WaveTrace.On)
+            {
+                _tracedRenderMs += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            }
+        }
+    }
+
+    private void Render(DrawingContext drawingContext)
     {
         base.OnRender(drawingContext);
 
